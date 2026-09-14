@@ -17,6 +17,8 @@ Open the demo redeem URL:
 
 [http://localhost:43147/r/DEMO-SARA-001](http://localhost:43147/r/DEMO-SARA-001)
 
+**Phone preview (no Node install):** [https://sara-pfilates-coach.surge.sh/r/DEMO-SARA-001](https://sara-pfilates-coach.surge.sh/r/DEMO-SARA-001)
+
 Production build:
 
 ```bash
