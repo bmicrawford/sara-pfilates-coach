@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Field, inputClass } from '../components/Chip'
 import { SaraPortrait } from '../components/SaraPortrait'
 import { readChat, writeChat } from '../lib/mockServer'
-import { replyAsSara } from '../lib/replies'
+import { askShouldCelebrate, replyAsSara } from '../lib/replies'
 import { nowIso, uid } from '../lib/storage'
 import type { ChatMessage, Mood } from '../lib/types'
 
@@ -29,14 +29,14 @@ export function AskSara() {
     const sara: ChatMessage = {
       id: uid(),
       from: 'sara',
-      text: replyAsSara(text),
+      text: replyAsSara(text, messages),
       at: nowIso(),
     }
     const next = [...messages, you, sara]
     setMessages(next)
     writeChat(next)
     setDraft('')
-    setMood(/exercis|pfil|class|walk|minute|workout/.test(text.toLowerCase()) ? 'celebrate' : 'default')
+    setMood(askShouldCelebrate(text, messages) ? 'celebrate' : 'default')
   }
 
   return (
@@ -52,7 +52,7 @@ export function AskSara() {
       <div className="mt-6">
         <SaraPortrait mood={mood} size="compact" />
         <p className="mt-2 text-center text-sm text-ink-mute">
-          Canned replies for now — warm, short, and on your side.
+          Ask a real question — I’ll answer that, not a pep talk.
         </p>
       </div>
 
