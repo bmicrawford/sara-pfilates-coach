@@ -23,21 +23,23 @@ export default function App() {
   }, [])
 
   return (
-    <div className="min-h-dvh">
-      <Routes location={location}>
-        <Route path="/r/:token" element={<Redeem />} />
-        <Route path="/move" element={<Move />} />
-        <Route
-          path="/ask"
-          element={
-            <NeedSession session={session}>
-              <AskSara />
-            </NeedSession>
-          }
-        />
-        <Route path="/" element={session ? <Home session={session} /> : <Welcome />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+    <div className="flex min-h-dvh justify-center bg-[#E8E3DA]">
+      <div className="min-h-dvh w-full max-w-[430px] bg-cream shadow-[0_0_60px_rgba(61,58,54,0.08)]">
+        <Routes location={location}>
+          <Route path="/r/:token" element={<Redeem />} />
+          <Route path="/move" element={<Move />} />
+          <Route
+            path="/ask"
+            element={
+              <NeedSession session={session}>
+                <AskSara />
+              </NeedSession>
+            }
+          />
+          <Route path="/" element={session ? <Home session={session} /> : <Welcome />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
     </div>
   )
 }

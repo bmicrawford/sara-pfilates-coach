@@ -91,6 +91,12 @@ export function clearSession(): void {
   notifySession()
 }
 
+/** Prototype helper: keep the mock bind, forget this browser as the phone. */
+export function simulateNewPhone(): void {
+  writeJson('deviceId', uid())
+  clearSession()
+}
+
 export function releaseBinding(email: string): boolean {
   const want = email.trim().toLowerCase()
   const next = readBindings().filter((b) => b.email !== want)

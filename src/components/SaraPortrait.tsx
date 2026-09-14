@@ -38,7 +38,7 @@ export function SaraPortrait({ mood, size = 'hero' }: Props) {
           />
         ))}
       </div>
-      <p className="mt-4 font-serif text-2xl text-ink">{LINES[mood]}</p>
+      <p className="mt-4 min-h-[2rem] font-serif text-2xl text-ink">{LINES[mood]}</p>
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Field, inputClass } from '../components/Chip'
 import { SaraPortrait } from '../components/SaraPortrait'
-import { DEMO_TOKEN, releaseBinding } from '../lib/mockServer'
+import { DEMO_TOKEN, releaseBinding, simulateNewPhone } from '../lib/mockServer'
 
 export function Move() {
   const navigate = useNavigate()
@@ -60,6 +60,16 @@ export function Move() {
           {error ? <p className="text-sm text-[#9a5b4a]">{error}</p> : null}
           <button type="submit" className="w-full rounded-full bg-sage py-3.5 font-semibold text-white">
             Release the old phone
+          </button>
+          <button
+            type="button"
+            className="w-full rounded-full border border-sage/30 py-3 text-sage-deep"
+            onClick={() => {
+              simulateNewPhone()
+              navigate(`/r/${DEMO_TOKEN}`)
+            }}
+          >
+            Pretend this is a new phone
           </button>
           <Link to="/" className="block text-center text-sm text-ink-mute">
             Never mind
