@@ -36,7 +36,7 @@ export function AskSara() {
     setMessages(next)
     writeChat(next)
     setDraft('')
-    setMood(/exercis|pfil|class|walk/.test(text.toLowerCase()) ? 'celebrate' : 'default')
+    setMood(/exercis|pfil|class|walk|minute|workout/.test(text.toLowerCase()) ? 'celebrate' : 'default')
   }
 
   return (

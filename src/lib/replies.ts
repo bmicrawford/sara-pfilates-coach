@@ -10,7 +10,7 @@ export function replyAsSara(prompt: string): string {
   if (/void|pee|bathroom|urge/.test(q)) {
     return "Good catch. Logging voids and urges helps you see the day without judging it. If an urge showed up, try one easy breath before you decide."
   }
-  if (/exercis|squeeze|kegel|pfil|class|walk|stretch/.test(q)) {
+  if (/exercis|squeeze|kegel|pfil|class|walk|stretch|minute|workout|set/.test(q)) {
     return "That's the good stuff. A short set you actually did beats a perfect one you skipped. Want to log it so we can cheer you on?"
   }
   if (/sleep|night|bed|overnight/.test(q)) {
