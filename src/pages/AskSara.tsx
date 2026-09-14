@@ -59,7 +59,7 @@ export function AskSara() {
       <div className="mt-6 flex-1 space-y-3">
         {messages.length === 0 ? (
           <p className="rounded-2xl bg-cream-card px-4 py-3 text-sm text-ink-mute shadow-card">
-            Try “I leaked on a walk,” “how much water,” or “I did ten minutes.”
+            Try “how much water?”, “why did I leak when I sneezed?”, or “is coffee ok?”
           </p>
         ) : null}
         {messages.map((m) => (
