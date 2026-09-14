@@ -1,0 +1,10 @@
+name = "sara-pfilates-ask"
+main = "src/index.js"
+compatibility_date = "2026-09-14"
+
+[vars]
+XAI_MODEL = "grok-4.6"
+
+# XAI_API_KEY is a secret. Do not put it here.
+# From a shell that already has the key:
+#   printf '%s' "$XAI_API_KEY" | npx wrangler secret put XAI_API_KEY

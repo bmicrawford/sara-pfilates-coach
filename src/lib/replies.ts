@@ -1,3 +1,9 @@
+/**
+ * Offline intent helpers for portrait moods and safety copy checks.
+ * Live Ask Sara talks to Grok through server/askGrok.mjs — never use these
+ * replies as a silent fallback that pretends to be the model.
+ */
+
 export type AskIntent =
   | 'water_amount'
   | 'water_timing'

@@ -4,6 +4,8 @@ dist
 *.local
 .dev-token
 .env
-.env.*
+.env.local
+.env.*.local
+worker/.dev.vars
 *.tsbuildinfo
 .netlify

@@ -4,20 +4,38 @@ Phone-first Progressive Web App companion for after a Kajabi PfilAtes purchase. 
 
 Identity is **email on redeem only** — no password, no Kajabi SSO.
 
-## Run it
+Ask Sara is powered by **xAI Grok** (`grok-4.6`) through a small server-side proxy. The API key never ships in the Vite bundle or on Surge.
+
+## Run it locally
 
 ```bash
 npm install
+cp .env.example .env
+# On a machine that already has the key in the environment, write it into .env
+# without printing it:
+#   python3 -c 'import os; open(".env","a").write("XAI_API_KEY="+os.environ["XAI_API_KEY"]+"\n")'
 npm run dev
 ```
 
-Dev server prefers **port 43147**.
+`npm run dev` starts:
+
+- Ask Sara API on **http://127.0.0.1:8787** (`POST /ask`) — reads `XAI_API_KEY` from the environment
+- Vite app on **port 43147**, proxying `/ask` to that API
+
+Or run them separately:
+
+```bash
+npm run api      # Node proxy (needs XAI_API_KEY)
+npm run dev:web  # frontend only
+```
 
 Open the demo redeem URL:
 
 [http://localhost:43147/r/DEMO-SARA-001](http://localhost:43147/r/DEMO-SARA-001)
 
-**Phone preview (no Node install):** [https://sara-pfilates-coach.surge.sh/r/DEMO-SARA-001](https://sara-pfilates-coach.surge.sh/r/DEMO-SARA-001)
+**Phone UI (static):** [https://sara-pfilates-coach.surge.sh/r/DEMO-SARA-001](https://sara-pfilates-coach.surge.sh/r/DEMO-SARA-001)
+
+Ask Sara on the phone demo needs the Grok proxy URL baked in as `VITE_SARA_API_URL` (see below). Until a Worker is deployed **with** `XAI_API_KEY`, the UI shows an honest “couldn’t reach my brain” line — it will not fake a Grok answer from the old keyword stub.
 
 Production build:
 
@@ -25,6 +43,34 @@ Production build:
 npm run build
 npm run preview
 ```
+
+## xAI / Grok
+
+| | |
+|---|---|
+| Endpoint | `https://api.x.ai/v1/chat/completions` |
+| Model | `grok-4.6` (override with `XAI_MODEL`) |
+| Secret | `XAI_API_KEY` — **server only**, never `VITE_*` |
+
+The Sara system prompt lives in `server/askGrok.mjs` (peer coach, Kajabi stays the course, soft irritant coaching, no casual “stress”, pain/UTI safety, session cap).
+
+### Cloudflare Worker (public HTTPS proxy)
+
+```bash
+cd worker
+# Secret from the environment already on this box — do not paste the key into chat or flags:
+printf '%s' "$XAI_API_KEY" | npx wrangler secret put XAI_API_KEY
+npx wrangler deploy
+```
+
+Copy the printed `*.workers.dev` URL, then rebuild the PWA so the phone app can reach it:
+
+```bash
+VITE_SARA_API_URL=https://sara-pfilates-ask.<account>.workers.dev npm run build
+npx surge ./dist https://sara-pfilates-coach.surge.sh
+```
+
+`wrangler` must be logged in on that box (`npx wrangler login`, or `CLOUDFLARE_API_TOKEN` already in env).
 
 ## What this prototype does
 
@@ -34,9 +80,9 @@ npm run preview
 - Stub move-to-new-phone at `/move`
 - Home with Sara’s portrait and quick logs: drink, void/leak, pad change (time + reason only), exercise, Ask Sara
 - Bottom sheets for those forms
-- Ask Sara canned-reply stub
+- Ask Sara via Grok (`POST /ask` + short chat history)
 - Install hint: `beforeinstallprompt` plus iOS Add to Home Screen tip
-- Portrait moods: idle = default smile, listening while logging/typing, celebrate on a successful save (especially exercise), quiet/neutral after idle
+- Portrait moods: idle = default smile, listening while logging/typing or waiting on Grok, celebrate on a successful save (especially exercise), quiet/neutral after idle
 - Stub push (default channel) and SMS fallback after 3 days with no open
 
 Kajabi API is a placeholder comment only. Push and SMS are hooks, not live sends.

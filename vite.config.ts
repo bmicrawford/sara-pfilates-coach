@@ -48,9 +48,17 @@ export default defineConfig({
   server: {
     port: 43147,
     host: true,
+    proxy: {
+      '/ask': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+      '/health': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+    },
   },
   preview: {
     port: 43147,
     host: true,
+    proxy: {
+      '/ask': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+      '/health': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+    },
   },
 })

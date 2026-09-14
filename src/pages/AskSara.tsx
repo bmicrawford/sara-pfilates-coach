@@ -2,8 +2,9 @@ import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Field, inputClass } from '../components/Chip'
 import { SaraPortrait } from '../components/SaraPortrait'
+import { askSaraRemote } from '../lib/askSara'
 import { readChat, writeChat } from '../lib/mockServer'
-import { askShouldCelebrate, replyAsSara } from '../lib/replies'
+import { askShouldCelebrate } from '../lib/replies'
 import { nowIso, uid } from '../lib/storage'
 import type { ChatMessage, Mood } from '../lib/types'
 
@@ -11,32 +12,40 @@ export function AskSara() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => readChat())
   const [draft, setDraft] = useState('')
   const [mood, setMood] = useState<Mood>('default')
+  const [busy, setBusy] = useState(false)
   const bottom = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, busy])
 
   useEffect(() => {
+    if (busy) {
+      setMood('listening')
+      return
+    }
     setMood(draft.trim() ? 'listening' : 'default')
-  }, [draft])
+  }, [draft, busy])
 
-  const send = (e: FormEvent) => {
+  const send = async (e: FormEvent) => {
     e.preventDefault()
     const text = draft.trim()
-    if (!text) return
+    if (!text || busy) return
     const you: ChatMessage = { id: uid(), from: 'you', text, at: nowIso() }
-    const sara: ChatMessage = {
-      id: uid(),
-      from: 'sara',
-      text: replyAsSara(text, messages),
-      at: nowIso(),
-    }
-    const next = [...messages, you, sara]
-    setMessages(next)
-    writeChat(next)
+    const prior = messages
+    setMessages((cur) => [...cur, you])
     setDraft('')
-    setMood(askShouldCelebrate(text, messages) ? 'celebrate' : 'default')
+    setBusy(true)
+    setMood('listening')
+    const reply = await askSaraRemote(text, prior)
+    const sara: ChatMessage = { id: uid(), from: 'sara', text: reply, at: nowIso() }
+    setMessages((cur) => {
+      const next = [...cur, sara]
+      writeChat(next)
+      return next
+    })
+    setBusy(false)
+    setMood(askShouldCelebrate(text, prior) ? 'celebrate' : 'default')
   }
 
   return (
@@ -52,14 +61,14 @@ export function AskSara() {
       <div className="mt-6">
         <SaraPortrait mood={mood} size="compact" />
         <p className="mt-2 text-center text-sm text-ink-mute">
-          Ask a real question — I’ll answer that, not a pep talk.
+          I’m listening — ask the real question.
         </p>
       </div>
 
       <div className="mt-6 flex-1 space-y-3">
         {messages.length === 0 ? (
           <p className="rounded-2xl bg-cream-card px-4 py-3 text-sm text-ink-mute shadow-card">
-            Try “how much water?”, “why did I leak when I sneezed?”, or “is coffee ok?”
+            Try “how much water?”, “why did I leak when I sneezed?”, or “what are symptoms of a UTI?”
           </p>
         ) : null}
         {messages.map((m) => (
@@ -74,6 +83,11 @@ export function AskSara() {
             {m.text}
           </div>
         ))}
+        {busy ? (
+          <div className="max-w-[85%] rounded-2xl bg-cream-card px-4 py-3 text-sm text-ink-mute shadow-card">
+            Listening…
+          </div>
+        ) : null}
         <div ref={bottom} />
       </div>
 
@@ -84,14 +98,15 @@ export function AskSara() {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="What’s going on?"
+            disabled={busy}
           />
         </Field>
         <button
           type="submit"
           className="w-full rounded-full bg-sage py-3 font-semibold text-white disabled:opacity-40"
-          disabled={!draft.trim()}
+          disabled={!draft.trim() || busy}
         >
-          Send to Sara
+          {busy ? 'Sara is thinking…' : 'Send to Sara'}
         </button>
       </form>
     </main>
