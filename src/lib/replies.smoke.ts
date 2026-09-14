@@ -61,6 +61,30 @@ const cases: { q: string; intent: ReturnType<typeof classifyAsk>; must: RegExp; 
     must: /are you asking about/i,
     mustNot: /i'm here\. tell me what's on your mind/i,
   },
+  {
+    q: 'what are symptoms of a UTI?',
+    intent: 'uti',
+    must: /uti|burning or stinging|urine test|clinician/i,
+    mustNot: /you have a uti|little sips count|an urge is a signal/i,
+  },
+  {
+    q: 'I have burning when I pee',
+    intent: 'uti',
+    must: /burning or stinging|pause pelvic-floor|clinician/i,
+    mustNot: /you have a uti|that counts|stop sign/i,
+  },
+  {
+    q: 'do I have a UTI?',
+    intent: 'uti',
+    must: /can't tell you whether this is a uti|urine check|urgent care/i,
+    mustNot: /you have a uti|an urge is a signal/i,
+  },
+  {
+    q: 'cloudy urine and it smells foul',
+    intent: 'uti',
+    must: /cloudy|smells off|clinician/i,
+    mustNot: /you have a uti/i,
+  },
 ]
 
 let failed = 0

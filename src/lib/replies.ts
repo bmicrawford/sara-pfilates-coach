@@ -17,6 +17,7 @@ export type AskIntent =
   | 'exercise_done'
   | 'diary'
   | 'prolapse'
+  | 'uti'
   | 'pain'
   | 'night'
   | 'phone'
@@ -32,11 +33,34 @@ type Rule = {
   test: (q: string) => boolean
 }
 
+function looksLikeUti(q: string): boolean {
+  return (
+    /\buti\b|u\.t\.i|urinary tract infect|bladder infect|kidney infect|cystitis/.test(q) ||
+    /burning (when i )?(pee|wee|urinat)|painful (pee|wee|urinat)|dysuria/.test(q) ||
+    /(pee|wee|urinat|urine).{0,24}(burn|sting|hurt)|(burn|sting).{0,24}(pee|wee|urinat|urine)/.test(
+      q,
+    ) ||
+    /cloudy (urine|pee)|foul[- ]smell|(smelly|odd[- ]smelling) (urine|pee)/.test(q) ||
+    /blood in (my )?(urine|pee)|pink (urine|pee)|hematuria/.test(q) ||
+    /fever.{0,28}(pee|urine|urinat|bladder|uti|infect)|(uti|urine|bladder|pee).{0,28}fever/.test(
+      q,
+    ) ||
+    /flank pain|(side|kidney|lower back) pain.{0,20}(pee|urine|uti|infect)/.test(q) ||
+    /sudden frequent (urges?|pees?).{0,24}(burn|sting|infect|uti)/.test(q)
+  )
+}
+
 const RULES: Rule[] = [
+  {
+    intent: 'uti',
+    weight: 16,
+    test: looksLikeUti,
+  },
   {
     intent: 'pain',
     weight: 12,
     test: (q) =>
+      !looksLikeUti(q) &&
       /\bpain\b|\bache\b|\bsore\b|\bhurts?\b|\bsharp\b|\bburning\b/.test(q) &&
       /pelvic|pelvis|vagina|perineum|tailbone|squeeze|kegel|exercis|pfil|worse|worsen|new |started|when i/.test(
         q,
@@ -205,6 +229,8 @@ const SHORT_FOLLOWUP: Record<string, AskIntent> = {
   phone: 'phone',
   urge: 'void_urge',
   void: 'void_urge',
+  uti: 'uti',
+  infection: 'uti',
 }
 
 export function classifyAsk(prompt: string, recent: ChatTurn[] = []): AskIntent {
@@ -269,6 +295,22 @@ function todayExerciseCount(): number {
   } catch {
     return 0
   }
+}
+
+function renderUti(q: string): string {
+  const askingIf =
+    /do i have|is (this|it) (a )?uti|have i got|is that a uti|could it be/.test(q)
+  const signs =
+    "People often notice burning or stinging when they pee, sudden frequent urges, urine that looks cloudy or smells off, or a heavy ache low in the pelvis. That can be a UTI-type picture — or something else."
+  const safety =
+    "Blood in the urine, fever, vomiting, or pain in your side or mid-back needs prompt care: same-day clinician or urgent care, and the ER if you feel very unwell, you're pregnant, or it came on hard. Symptoms that don't ease also deserve a look."
+  const pause =
+    "Pause pelvic-floor squeezes until this is checked — infection-type days are not a time to pile on practice. I can't diagnose you; a urine test can. Sip water as you like and get it looked at rather than waiting it out."
+
+  if (askingIf) {
+    return `I can't tell you whether this is a UTI — that takes a clinician, often with a urine check. ${signs} ${safety} ${pause}`
+  }
+  return `I can't diagnose a UTI from here. ${signs} ${safety} ${pause}`
 }
 
 function mentionedSessionCount(q: string): number | null {
@@ -343,6 +385,9 @@ function render(intent: AskIntent, q: string): string {
 
     case 'diary':
       return "The diary is just breadcrumbs: time, what you drank, a void or leak, a pad change, a session. Not a novel. We use it to spot 'this drink, then that urge' instead of blaming yourself. Log the boring stuff; that's where the pattern hides."
+
+    case 'uti':
+      return renderUti(q)
 
     case 'prolapse':
       return "Heaviness or a bulge-y feeling is worth taking seriously and worth not panicking over. Ease off long standing, skip bearing down, and use the course's pacing rather than extra squeezes. If it's new, worsening, or you can see or feel tissue where it wasn't, get a clinician who knows pelvic floor — I'm a companion, not a diagnosis."
