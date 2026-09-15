@@ -50,6 +50,8 @@ export default defineConfig({
     host: true,
     proxy: {
       '/ask': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+      '/speak': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+      '/talk': { target: 'http://127.0.0.1:8787', changeOrigin: true },
       '/health': { target: 'http://127.0.0.1:8787', changeOrigin: true },
     },
   },
@@ -58,6 +60,8 @@ export default defineConfig({
     host: true,
     proxy: {
       '/ask': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+      '/speak': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+      '/talk': { target: 'http://127.0.0.1:8787', changeOrigin: true },
       '/health': { target: 'http://127.0.0.1:8787', changeOrigin: true },
     },
   },

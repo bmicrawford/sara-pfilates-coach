@@ -5,6 +5,7 @@ compatibility_date = "2026-09-14"
 [vars]
 XAI_MODEL = "grok-4.6"
 
-# XAI_API_KEY is a secret. Do not put it here.
-# From a shell that already has the key:
+# Secrets — do not put keys here.
 #   printf '%s' "$XAI_API_KEY" | npx wrangler secret put XAI_API_KEY
+# Optional talking-head video (the one extra key to collect):
+#   printf '%s' "$DID_API_KEY" | npx wrangler secret put DID_API_KEY

@@ -1,19 +1,20 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Field, inputClass } from '../components/Chip'
-import { SaraPortrait } from '../components/SaraPortrait'
+import { TalkingPortrait } from '../components/TalkingPortrait'
 import { askSaraRemote } from '../lib/askSara'
 import { readChat, writeChat } from '../lib/mockServer'
 import {
   isSaraMuted,
-  isSpeechSupported,
+  isVoiceReady,
+  requestSaraTalk,
   setSaraMuted,
   speakSara,
   stopSaraSpeech,
   unlockSaraSpeech,
 } from '../lib/speakSara'
 import { nowIso, uid } from '../lib/storage'
-import type { ChatMessage, Mood } from '../lib/types'
+import type { ChatMessage } from '../lib/types'
 
 export function AskSara() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => readChat())
@@ -21,9 +22,11 @@ export function AskSara() {
   const [busy, setBusy] = useState(false)
   const [speaking, setSpeaking] = useState(false)
   const [muted, setMuted] = useState(() => isSaraMuted())
+  const [level, setLevel] = useState(0)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [voiceNote, setVoiceNote] = useState<string | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
-
-  const mood: Mood = busy ? 'listening' : speaking ? 'talking' : draft.trim() ? 'listening' : 'default'
+  const talkFor = useRef<string | null>(null)
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' })
@@ -31,12 +34,29 @@ export function AskSara() {
 
   useEffect(() => () => stopSaraSpeech(), [])
 
-  const speakReply = (text: string) => {
-    if (muted || !isSpeechSupported()) return
-    speakSara(text, {
-      onStart: () => setSpeaking(true),
-      onEnd: () => setSpeaking(false),
+  const prefetchTalk = (text: string) => {
+    if (muted || !isVoiceReady()) return
+    if (talkFor.current === text && videoUrl) return
+    talkFor.current = text
+    void requestSaraTalk(text).then((url) => {
+      if (url && talkFor.current === text) setVideoUrl(url)
     })
+  }
+
+  const speakReply = (text: string) => {
+    if (muted || !isVoiceReady()) return
+    setVoiceNote(null)
+    setLevel(0)
+    void speakSara(text, {
+      onStart: () => setSpeaking(true),
+      onEnd: () => {
+        setSpeaking(false)
+        setLevel(0)
+      },
+      onLevel: setLevel,
+      onError: (message) => setVoiceNote(message),
+    })
+    prefetchTalk(text)
   }
 
   const send = async (e: FormEvent) => {
@@ -46,6 +66,9 @@ export function AskSara() {
     unlockSaraSpeech()
     stopSaraSpeech()
     setSpeaking(false)
+    setLevel(0)
+    setVideoUrl(null)
+    talkFor.current = null
     const you: ChatMessage = { id: uid(), from: 'you', text, at: nowIso() }
     const prior = messages
     setMessages((cur) => [...cur, you])
@@ -65,8 +88,8 @@ export function AskSara() {
   const lastSara = [...messages].reverse().find((m) => m.from === 'sara')
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-[430px] flex-col px-5 pb-6 safe-top">
-      <header className="flex items-center justify-between">
+    <main className="ask-sara mx-auto flex h-dvh max-h-dvh max-w-[430px] flex-col overflow-hidden px-5 safe-top">
+      <header className="flex shrink-0 items-center justify-between pb-1">
         <Link to="/" className="text-sm text-sage-deep">
           ← Home
         </Link>
@@ -78,26 +101,38 @@ export function AskSara() {
             if (speaking && !muted) {
               stopSaraSpeech()
               setSpeaking(false)
+              setLevel(0)
               return
             }
             const next = !muted
             setMuted(next)
             setSaraMuted(next)
-            if (next) setSpeaking(false)
+            if (next) {
+              setSpeaking(false)
+              setLevel(0)
+            }
           }}
         >
           {muted ? 'Unmute' : speaking ? 'Stop' : 'Mute'}
         </button>
       </header>
 
-      <div className="mt-6">
-        <SaraPortrait mood={mood} size="compact" />
-        <p className="mt-2 text-center text-sm text-ink-mute">
+      <div className="ask-sara-stage shrink-0 bg-cream pb-2 pt-2">
+        <TalkingPortrait
+          talking={speaking}
+          listening={busy || Boolean(draft.trim())}
+          level={level}
+          videoUrl={videoUrl}
+        />
+        <p className="mt-1 text-center text-sm text-ink-mute">
           {speaking ? 'Sara is talking.' : 'I’m listening — ask the real question.'}
         </p>
+        {voiceNote ? (
+          <p className="mt-1 text-center text-xs leading-snug text-ink-faint">{voiceNote}</p>
+        ) : null}
       </div>
 
-      <div className="mt-6 flex-1 space-y-3">
+      <div className="ask-sara-thread min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-3">
         {messages.length === 0 ? (
           <p className="rounded-2xl bg-cream-card px-4 py-3 text-sm text-ink-mute shadow-card">
             Try “how much water?”, “why did I leak when I sneezed?”, or “what are symptoms of a UTI?”
@@ -113,7 +148,7 @@ export function AskSara() {
             }`}
           >
             {m.text}
-            {m.from === 'sara' && m.id === lastSara?.id && isSpeechSupported() ? (
+            {m.from === 'sara' && m.id === lastSara?.id && isVoiceReady() ? (
               <button
                 type="button"
                 className="mt-2 block text-xs font-medium text-sage-deep"
@@ -122,6 +157,7 @@ export function AskSara() {
                   if (speaking) {
                     stopSaraSpeech()
                     setSpeaking(false)
+                    setLevel(0)
                     return
                   }
                   speakReply(m.text)
@@ -140,10 +176,10 @@ export function AskSara() {
         <div ref={bottom} />
       </div>
 
-      <form onSubmit={send} className="mt-4 space-y-3">
+      <form onSubmit={send} className="ask-sara-compose shrink-0 space-y-3 bg-cream pb-4 pt-2 safe-bottom">
         <Field label="Your note">
           <textarea
-            className={`${inputClass} min-h-[5.5rem] resize-none`}
+            className={`${inputClass} min-h-[4.5rem] resize-none`}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="What’s going on?"

@@ -58,3 +58,21 @@ select {
 .sara-talking {
   animation: sara-talk 1.15s ease-in-out infinite;
 }
+
+.ask-sara {
+  overscroll-behavior: none;
+}
+
+.ask-sara-stage {
+  position: relative;
+  z-index: 2;
+}
+
+.ask-sara-thread {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.ask-sara-compose {
+  box-shadow: 0 -8px 18px -14px rgba(61, 58, 54, 0.28);
+}
