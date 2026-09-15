@@ -1,4 +1,4 @@
-export type Mood = 'default' | 'neutral' | 'listening' | 'celebrate'
+export type Mood = 'default' | 'neutral' | 'listening' | 'talking' | 'celebrate'
 
 export type Session = {
   email: string

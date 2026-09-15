@@ -4,39 +4,53 @@ import { Field, inputClass } from '../components/Chip'
 import { SaraPortrait } from '../components/SaraPortrait'
 import { askSaraRemote } from '../lib/askSara'
 import { readChat, writeChat } from '../lib/mockServer'
-import { askShouldCelebrate } from '../lib/replies'
+import {
+  isSaraMuted,
+  isSpeechSupported,
+  setSaraMuted,
+  speakSara,
+  stopSaraSpeech,
+  unlockSaraSpeech,
+} from '../lib/speakSara'
 import { nowIso, uid } from '../lib/storage'
 import type { ChatMessage, Mood } from '../lib/types'
 
 export function AskSara() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => readChat())
   const [draft, setDraft] = useState('')
-  const [mood, setMood] = useState<Mood>('default')
   const [busy, setBusy] = useState(false)
+  const [speaking, setSpeaking] = useState(false)
+  const [muted, setMuted] = useState(() => isSaraMuted())
   const bottom = useRef<HTMLDivElement>(null)
+
+  const mood: Mood = busy ? 'listening' : speaking ? 'talking' : draft.trim() ? 'listening' : 'default'
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, busy])
 
-  useEffect(() => {
-    if (busy) {
-      setMood('listening')
-      return
-    }
-    setMood(draft.trim() ? 'listening' : 'default')
-  }, [draft, busy])
+  useEffect(() => () => stopSaraSpeech(), [])
+
+  const speakReply = (text: string) => {
+    if (muted || !isSpeechSupported()) return
+    speakSara(text, {
+      onStart: () => setSpeaking(true),
+      onEnd: () => setSpeaking(false),
+    })
+  }
 
   const send = async (e: FormEvent) => {
     e.preventDefault()
     const text = draft.trim()
     if (!text || busy) return
+    unlockSaraSpeech()
+    stopSaraSpeech()
+    setSpeaking(false)
     const you: ChatMessage = { id: uid(), from: 'you', text, at: nowIso() }
     const prior = messages
     setMessages((cur) => [...cur, you])
     setDraft('')
     setBusy(true)
-    setMood('listening')
     const reply = await askSaraRemote(text, prior)
     const sara: ChatMessage = { id: uid(), from: 'sara', text: reply, at: nowIso() }
     setMessages((cur) => {
@@ -45,8 +59,10 @@ export function AskSara() {
       return next
     })
     setBusy(false)
-    setMood(askShouldCelebrate(text, prior) ? 'celebrate' : 'default')
+    speakReply(reply)
   }
+
+  const lastSara = [...messages].reverse().find((m) => m.from === 'sara')
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-[430px] flex-col px-5 pb-6 safe-top">
@@ -55,13 +71,29 @@ export function AskSara() {
           ← Home
         </Link>
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-ink-faint">Ask Sara</p>
-        <span className="w-10" />
+        <button
+          type="button"
+          className="text-xs text-sage-deep"
+          onClick={() => {
+            if (speaking && !muted) {
+              stopSaraSpeech()
+              setSpeaking(false)
+              return
+            }
+            const next = !muted
+            setMuted(next)
+            setSaraMuted(next)
+            if (next) setSpeaking(false)
+          }}
+        >
+          {muted ? 'Unmute' : speaking ? 'Stop' : 'Mute'}
+        </button>
       </header>
 
       <div className="mt-6">
         <SaraPortrait mood={mood} size="compact" />
         <p className="mt-2 text-center text-sm text-ink-mute">
-          I’m listening — ask the real question.
+          {speaking ? 'Sara is talking.' : 'I’m listening — ask the real question.'}
         </p>
       </div>
 
@@ -81,6 +113,23 @@ export function AskSara() {
             }`}
           >
             {m.text}
+            {m.from === 'sara' && m.id === lastSara?.id && isSpeechSupported() ? (
+              <button
+                type="button"
+                className="mt-2 block text-xs font-medium text-sage-deep"
+                onClick={() => {
+                  unlockSaraSpeech()
+                  if (speaking) {
+                    stopSaraSpeech()
+                    setSpeaking(false)
+                    return
+                  }
+                  speakReply(m.text)
+                }}
+              >
+                {speaking ? 'Stop' : 'Play'}
+              </button>
+            ) : null}
           </div>
         ))}
         {busy ? (

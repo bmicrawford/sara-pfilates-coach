@@ -80,7 +80,11 @@ npx surge ./dist https://sara-pfilates-coach.surge.sh
 - Stub move-to-new-phone at `/move`
 - Home with Sara’s portrait and quick logs: drink, void/leak, pad change (time + reason only), exercise, Ask Sara
 - Bottom sheets for those forms
-- Ask Sara via Grok (`POST /ask` + short chat history)
+- Ask Sara via Grok (`POST /ask` + short chat history), then spoken aloud with the browser Web Speech API (mute / stop / Play)
+
+## TODO (Phase 2 — not built)
+
+Real lip-sync video from the locked Sara still plus vendor TTS audio (not `speechSynthesis`). Keep the still as the source of truth; do not invent a new face.
 - Install hint: `beforeinstallprompt` plus iOS Add to Home Screen tip
 - Portrait moods: idle = default smile, listening while logging/typing or waiting on Grok, celebrate on a successful save (especially exercise), quiet/neutral after idle
 - Stub push (default channel) and SMS fallback after 3 days with no open

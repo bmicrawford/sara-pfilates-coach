@@ -42,3 +42,19 @@ select {
 .safe-top {
   padding-top: max(0.75rem, env(safe-area-inset-top));
 }
+
+@keyframes sara-talk {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(124, 139, 112, 0.28);
+  }
+  50% {
+    transform: scale(1.035);
+    box-shadow: 0 0 0 10px rgba(124, 139, 112, 0);
+  }
+}
+
+.sara-talking {
+  animation: sara-talk 1.15s ease-in-out infinite;
+}
