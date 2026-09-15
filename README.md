@@ -96,6 +96,7 @@ Copy the printed `*.workers.dev` URL, then rebuild the PWA so the phone app can 
 
 ```bash
 VITE_SARA_API_URL=https://sara-pfilates-ask.<account>.workers.dev npm run build
+# build copies index.html → 200.html so Surge keeps /r/:token and /ask on the PWA
 npx surge ./dist https://sara-pfilates-coach.surge.sh
 ```
 
