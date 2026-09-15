@@ -49,7 +49,13 @@ export default defineConfig({
     port: 43147,
     host: true,
     proxy: {
-      '/ask': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+      '/ask': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+        bypass(req) {
+          if (req.method !== 'POST') return '/index.html'
+        },
+      },
       '/speak': { target: 'http://127.0.0.1:8787', changeOrigin: true },
       '/talk': { target: 'http://127.0.0.1:8787', changeOrigin: true },
       '/health': { target: 'http://127.0.0.1:8787', changeOrigin: true },
@@ -59,7 +65,13 @@ export default defineConfig({
     port: 43147,
     host: true,
     proxy: {
-      '/ask': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+      '/ask': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+        bypass(req) {
+          if (req.method !== 'POST') return '/index.html'
+        },
+      },
       '/speak': { target: 'http://127.0.0.1:8787', changeOrigin: true },
       '/talk': { target: 'http://127.0.0.1:8787', changeOrigin: true },
       '/health': { target: 'http://127.0.0.1:8787', changeOrigin: true },

@@ -9,104 +9,10 @@ type Props = {
   videoUrl?: string | null
 }
 
-function coverDraw(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  size: number,
-) {
-  const iw = img.naturalWidth
-  const ih = img.naturalHeight
-  if (!iw || !ih) return { destX: 0, destY: 0, dw: size, dh: size }
-  const scale = Math.max(size / iw, size / ih)
-  const dw = iw * scale
-  const dh = ih * scale
-  const destX = (size - dw) / 2
-  const destY = size * 0.5 - dh * 0.18
-  ctx.drawImage(img, destX, destY, dw, dh)
-  return { destX, destY, dw, dh }
-}
-
-function paintHead(
-  canvas: HTMLCanvasElement,
-  img: HTMLImageElement,
-  open: number,
-) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2)
-  const css = canvas.clientWidth || 176
-  if (canvas.width !== Math.round(css * dpr) || canvas.height !== Math.round(css * dpr)) {
-    canvas.width = Math.round(css * dpr)
-    canvas.height = Math.round(css * dpr)
-  }
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  const size = canvas.width
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.clearRect(0, 0, size, size)
-  ctx.save()
-  ctx.beginPath()
-  ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2)
-  ctx.clip()
-  const placed = coverDraw(ctx, img, size)
-
-  if (open > 0.03) {
-    const mx = size * 0.5
-    const my = size * 0.665
-    const rx = size * (0.078 + open * 0.018)
-    const ry = size * (0.014 + open * 0.052)
-
-    ctx.save()
-    ctx.beginPath()
-    ctx.ellipse(mx, my, rx * 1.45, ry * 2.4, 0, 0, Math.PI * 2)
-    ctx.clip()
-    ctx.translate(mx, my + ry * 0.15)
-    ctx.scale(1 + open * 0.04, 1 + open * 0.62)
-    ctx.translate(-mx, -(my + ry * 0.15))
-    ctx.drawImage(img, placed.destX, placed.destY, placed.dw, placed.dh)
-    ctx.restore()
-
-    const cavity = ctx.createRadialGradient(mx, my + ry * 0.2, 0, mx, my, rx)
-    cavity.addColorStop(0, `rgba(52, 18, 20, ${0.12 + open * 0.58})`)
-    cavity.addColorStop(0.65, `rgba(92, 38, 42, ${0.06 + open * 0.28})`)
-    cavity.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = cavity
-    ctx.beginPath()
-    ctx.ellipse(mx, my + ry * 0.12, rx, ry, 0, 0, Math.PI * 2)
-    ctx.fill()
-
-    if (open > 0.22) {
-      ctx.fillStyle = `rgba(255, 252, 248, ${(open - 0.22) * 0.5})`
-      ctx.beginPath()
-      ctx.ellipse(mx, my - ry * 0.38, rx * 0.7, ry * 0.26, 0, 0, Math.PI * 2)
-      ctx.fill()
-    }
-  }
-  ctx.restore()
-}
-
 export function TalkingPortrait({ talking, listening = false, level, videoUrl }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const imgRef = useRef<HTMLImageElement | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const openRef = useRef(0)
   const showVideo = Boolean(talking && videoUrl)
-  openRef.current = talking ? Math.min(1, Math.max(0, level)) : 0
-
-  useEffect(() => {
-    const img = new Image()
-    img.src = STILL
-    img.onload = () => {
-      imgRef.current = img
-      const canvas = canvasRef.current
-      if (canvas) paintHead(canvas, img, openRef.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    const img = imgRef.current
-    if (!canvas || !img) return
-    paintHead(canvas, img, talking ? Math.min(1, Math.max(0, level)) : 0)
-  }, [talking, level])
+  const open = talking ? Math.min(1, Math.max(0, level)) : 0
 
   useEffect(() => {
     const video = videoRef.current
@@ -118,6 +24,14 @@ export function TalkingPortrait({ talking, listening = false, level, videoUrl }:
       video.pause()
     }
   }, [showVideo, videoUrl])
+
+  const left = 44.8 - open * 0.55
+  const right = 55.2 + open * 0.55
+  const top = 43.75 - open * 0.95
+  const bot = 45.15 + open * 3.85
+  const mid = 50
+  const mouth = `M ${left} 44.05 C ${left + 3} ${top}, ${right - 3} ${top}, ${right} 44.05 C ${right - 2.2} ${bot}, ${left + 2.2} ${bot}, ${left} 44.05 Z`
+  const teeth = `M ${left + 1.6} 44.15 C ${mid - 4} ${top + 0.35}, ${mid + 4} ${top + 0.35}, ${right - 1.6} 44.15 C ${mid + 3} ${top + 1.35 + open}, ${mid - 3} ${top + 1.35 + open}, ${left + 1.6} 44.15 Z`
 
   return (
     <div className="flex flex-col items-center text-center">
@@ -133,11 +47,23 @@ export function TalkingPortrait({ talking, listening = false, level, videoUrl }:
             showVideo ? 'opacity-0' : 'opacity-100'
           }`}
         />
-        <canvas
-          ref={canvasRef}
-          className={`absolute inset-0 h-full w-full ${showVideo ? 'opacity-0' : 'opacity-100'}`}
+        <svg
+          className={`pointer-events-none absolute inset-0 h-full w-full ${showVideo ? 'opacity-0' : 'opacity-100'}`}
+          viewBox="0 0 100 100"
           aria-hidden
-        />
+        >
+          <g style={{ opacity: open > 0.05 ? Math.min(1, open * 1.15) : 0 }}>
+            <path d={mouth} fill={`rgba(62, 22, 24, ${0.42 + open * 0.38})`} />
+            <path d={teeth} fill={`rgba(255, 251, 246, ${open > 0.18 ? Math.min(0.7, (open - 0.12) * 0.85) : 0})`} />
+            <path
+              d={`M ${left + 1} ${44.2 + open * 2.4} C ${mid - 3} ${bot - 0.35}, ${mid + 3} ${bot - 0.35}, ${right - 1} ${44.2 + open * 2.4}`}
+              fill="none"
+              stroke={`rgba(120, 48, 52, ${0.25 + open * 0.35})`}
+              strokeWidth={0.45 + open * 0.25}
+              strokeLinecap="round"
+            />
+          </g>
+        </svg>
         {videoUrl ? (
           <video
             ref={videoRef}
