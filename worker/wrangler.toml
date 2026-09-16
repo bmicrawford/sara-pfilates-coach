@@ -1,11 +1,15 @@
+# Durable public Ask Sara origin after `npx wrangler deploy`:
+#   https://sara-pfilates-ask.<your-subdomain>.workers.dev
+# Bake that URL as VITE_SARA_API_URL for Surge. Never trycloudflare.
 name = "sara-pfilates-ask"
 main = "src/index.js"
 compatibility_date = "2026-09-14"
 
 [vars]
 XAI_MODEL = "grok-4.6"
+XAI_TTS_VOICE = "ara"
 
 # Secrets — do not put keys here.
 #   printf '%s' "$XAI_API_KEY" | npx wrangler secret put XAI_API_KEY
-# Optional talking-head video (the one extra key to collect):
+# D-ID talking-head video is paused (product). Leave DID_API_KEY unset.
 #   printf '%s' "$DID_API_KEY" | npx wrangler secret put DID_API_KEY

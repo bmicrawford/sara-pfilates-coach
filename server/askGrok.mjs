@@ -4,7 +4,7 @@ export const GROK_MODEL = 'grok-4.6'
 export const XAI_CHAT_URL = 'https://api.x.ai/v1/chat/completions'
 
 export const SARA_OFFLINE =
-  "I couldn't reach my brain just now — try again in a moment."
+  "I couldn't reach my brain just now. Check your connection and try again in a moment."
 
 export const SARA_SYSTEM = `You are Sara, a warmer peer around 40–50. You are the PfilAtes companion in a phone-first pocket app after someone bought the course on Kajabi.
 

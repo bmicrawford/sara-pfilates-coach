@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Field, inputClass } from '../components/Chip'
 import { TalkingPortrait } from '../components/TalkingPortrait'
-import { askSaraRemote } from '../lib/askSara'
+import { askSaraRemote, isSaraUnreachable } from '../lib/askSara'
 import { readChat, writeChat } from '../lib/mockServer'
 import {
   isSaraMuted,
@@ -82,6 +82,12 @@ export function AskSara() {
       return next
     })
     setBusy(false)
+    if (isSaraUnreachable(reply)) {
+      setVoiceNote(
+        "I couldn't reach my voice either. Same connection — try Send again in a moment.",
+      )
+      return
+    }
     speakReply(reply)
   }
 
@@ -128,7 +134,7 @@ export function AskSara() {
           {speaking ? 'Sara is talking.' : 'I’m listening — ask the real question.'}
         </p>
         {voiceNote ? (
-          <p className="mt-1 text-center text-xs leading-snug text-ink-faint">{voiceNote}</p>
+          <p className="mt-1 text-center text-xs leading-snug text-ink-mute">{voiceNote}</p>
         ) : null}
       </div>
 
@@ -148,7 +154,10 @@ export function AskSara() {
             }`}
           >
             {m.text}
-            {m.from === 'sara' && m.id === lastSara?.id && isVoiceReady() ? (
+            {m.from === 'sara' &&
+            m.id === lastSara?.id &&
+            isVoiceReady() &&
+            !isSaraUnreachable(m.text) ? (
               <button
                 type="button"
                 className="mt-2 block text-xs font-medium text-sage-deep"
