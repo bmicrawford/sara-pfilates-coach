@@ -6,6 +6,8 @@ Identity is **email on redeem only** — no password, no Kajabi SSO.
 
 Ask Sara is powered by **xAI Grok** (`grok-4.6`) through a small server-side proxy. The API key never ships in the Vite bundle or on Surge.
 
+Eng operating notes (board-first, named trees, who merges, Sara constraints): [docs/eng-playbook.md](docs/eng-playbook.md).
+
 ## Run it locally
 
 ```bash
@@ -35,7 +37,7 @@ Open the demo redeem URL:
 
 **Phone UI (static):** [https://sara-pfilates-coach.surge.sh/r/DEMO-SARA-001](https://sara-pfilates-coach.surge.sh/r/DEMO-SARA-001)
 
-Ask Sara on the phone demo needs the Grok proxy URL baked in as `VITE_SARA_API_URL` (see below). Until a Worker is deployed **with** `XAI_API_KEY`, the UI shows an honest “couldn’t reach my brain” line — it will not fake a Grok answer from the old keyword stub.
+Ask Sara on the phone demo needs the **Cloudflare Worker** URL baked in as `VITE_SARA_API_URL` (see below). Until that Worker is deployed **with** `XAI_API_KEY`, the UI shows an honest reconnect line — it will not fake a Grok answer from the old keyword stub, and it will not fall back to the phone’s `speechSynthesis`. Never bake a `*.trycloudflare.com` tunnel into Surge.
 
 Production build:
 
@@ -62,45 +64,36 @@ Spoken replies use the same key via **xAI neural TTS** (`POST https://api.x.ai/v
 | Voice | `ara` (override with `XAI_TTS_VOICE`) |
 | Secret | same `XAI_API_KEY` — **server only** |
 
-After you pull this change, **restart** `npm run api` (and the cloudflared / trycloudflare tunnel) so `/speak` exists on the public URL. A hard-refresh of the Surge app still talks to that tunnel.
+The durable public origin is the **Cloudflare Worker**, not an ephemeral trycloudflare tunnel.
 
 ### Talking-head / lip-sync
 
 Ask Sara pins Sara’s portrait while the chat scrolls. While neural audio plays, the locked still (`public/avatar/sara-default.png`) gets a real mouth open/close driven by the audio (not a pulse ring).
 
-Vendor talking-head **video** is scaffolded on `POST /talk` (D-ID: upload the neural audio + locked still → mp4). It is off until you set one extra secret:
+Vendor talking-head **video** (`POST /talk`, D-ID) is **paused** until Dr C / CoS says go. Leave `DID_API_KEY` unset. Voice still uses xAI `ara` and the mouth still moves on the still. Do not fall back to OS `speechSynthesis` as the “good” path.
 
-```bash
-# The one key to collect for full video lip-sync:
-DID_API_KEY=   # D-ID studio API key
-# optional override; default is the Surge still:
-SARA_AVATAR_URL=https://sara-pfilates-coach.surge.sh/avatar/sara-default.png
-```
+### Cloudflare Worker (durable phone-demo origin)
 
-```bash
-printf '%s' "$DID_API_KEY" | npx wrangler secret put DID_API_KEY
-```
-
-Without `DID_API_KEY`, voice still uses xAI `ara` and the mouth still moves on the still. Do not fall back to OS `speechSynthesis` as the “good” path.
-
-### Cloudflare Worker (public HTTPS proxy)
+Human after merge (do not put `XAI_API_KEY` in the repo or in agent chat):
 
 ```bash
 cd worker
-# Secret from the environment already on this box — do not paste the key into chat or flags:
 printf '%s' "$XAI_API_KEY" | npx wrangler secret put XAI_API_KEY
 npx wrangler deploy
 ```
 
-Copy the printed `*.workers.dev` URL, then rebuild the PWA so the phone app can reach it:
+Copy the printed `https://sara-pfilates-ask.<account>.workers.dev` URL, then verify and rebuild Surge:
 
 ```bash
+npm run verify:ask-api -- https://sara-pfilates-ask.<account>.workers.dev
+# expect GET /health → ok, tts=ara; fails loudly on *.trycloudflare.com
+
 VITE_SARA_API_URL=https://sara-pfilates-ask.<account>.workers.dev npm run build
 # build copies index.html → 200.html so Surge keeps /r/:token and /ask on the PWA
 npx surge ./dist https://sara-pfilates-coach.surge.sh
 ```
 
-`wrangler` must be logged in on that box (`npx wrangler login`, or `CLOUDFLARE_API_TOKEN` already in env).
+`wrangler` must be logged in on that box (`npx wrangler login`, or `CLOUDFLARE_API_TOKEN` already in env). `npm run build` refuses a trycloudflare `VITE_SARA_API_URL`.
 
 ## What this prototype does
 
@@ -114,7 +107,7 @@ npx surge ./dist https://sara-pfilates-coach.surge.sh
 
 ## TODO (later)
 
-Vendor talking-head video waits on **`DID_API_KEY`** (D-ID). Mouth motion on the locked still + neural `ara` voice already ship.
+Vendor talking-head video (D-ID) stays paused until product says go. Mouth motion on the locked still + neural `ara` voice already ship.
 - Install hint: `beforeinstallprompt` plus iOS Add to Home Screen tip
 - Portrait moods: idle = default smile, listening while logging/typing or waiting on Grok, celebrate on a successful save (especially exercise), quiet/neutral after idle
 - Stub push (default channel) and SMS fallback after 3 days with no open

@@ -11,7 +11,10 @@
     "preview": "vite preview --port 43147 --host",
     "smoke:replies": "node --experimental-strip-types src/lib/replies.smoke.ts",
     "smoke:ask": "node server/askGrok.smoke.mjs",
-    "smoke:speak": "node server/speakSara.smoke.mjs"
+    "smoke:ask-copy": "node --experimental-strip-types src/lib/askSara.smoke.ts",
+    "smoke:speak": "node server/speakSara.smoke.mjs",
+    "smoke:verify-api": "node scripts/verify-sara-api.mjs --self-test",
+    "verify:ask-api": "node scripts/verify-sara-api.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",

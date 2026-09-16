@@ -1,7 +1,11 @@
 import type { ChatMessage } from './types'
 
 export const SARA_OFFLINE =
-  "I couldn't reach my brain just now — try again in a moment."
+  "I couldn't reach my brain just now. Check your connection and try again in a moment."
+
+export function isSaraUnreachable(reply: string): boolean {
+  return reply === SARA_OFFLINE
+}
 
 function apiUrl(): string {
   const base = (import.meta.env.VITE_SARA_API_URL ?? '').replace(/\/$/, '')

@@ -5,7 +5,7 @@ const SILENT_WAV =
   'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
 
 export const SARA_VOICE_OFFLINE =
-  "Sara’s voice isn’t on this API yet — pull main and restart the Grok proxy."
+  "I couldn't reach my voice just now. Tap Play in a moment — I won't fake it from the phone speaker."
 
 function apiBase(): string {
   return (import.meta.env.VITE_SARA_API_URL ?? '').replace(/\/$/, '')

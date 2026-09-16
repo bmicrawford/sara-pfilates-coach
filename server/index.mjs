@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { askSaraGrok, corsHeaders, jsonResponse, GROK_MODEL } from './askGrok.mjs'
+import { askSaraGrok, corsHeaders, jsonResponse, GROK_MODEL, SARA_OFFLINE } from './askGrok.mjs'
 import { speakSaraTts, SARA_VOICE } from './speakSara.mjs'
 import { talkSaraDid } from './talkSara.mjs'
 
@@ -45,7 +45,7 @@ const server = createServer(async (req, res) => {
       JSON.stringify({
         ok: true,
         model: process.env.XAI_MODEL || GROK_MODEL,
-        tts: SARA_VOICE,
+        tts: process.env.XAI_TTS_VOICE || SARA_VOICE,
         talk: Boolean(process.env.DID_API_KEY),
       }),
     )
@@ -66,7 +66,7 @@ const server = createServer(async (req, res) => {
     } catch {
       sendJson(
         res,
-        { status: 503, body: { reply: "I couldn't reach my brain just now — try again in a moment." } },
+        { status: 503, body: { reply: SARA_OFFLINE } },
         origin,
       )
     }
