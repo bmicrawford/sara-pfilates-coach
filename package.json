@@ -17,6 +17,7 @@
     "verify:ask-api": "node scripts/verify-sara-api.mjs"
   },
   "dependencies": {
+    "@d-id/client-sdk": "^2.0.10",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.6"

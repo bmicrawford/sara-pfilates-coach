@@ -14,3 +14,5 @@ SARA_AVATAR_URL = "https://sara-pfilates.surge.sh/avatar/sara-default.png"
 #   printf '%s' "$XAI_API_KEY" | npx wrangler secret put XAI_API_KEY
 # DID_API_KEY is already set on sara-pfilates-ask. Do not commit it.
 #   printf '%s' "$DID_API_KEY" | npx wrangler secret put DID_API_KEY
+# After creating the Sara photo Agent, put its id (agt_...) as a Worker var/secret:
+#   printf '%s' "$DID_AGENT_ID" | npx wrangler secret put DID_AGENT_ID

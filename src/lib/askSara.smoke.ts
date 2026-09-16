@@ -1,5 +1,5 @@
 import { isSaraUnreachable, SARA_OFFLINE } from './askSara.ts'
-import { SARA_VOICE_OFFLINE, SARA_TALK_POLL_MS } from './speakSara.ts'
+import { SARA_VOICE_OFFLINE } from './speakSara.ts'
 import { readFileSync } from 'node:fs'
 
 function assert(cond: unknown, msg: string) {
@@ -24,12 +24,27 @@ assert(!/speechSynthesis|Web Speech/i.test(SARA_VOICE_OFFLINE), 'does not advert
 const speakSrc = readFileSync(new URL('./speakSara.ts', import.meta.url), 'utf8')
 assert(!/speechSynthesis/.test(speakSrc), 'speakSara.ts has no speechSynthesis fallback')
 assert(!/trycloudflare/.test(speakSrc), 'speakSara.ts does not send people to trycloudflare')
-assert(SARA_TALK_POLL_MS === 150_000, 'client polls D-ID for ~150s')
-assert(/\/talk\?id=/.test(speakSrc), 'requestSaraTalk polls GET /talk?id=')
+assert(!/requestSaraTalk/.test(speakSrc), 'client no longer waits on D-ID Talks mp4')
+
+const streamSrc = readFileSync(new URL('./saraStream.ts', import.meta.url), 'utf8')
+assert(/createAgentManager/.test(streamSrc), 'uses D-ID Agents SDK manager')
+assert(/speak\(\{ type: 'text'/.test(streamSrc), 'drives the avatar with agentManager.speak()')
+assert(/\/stream/.test(streamSrc), 'fetches stream credentials from the Worker')
+assert(!/DID_API_KEY/.test(streamSrc), 'Agents SDK client never sees DID_API_KEY')
+assert(/muted = true/.test(streamSrc), 'WebRTC video is muted so ara is the voice')
 
 const portraitSrc = readFileSync(new URL('../components/TalkingPortrait.tsx', import.meta.url), 'utf8')
 assert(!/<svg[\s>]/.test(portraitSrc), 'TalkingPortrait has no SVG mouth overlay')
-assert(/videoUrl/.test(portraitSrc), 'TalkingPortrait still plays D-ID video when ready')
+assert(!/talking\s*&&\s*videoUrl/.test(portraitSrc), 'portrait is not gated on Talks mp4')
+assert(/streaming/.test(portraitSrc), 'portrait shows the live Agents stream')
+assert(/playsInline/.test(portraitSrc), 'stream video is playsInline')
+
+const askSrc = readFileSync(new URL('../pages/AskSara.tsx', import.meta.url), 'utf8')
+assert(/unlockSaraSpeech/.test(askSrc), 'Send still unlocks ara audio for iOS')
+assert(/speakSara\(/.test(askSrc), 'ara TTS starts immediately on reply')
+assert(/speakSaraStream/.test(askSrc), 'Agents stream speak runs alongside ara')
+assert(!/requestSaraTalk/.test(askSrc), 'Ask Sara does not poll Talks mp4')
+assert(!/watchSaraTalk/.test(askSrc), 'Ask Sara does not wait minutes for an mp4')
 
 if (process.exitCode) {
   console.error('askSara copy smoke failed')

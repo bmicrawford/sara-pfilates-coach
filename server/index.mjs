@@ -9,6 +9,7 @@ import {
   talkStartResponse,
   talkPollResponse,
 } from './talkSara.mjs'
+import { mintSaraStreamKey, streamStartResponse } from './streamSara.mjs'
 
 const PORT = Number(process.env.SARA_API_PORT || 8787)
 
@@ -60,6 +61,7 @@ const server = createServer(async (req, res) => {
         model: process.env.XAI_MODEL || GROK_MODEL,
         tts: process.env.XAI_TTS_VOICE || SARA_VOICE,
         talk: Boolean(process.env.DID_API_KEY),
+        stream: Boolean(process.env.DID_API_KEY && process.env.DID_AGENT_ID),
       }),
     )
     return
@@ -107,6 +109,19 @@ const server = createServer(async (req, res) => {
       res.end(Buffer.from(result.audio))
     } catch {
       sendJson(res, { status: 503, body: { error: 'tts_failed', voice: 'unavailable' } }, origin)
+    }
+    return
+  }
+
+  if (req.method === 'POST' && url.pathname === '/stream') {
+    try {
+      const minted = await mintSaraStreamKey({
+        apiKey: process.env.DID_API_KEY,
+        agentId: process.env.DID_AGENT_ID,
+      })
+      sendTalkJson(res, streamStartResponse(minted), origin)
+    } catch {
+      sendTalkJson(res, streamStartResponse({ ok: false, reason: 'stream_failed' }), origin)
     }
     return
   }

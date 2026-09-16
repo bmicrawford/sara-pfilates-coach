@@ -68,9 +68,36 @@ The durable public origin is the **Cloudflare Worker**, not an ephemeral tryclou
 
 ### Talking-head / lip-sync
 
-Ask Sara pins Sara’s portrait while the chat scrolls. Until D-ID video is ready, the locked still (`public/avatar/sara-default.png`) stays clean — no SVG mouth overlay.
+Ask Sara pins Sara’s portrait while the chat scrolls. Idle is the locked still (`public/avatar/sara-default.png`) — no SVG mouth overlay.
 
-Vendor talking-head **video** is optional D-ID. `POST /talk` starts xAI `ara` TTS, uploads audio, creates a talk, and returns `{ talkId }` quickly (Cloudflare Workers cannot wait ~110s for the mp4). The client polls `GET /talk?id=` for up to ~150s and plays the muted video when `videoUrl` arrives. Without `DID_API_KEY`, the API returns honest null video and does not crash. Default still URL: `https://sara-pfilates.surge.sh/avatar/sara-default.png`. Do not fall back to OS `speechSynthesis` as the “good” path.
+**Voice** is immediate xAI `ara` (`POST /speak`). Never wait on a D-ID mp4.
+
+**Motion** is D-ID **Agents Streams** (WebRTC) via `@d-id/client-sdk`. The Worker mints a short-lived `client_key` (`POST /stream`) for the allowed Surge origins. The browser calls `agentManager.speak({ type: 'text', input })` with the Grok reply. The stream video is muted so ara is the only voice. Do not call `agentManager.chat()` — Grok stays the brain (`POST /ask`).
+
+Human setup (once): create a Talks V2 **photo** Agent from `https://sara-pfilates.surge.sh/avatar/sara-default.png` (no D-ID LLM), put `DID_AGENT_ID` on the Worker, keep `DID_API_KEY` as a Worker secret. The Worker mints client keys with allowed origins `https://sara-pfilates.surge.sh`, `https://sara-pfilates-coach.surge.sh`, and local Vite (`http://localhost:43147`). Default still URL: `https://sara-pfilates.surge.sh/avatar/sara-default.png`. Do not fall back to OS `speechSynthesis` as the “good” path.
+
+Create the photo Agent (human; `DID_API_KEY` already in that shell — do not paste it into chat):
+
+```bash
+curl -sS -X POST https://api.d-id.com/agents \
+  -H "Authorization: Basic $(printf '%s' "$DID_API_KEY:" | base64 | tr -d '\n')" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "preview_name": "Sara",
+    "preview_description": "PfilAtes peer coach. Answers come from our Grok worker, not D-ID.",
+    "embed": true,
+    "presenter": {
+      "type": "talk",
+      "source_url": "https://sara-pfilates.surge.sh/avatar/sara-default.png",
+      "thumbnail": "https://sara-pfilates.surge.sh/avatar/sara-default.png",
+      "stitch": true
+    }
+  }'
+# copy id (agt_...) then:
+#   printf '%s' "$DID_AGENT_ID" | npx wrangler secret put DID_AGENT_ID
+```
+
+Or in D-ID Studio: new Agent → photo of that still → embed → do not wire an LLM. Studio “allowed domains” can stay empty; this app uses Worker-minted short-lived keys.
 
 ### Cloudflare Worker (durable phone-demo origin)
 
@@ -103,7 +130,7 @@ npx surge ./dist https://sara-pfilates.surge.sh
 - Stub move-to-new-phone at `/move`
 - Home with Sara’s portrait and quick logs: drink, void/leak, pad change (time + reason only), exercise, Ask Sara
 - Bottom sheets for those forms
-- Ask Sara via Grok (`POST /ask` + short chat history), then spoken with xAI neural TTS (`POST /speak`, voice `ara`). Mute / Stop / Play stay in the UI. Portrait stays pinned while the thread scrolls.
+- Ask Sara via Grok (`POST /ask` + short chat history), spoken immediately with xAI neural TTS (`POST /speak`, voice `ara`). Realtime head motion is D-ID Agents Streams (WebRTC), not an offline mp4. Mute / Stop / Play stay in the UI. Portrait stays pinned while the thread scrolls.
 
 ## TODO (later)
 

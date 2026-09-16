@@ -50,7 +50,7 @@ Default connector timeout: **~12s**. If `/health` cannot DNS or connect, the pho
 
 - **Kajabi stays the course.** This app is the pocket companion (redeem, bind one phone, log the day, Ask Sara). Do not move lessons off Kajabi.
 - **No outbound patient email from eng.** Identity is email-on-redeem only. This repo does not send mail, SMS campaigns, or clinician notifications.
-- **D-ID talking-head is optional and async.** `POST /talk` does TTS + D-ID create and returns `{ talkId }` quickly (plus `videoUrl` if already present). `GET /talk?id=` (or `/talk/:id`) polls D-ID once. Missing `DID_API_KEY` → honest null video, no crash. Do not block a Worker request on D-ID render (~110s). Do not put the key in the repo. CORS must keep `https://sara-pfilates.surge.sh` and `https://sara-pfilates-coach.surge.sh`. Default still: `https://sara-pfilates.surge.sh/avatar/sara-default.png`.
+- **D-ID talking-head is Agents Streams (WebRTC), not Talks mp4.** Worker `POST /stream` mints a short-lived Agents SDK `client_key` (`ttl_seconds` ~10 min) for `https://sara-pfilates.surge.sh` and `https://sara-pfilates-coach.surge.sh` (plus local Vite). Browser uses `@d-id/client-sdk` `createAgentManager` + `speak({ type: 'text', input })` with the Grok reply. Do not call `chat()` (Grok is the brain via `POST /ask`). Voice is immediate xAI `ara` via `POST /speak` — never block on D-ID clip generation. Mute the WebRTC element so ara is the only audio. Missing `DID_API_KEY` or `DID_AGENT_ID` → honest null credentials, ara still works. Do not restore the SVG mouth overlay. Do not put `DID_API_KEY` in the Vite bundle. CORS must keep both Surge hosts. Default still: `https://sara-pfilates.surge.sh/avatar/sara-default.png`.
 - **Site-backed medical claims only.** Never invent clinical promises. Sara is a peer coach, not a clinician. If you touch coach copy, keep it to what the site / system prompt already allows.
 - **Voice path is xAI neural TTS** (`ara`) via `POST /speak`. Do not treat OS `speechSynthesis` as the good path.
 - **Sticky Ask Sara portrait:** Sara stays pinned; the thread scrolls underneath. Do not “fix” that layout unless you have a clear regression.
@@ -85,7 +85,7 @@ Do **not** use ephemeral `*.trycloudflare.com` tunnels for the phone demo. They 
    ```
 6. Re-run `verify:ask-api` against the same Worker URL. Hard-refresh the phone demo.
 
-Agents must not run steps 1, 2, or 5 with real secrets. `DID_API_KEY` is already on the Worker; do not put it in the repo. After this tree merges, the human redeploys the Worker so `GET /talk` ships, then rebuilds Surge.
+Agents must not run steps 1, 2, or 5 with real secrets. `DID_API_KEY` is already on the Worker; do not put it in the repo. After this tree merges: create the Sara photo Agent if it does not exist, `wrangler secret put DID_AGENT_ID`, redeploy the Worker so `POST /stream` ships, then rebuild Surge.
 
 ## Secrets
 

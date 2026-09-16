@@ -4,7 +4,7 @@ export const DID_TALKS_URL = 'https://api.d-id.com/talks'
 export const DID_AUDIOS_URL = 'https://api.d-id.com/audios'
 export const SARA_STILL_URL = 'https://sara-pfilates.surge.sh/avatar/sara-default.png'
 
-function didAuth(apiKey) {
+export function didAuth(apiKey) {
   const raw = String(apiKey || '').trim()
   if (!raw) return ''
   if (/^basic\s+/i.test(raw)) return raw
