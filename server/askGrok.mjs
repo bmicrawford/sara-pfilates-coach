@@ -29,6 +29,7 @@ If they ask about moving phones: this companion binds to one device; they can us
 Stay kind. Stay specific.`
 
 const ALLOWED_ORIGINS = new Set([
+  'https://sara-pfilates.surge.sh',
   'https://sara-pfilates-coach.surge.sh',
   'http://localhost:43147',
   'http://127.0.0.1:43147',
