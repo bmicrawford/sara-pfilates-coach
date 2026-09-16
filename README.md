@@ -35,7 +35,7 @@ Open the demo redeem URL:
 
 [http://localhost:43147/r/DEMO-SARA-001](http://localhost:43147/r/DEMO-SARA-001)
 
-**Phone UI (static):** [https://sara-pfilates-coach.surge.sh/r/DEMO-SARA-001](https://sara-pfilates-coach.surge.sh/r/DEMO-SARA-001)
+**Phone UI (static):** [https://sara-pfilates.surge.sh/r/DEMO-SARA-001](https://sara-pfilates.surge.sh/r/DEMO-SARA-001) (current). The older Surge host `https://sara-pfilates-coach.surge.sh` remains CORS-allowlisted.
 
 Ask Sara on the phone demo needs the **Cloudflare Worker** URL baked in as `VITE_SARA_API_URL` (see below). Until that Worker is deployed **with** `XAI_API_KEY`, the UI shows an honest reconnect line — it will not fake a Grok answer from the old keyword stub, and it will not fall back to the phone’s `speechSynthesis`. Never bake a `*.trycloudflare.com` tunnel into Surge.
 
@@ -90,7 +90,7 @@ npm run verify:ask-api -- https://sara-pfilates-ask.<account>.workers.dev
 
 VITE_SARA_API_URL=https://sara-pfilates-ask.<account>.workers.dev npm run build
 # build copies index.html → 200.html so Surge keeps /r/:token and /ask on the PWA
-npx surge ./dist https://sara-pfilates-coach.surge.sh
+npx surge ./dist https://sara-pfilates.surge.sh
 ```
 
 `wrangler` must be logged in on that box (`npx wrangler login`, or `CLOUDFLARE_API_TOKEN` already in env). `npm run build` refuses a trycloudflare `VITE_SARA_API_URL`.

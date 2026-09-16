@@ -48,7 +48,7 @@ export function surgeRebuildReminder(workerUrl) {
   return [
     'After wrangler deploy (human; XAI_API_KEY already in Worker secrets):',
     `  VITE_SARA_API_URL=${origin} npm run build`,
-    '  npx surge ./dist https://sara-pfilates-coach.surge.sh',
+    '  npx surge ./dist https://sara-pfilates.surge.sh',
     `  npm run verify:ask-api -- ${origin}`,
     'Never bake *.trycloudflare.com into the phone demo. D-ID stays paused (no DID_API_KEY).',
   ].join('\n')

@@ -1,4 +1,4 @@
-import { askSaraGrok, buildMessages, SARA_OFFLINE, SARA_SYSTEM, GROK_MODEL } from './askGrok.mjs'
+import { askSaraGrok, buildMessages, corsHeaders, SARA_OFFLINE, SARA_SYSTEM, GROK_MODEL } from './askGrok.mjs'
 
 function assert(cond, msg) {
   if (!cond) {
@@ -10,6 +10,16 @@ function assert(cond, msg) {
 }
 
 assert(GROK_MODEL === 'grok-4.6', 'model id is grok-4.6')
+assert(
+  corsHeaders('https://sara-pfilates.surge.sh')['Access-Control-Allow-Origin'] ===
+    'https://sara-pfilates.surge.sh',
+  'CORS allows current phone demo origin',
+)
+assert(
+  corsHeaders('https://sara-pfilates-coach.surge.sh')['Access-Control-Allow-Origin'] ===
+    'https://sara-pfilates-coach.surge.sh',
+  'CORS still allows the older Surge origin',
+)
 assert(/never use the casual word "stress"/i.test(SARA_SYSTEM), 'system prompt forbids casual stress')
 assert(!/reduce stress|don't stress|less stress/i.test(SARA_SYSTEM), 'prompt does not coach "stress" as a lifestyle word')
 assert(/Kajabi/.test(SARA_SYSTEM), 'course stays on Kajabi')

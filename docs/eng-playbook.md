@@ -57,7 +57,7 @@ Default connector timeout: **~12s**. If `/health` cannot DNS or connect, the pho
 
 ## Durable Ask Sara path (phone demo)
 
-The Surge static app (`https://sara-pfilates-coach.surge.sh`) can only call a **public HTTPS** origin baked in as `VITE_SARA_API_URL`.
+The Surge static app (`https://sara-pfilates.surge.sh`, current phone demo; `https://sara-pfilates-coach.surge.sh` still CORS-allowlisted) can only call a **public HTTPS** origin baked in as `VITE_SARA_API_URL`.
 
 **Use the Cloudflare Worker** (`worker/`, name `sara-pfilates-ask` → `https://sara-pfilates-ask.<account>.workers.dev`).
 
@@ -81,7 +81,7 @@ Do **not** use ephemeral `*.trycloudflare.com` tunnels for the phone demo. They 
 5. Rebuild Surge **with that Worker URL** (not a tunnel):
    ```bash
    VITE_SARA_API_URL=https://sara-pfilates-ask.<account>.workers.dev npm run build
-   npx surge ./dist https://sara-pfilates-coach.surge.sh
+   npx surge ./dist https://sara-pfilates.surge.sh
    ```
 6. Re-run `verify:ask-api` against the same Worker URL. Hard-refresh the phone demo.
 
