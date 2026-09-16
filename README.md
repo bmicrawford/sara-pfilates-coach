@@ -21,7 +21,7 @@ npm run dev
 
 `npm run dev` starts:
 
-- Ask Sara API on **http://127.0.0.1:8787** (`POST /ask`, `POST /speak`, `POST /talk`) — reads `XAI_API_KEY` from the environment
+- Ask Sara API on **http://127.0.0.1:8787** (`POST /ask`, `POST /speak`, `POST /talk`, `GET /talk?id=`) — reads `XAI_API_KEY` from the environment
 - Vite app on **port 43147**, proxying those paths to that API
 
 Or run them separately:
@@ -68,9 +68,9 @@ The durable public origin is the **Cloudflare Worker**, not an ephemeral tryclou
 
 ### Talking-head / lip-sync
 
-Ask Sara pins Sara’s portrait while the chat scrolls. While neural audio plays, the locked still (`public/avatar/sara-default.png`) gets a real mouth open/close driven by the audio (not a pulse ring).
+Ask Sara pins Sara’s portrait while the chat scrolls. Until D-ID video is ready, the locked still (`public/avatar/sara-default.png`) stays clean — no SVG mouth overlay.
 
-Vendor talking-head **video** (`POST /talk`, D-ID) is **paused** until Dr C / CoS says go. Leave `DID_API_KEY` unset. Voice still uses xAI `ara` and the mouth still moves on the still. Do not fall back to OS `speechSynthesis` as the “good” path.
+Vendor talking-head **video** is optional D-ID. `POST /talk` starts xAI `ara` TTS, uploads audio, creates a talk, and returns `{ talkId }` quickly (Cloudflare Workers cannot wait ~110s for the mp4). The client polls `GET /talk?id=` for up to ~150s and plays the muted video when `videoUrl` arrives. Without `DID_API_KEY`, the API returns honest null video and does not crash. Default still URL: `https://sara-pfilates.surge.sh/avatar/sara-default.png`. Do not fall back to OS `speechSynthesis` as the “good” path.
 
 ### Cloudflare Worker (durable phone-demo origin)
 
@@ -107,7 +107,6 @@ npx surge ./dist https://sara-pfilates.surge.sh
 
 ## TODO (later)
 
-Vendor talking-head video (D-ID) stays paused until product says go. Mouth motion on the locked still + neural `ara` voice already ship.
 - Install hint: `beforeinstallprompt` plus iOS Add to Home Screen tip
 - Portrait moods: idle = default smile, listening while logging/typing or waiting on Grok, celebrate on a successful save (especially exercise), quiet/neutral after idle
 - Stub push (default channel) and SMS fallback after 3 days with no open

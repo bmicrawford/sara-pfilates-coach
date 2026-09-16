@@ -1,6 +1,18 @@
 import { askSaraGrok, corsHeaders, jsonResponse, GROK_MODEL } from '../../server/askGrok.mjs'
 import { speakSaraTts, SARA_VOICE } from '../../server/speakSara.mjs'
-import { talkSaraDid } from '../../server/talkSara.mjs'
+import {
+  talkSaraDid,
+  getSaraTalk,
+  isTalkPath,
+  talkIdFromUrl,
+  talkStartResponse,
+  talkPollResponse,
+} from '../../server/talkSara.mjs'
+
+function talkJson(status, body, origin) {
+  const out = jsonResponse(status, body, origin)
+  return { ...out, headers: { ...out.headers, 'Cache-Control': 'no-store' } }
+}
 
 export default {
   async fetch(request, env) {
@@ -22,6 +34,15 @@ export default {
         },
         origin,
       )
+      return new Response(out.body, { status: out.status, headers: out.headers })
+    }
+
+    if (request.method === 'GET' && isTalkPath(url.pathname)) {
+      const talked = await getSaraTalk({
+        id: talkIdFromUrl(url),
+        apiKey: env.DID_API_KEY,
+      })
+      const out = talkJson(200, talkPollResponse(talked), origin)
       return new Response(out.body, { status: out.status, headers: out.headers })
     }
 
@@ -67,7 +88,7 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/talk') {
       if (!env.DID_API_KEY) {
-        const out = jsonResponse(200, { videoUrl: null, reason: 'missing_did_key' }, origin)
+        const out = talkJson(200, talkStartResponse({ ok: false, reason: 'missing_did_key' }), origin)
         return new Response(out.body, { status: out.status, headers: out.headers })
       }
       const spoken = await speakSaraTts({
@@ -76,7 +97,7 @@ export default {
         voice: env.XAI_TTS_VOICE || SARA_VOICE,
       })
       if (!spoken.ok) {
-        const out = jsonResponse(200, { videoUrl: null, reason: spoken.error }, origin)
+        const out = talkJson(200, talkStartResponse({ ok: false, reason: spoken.error }), origin)
         return new Response(out.body, { status: out.status, headers: out.headers })
       }
       const talked = await talkSaraDid({
@@ -85,11 +106,7 @@ export default {
         apiKey: env.DID_API_KEY,
         imageUrl: env.SARA_AVATAR_URL,
       })
-      const out = jsonResponse(
-        200,
-        { videoUrl: talked.ok ? talked.videoUrl : null, reason: talked.ok ? undefined : talked.reason },
-        origin,
-      )
+      const out = talkJson(200, talkStartResponse(talked), origin)
       return new Response(out.body, { status: out.status, headers: out.headers })
     }
 

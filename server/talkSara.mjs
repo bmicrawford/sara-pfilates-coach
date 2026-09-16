@@ -2,8 +2,7 @@
 
 export const DID_TALKS_URL = 'https://api.d-id.com/talks'
 export const DID_AUDIOS_URL = 'https://api.d-id.com/audios'
-export const SARA_STILL_URL =
-  'https://sara-pfilates-coach.surge.sh/avatar/sara-default.png'
+export const SARA_STILL_URL = 'https://sara-pfilates.surge.sh/avatar/sara-default.png'
 
 function didAuth(apiKey) {
   const raw = String(apiKey || '').trim()
@@ -13,8 +12,39 @@ function didAuth(apiKey) {
   return `Basic ${btoa(token)}`
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms))
+export function saraStillUrl(imageUrl) {
+  return (
+    imageUrl ||
+    (typeof process !== 'undefined' && process.env?.SARA_AVATAR_URL) ||
+    SARA_STILL_URL
+  )
+}
+
+export function isTalkPath(pathname) {
+  const path = String(pathname || '')
+  return path === '/talk' || /^\/talk\/[^/]+\/?$/.test(path)
+}
+
+export function talkIdFromUrl(url) {
+  const q = String(url?.searchParams?.get('id') || '').trim()
+  if (q) return q
+  const m = String(url?.pathname || '').match(/^\/talk\/([^/]+)\/?$/)
+  return m ? decodeURIComponent(m[1]).trim() : ''
+}
+
+export function talkStartResponse(talked) {
+  if (!talked?.ok) {
+    return { talkId: null, videoUrl: null, reason: talked?.reason || 'talk_failed' }
+  }
+  return { talkId: talked.talkId || null, videoUrl: talked.videoUrl || null }
+}
+
+export function talkPollResponse(got) {
+  return {
+    status: got?.status || 'error',
+    videoUrl: got?.videoUrl || null,
+    reason: got?.reason,
+  }
 }
 
 async function uploadDidAudio(audio, contentType, apiKey, fetchFn) {
@@ -33,23 +63,7 @@ async function uploadDidAudio(audio, contentType, apiKey, fetchFn) {
   return data.url || data.audio_url || null
 }
 
-async function pollTalk(id, apiKey, fetchFn, maxMs = 45_000) {
-  const started = Date.now()
-  while (Date.now() - started < maxMs) {
-    await sleep(1200)
-    const res = await fetchFn(`${DID_TALKS_URL}/${id}`, {
-      headers: { Authorization: didAuth(apiKey) },
-    })
-    if (!res.ok) return null
-    const data = await res.json().catch(() => ({}))
-    if (data.status === 'done' && (data.result_url || data.audio_url)) {
-      return data.result_url
-    }
-    if (data.status === 'error' || data.status === 'rejected') return null
-  }
-  return null
-}
-
+/** Start a D-ID talk. Returns talkId quickly; does not wait for the mp4. */
 export async function talkSaraDid({
   audio,
   contentType = 'audio/mpeg',
@@ -57,25 +71,22 @@ export async function talkSaraDid({
   imageUrl,
   fetchFn = fetch,
 } = {}) {
-  const still =
-    imageUrl ||
-    (typeof process !== 'undefined' && process.env?.SARA_AVATAR_URL) ||
-    SARA_STILL_URL
+  const still = saraStillUrl(imageUrl)
   if (!apiKey) {
-    return { ok: false, reason: 'missing_did_key' }
+    return { ok: false, talkId: null, videoUrl: null, reason: 'missing_did_key' }
   }
   if (!audio || !audio.byteLength) {
-    return { ok: false, reason: 'no_audio' }
+    return { ok: false, talkId: null, videoUrl: null, reason: 'no_audio' }
   }
 
   let audioUrl
   try {
     audioUrl = await uploadDidAudio(audio, contentType, apiKey, fetchFn)
   } catch {
-    return { ok: false, reason: 'did_upload_failed' }
+    return { ok: false, talkId: null, videoUrl: null, reason: 'did_upload_failed' }
   }
   if (!audioUrl) {
-    return { ok: false, reason: 'did_upload_failed' }
+    return { ok: false, talkId: null, videoUrl: null, reason: 'did_upload_failed' }
   }
 
   let created
@@ -94,24 +105,48 @@ export async function talkSaraDid({
     })
     created = await res.json().catch(() => ({}))
     if (!res.ok || !created.id) {
-      return { ok: false, reason: 'did_create_failed' }
+      return { ok: false, talkId: null, videoUrl: null, reason: 'did_create_failed' }
     }
   } catch {
-    return { ok: false, reason: 'did_create_failed' }
+    return { ok: false, talkId: null, videoUrl: null, reason: 'did_create_failed' }
   }
 
-  if (created.result_url) {
-    return { ok: true, videoUrl: created.result_url }
+  return {
+    ok: true,
+    talkId: created.id,
+    videoUrl: created.result_url || null,
+  }
+}
+
+/** One D-ID GET for a talk id. Call again from the client until videoUrl or timeout. */
+export async function getSaraTalk({ id, apiKey, fetchFn = fetch } = {}) {
+  if (!apiKey) {
+    return { ok: false, status: 'error', videoUrl: null, reason: 'missing_did_key' }
+  }
+  const talkId = String(id || '').trim()
+  if (!talkId) {
+    return { ok: false, status: 'error', videoUrl: null, reason: 'missing_id' }
   }
 
-  let videoUrl
   try {
-    videoUrl = await pollTalk(created.id, apiKey, fetchFn)
+    const res = await fetchFn(`${DID_TALKS_URL}/${encodeURIComponent(talkId)}`, {
+      headers: { Authorization: didAuth(apiKey) },
+    })
+    if (!res.ok) {
+      return { ok: false, status: 'error', videoUrl: null, reason: 'did_poll_failed' }
+    }
+    const data = await res.json().catch(() => ({}))
+    const status = String(data.status || 'unknown')
+    if (status === 'done') {
+      const videoUrl = data.result_url || null
+      if (videoUrl) return { ok: true, status: 'done', videoUrl }
+      return { ok: false, status: 'error', videoUrl: null, reason: 'did_no_result' }
+    }
+    if (status === 'error' || status === 'rejected') {
+      return { ok: false, status, videoUrl: null, reason: 'did_error' }
+    }
+    return { ok: true, status, videoUrl: null }
   } catch {
-    return { ok: false, reason: 'did_poll_failed' }
+    return { ok: false, status: 'error', videoUrl: null, reason: 'did_poll_failed' }
   }
-  if (!videoUrl) {
-    return { ok: false, reason: 'did_timeout' }
-  }
-  return { ok: true, videoUrl }
 }

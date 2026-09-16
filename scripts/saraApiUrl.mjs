@@ -50,6 +50,6 @@ export function surgeRebuildReminder(workerUrl) {
     `  VITE_SARA_API_URL=${origin} npm run build`,
     '  npx surge ./dist https://sara-pfilates.surge.sh',
     `  npm run verify:ask-api -- ${origin}`,
-    'Never bake *.trycloudflare.com into the phone demo. D-ID stays paused (no DID_API_KEY).',
+    'Never bake *.trycloudflare.com into the phone demo. D-ID is optional on the Worker (no keys in the repo).',
   ].join('\n')
 }
