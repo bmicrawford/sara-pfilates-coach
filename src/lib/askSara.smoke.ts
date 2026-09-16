@@ -1,5 +1,5 @@
 import { isSaraUnreachable, SARA_OFFLINE } from './askSara.ts'
-import { SARA_VOICE_OFFLINE } from './speakSara.ts'
+import { SARA_VOICE_OFFLINE, SARA_TALK_POLL_MS } from './speakSara.ts'
 import { readFileSync } from 'node:fs'
 
 function assert(cond: unknown, msg: string) {
@@ -24,6 +24,12 @@ assert(!/speechSynthesis|Web Speech/i.test(SARA_VOICE_OFFLINE), 'does not advert
 const speakSrc = readFileSync(new URL('./speakSara.ts', import.meta.url), 'utf8')
 assert(!/speechSynthesis/.test(speakSrc), 'speakSara.ts has no speechSynthesis fallback')
 assert(!/trycloudflare/.test(speakSrc), 'speakSara.ts does not send people to trycloudflare')
+assert(SARA_TALK_POLL_MS === 150_000, 'client polls D-ID for ~150s')
+assert(/\/talk\?id=/.test(speakSrc), 'requestSaraTalk polls GET /talk?id=')
+
+const portraitSrc = readFileSync(new URL('../components/TalkingPortrait.tsx', import.meta.url), 'utf8')
+assert(!/<svg[\s>]/.test(portraitSrc), 'TalkingPortrait has no SVG mouth overlay')
+assert(/videoUrl/.test(portraitSrc), 'TalkingPortrait still plays D-ID video when ready')
 
 if (process.exitCode) {
   console.error('askSara copy smoke failed')

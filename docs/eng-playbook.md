@@ -50,7 +50,7 @@ Default connector timeout: **~12s**. If `/health` cannot DNS or connect, the pho
 
 - **Kajabi stays the course.** This app is the pocket companion (redeem, bind one phone, log the day, Ask Sara). Do not move lessons off Kajabi.
 - **No outbound patient email from eng.** Identity is email-on-redeem only. This repo does not send mail, SMS campaigns, or clinician notifications.
-- **D-ID / talking-head video is paused** until Dr C or CoS says go. Leave the optional `POST /talk` scaffold inert. Do not enable, expand, or require `DID_API_KEY`.
+- **D-ID talking-head is optional and async.** `POST /talk` does TTS + D-ID create and returns `{ talkId }` quickly (plus `videoUrl` if already present). `GET /talk?id=` (or `/talk/:id`) polls D-ID once. Missing `DID_API_KEY` → honest null video, no crash. Do not block a Worker request on D-ID render (~110s). Do not put the key in the repo. CORS must keep `https://sara-pfilates.surge.sh` and `https://sara-pfilates-coach.surge.sh`. Default still: `https://sara-pfilates.surge.sh/avatar/sara-default.png`.
 - **Site-backed medical claims only.** Never invent clinical promises. Sara is a peer coach, not a clinician. If you touch coach copy, keep it to what the site / system prompt already allows.
 - **Voice path is xAI neural TTS** (`ara`) via `POST /speak`. Do not treat OS `speechSynthesis` as the good path.
 - **Sticky Ask Sara portrait:** Sara stays pinned; the thread scrolls underneath. Do not “fix” that layout unless you have a clear regression.
@@ -85,7 +85,7 @@ Do **not** use ephemeral `*.trycloudflare.com` tunnels for the phone demo. They 
    ```
 6. Re-run `verify:ask-api` against the same Worker URL. Hard-refresh the phone demo.
 
-Agents must not run steps 1, 2, or 5 with real secrets. `DID_API_KEY` stays unset while D-ID is paused.
+Agents must not run steps 1, 2, or 5 with real secrets. `DID_API_KEY` is already on the Worker; do not put it in the repo. After this tree merges, the human redeploys the Worker so `GET /talk` ships, then rebuilds Surge.
 
 ## Secrets
 

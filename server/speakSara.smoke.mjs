@@ -1,5 +1,15 @@
 import { clipSpeakText, speakSaraTts, SARA_VOICE, XAI_TTS_URL } from './speakSara.mjs'
-import { talkSaraDid, DID_TALKS_URL, DID_AUDIOS_URL, SARA_STILL_URL } from './talkSara.mjs'
+import {
+  talkSaraDid,
+  getSaraTalk,
+  talkIdFromUrl,
+  isTalkPath,
+  talkStartResponse,
+  talkPollResponse,
+  DID_TALKS_URL,
+  DID_AUDIOS_URL,
+  SARA_STILL_URL,
+} from './talkSara.mjs'
 
 function assert(cond, msg) {
   if (!cond) {
@@ -14,6 +24,14 @@ assert(SARA_VOICE === 'ara', 'warm adult female voice is ara')
 assert(XAI_TTS_URL.includes('/v1/tts'), 'xAI TTS path')
 assert(clipSpeakText('  hello   there  ') === 'hello there', 'clips/collapses speak text')
 assert(clipSpeakText('x'.repeat(5000)).length === 4000, 'caps speak length')
+assert(
+  SARA_STILL_URL === 'https://sara-pfilates.surge.sh/avatar/sara-default.png',
+  'default still is the live Surge avatar',
+)
+assert(isTalkPath('/talk') && isTalkPath('/talk/abc') && !isTalkPath('/talks'), 'talk paths')
+assert(talkIdFromUrl(new URL('http://x/talk?id=tlk_1')) === 'tlk_1', 'talk id from query')
+assert(talkIdFromUrl(new URL('http://x/talk/tlk_2')) === 'tlk_2', 'talk id from path')
+assert(talkIdFromUrl(new URL('http://x/talk')) === '', 'missing talk id is empty')
 
 const missing = await speakSaraTts({ text: 'hello', apiKey: '' })
 assert(missing.ok === false && missing.status === 503, 'missing XAI key → no fake voice')
@@ -50,8 +68,10 @@ const noDid = await talkSaraDid({
   audio: new Uint8Array([1]),
   apiKey: '',
 })
-assert(noDid.ok === false && noDid.reason === 'missing_did_key', 'D-ID absent → no fake video')
+assert(noDid.ok === false && noDid.reason === 'missing_did_key' && !noDid.talkId, 'D-ID absent → no fake video')
+assert(talkStartResponse(noDid).videoUrl === null, 'missing key start payload has null video')
 
+let pollCalls = 0
 const didMock = await talkSaraDid({
   audio: new Uint8Array([9, 8, 7]),
   apiKey: 'did-test-key',
@@ -66,10 +86,59 @@ const didMock = await talkSaraDid({
       assert(body.script.type === 'audio', 'uses uploaded neural audio, not D-ID TTS')
       return { ok: true, json: async () => ({ id: 'talk_1', result_url: 'https://d-id.example/sara.mp4' }) }
     }
+    pollCalls += 1
     throw new Error(`unexpected ${url}`)
   },
 })
-assert(didMock.ok && /sara\.mp4$/.test(didMock.videoUrl), 'D-ID mock returns talking-head url')
+assert(didMock.ok && didMock.talkId === 'talk_1' && /sara\.mp4$/.test(didMock.videoUrl), 'create returns talkId + video if D-ID already has it')
+assert(pollCalls === 0, 'create does not poll D-ID for the mp4')
+
+const didAsync = await talkSaraDid({
+  audio: new Uint8Array([1, 2]),
+  apiKey: 'did-test-key',
+  fetchFn: async (url) => {
+    if (url === DID_AUDIOS_URL) {
+      return { ok: true, json: async () => ({ url: 'https://d-id.example/a.mp3' }) }
+    }
+    if (url === DID_TALKS_URL) {
+      return { ok: true, json: async () => ({ id: 'talk_slow', status: 'created' }) }
+    }
+    throw new Error(`create must not wait on ${url}`)
+  },
+})
+assert(didAsync.ok && didAsync.talkId === 'talk_slow' && !didAsync.videoUrl, 'create returns talkId without blocking ~2 minutes')
+
+const pending = await getSaraTalk({
+  id: 'talk_slow',
+  apiKey: 'did-test-key',
+  fetchFn: async (url, init) => {
+    assert(url === `${DID_TALKS_URL}/talk_slow`, 'GET talks/:id once')
+    assert(/Basic /.test(init.headers.Authorization), 'poll uses Basic auth')
+    return { ok: true, json: async () => ({ id: 'talk_slow', status: 'started' }) }
+  },
+})
+assert(pending.ok && pending.status === 'started' && !pending.videoUrl, 'one GET can be pending')
+assert(talkPollResponse(pending).status === 'started', 'poll payload keeps pending status')
+
+const done = await getSaraTalk({
+  id: 'talk_slow',
+  apiKey: 'did-test-key',
+  fetchFn: async () => ({
+    ok: true,
+    json: async () => ({ status: 'done', result_url: 'https://d-id.example/sara.mp4' }),
+  }),
+})
+assert(done.ok && done.status === 'done' && /sara\.mp4$/.test(done.videoUrl), 'done GET returns videoUrl')
+
+const errored = await getSaraTalk({
+  id: 'talk_bad',
+  apiKey: 'did-test-key',
+  fetchFn: async () => ({ ok: true, json: async () => ({ status: 'error' }) }),
+})
+assert(errored.ok === false && errored.status === 'error' && !errored.videoUrl, 'D-ID error is honest')
+
+const noPollKey = await getSaraTalk({ id: 'talk_1', apiKey: '' })
+assert(noPollKey.reason === 'missing_did_key' && !noPollKey.videoUrl, 'GET without key does not crash')
 
 if (process.exitCode) {
   console.error('speakSara smoke failed')

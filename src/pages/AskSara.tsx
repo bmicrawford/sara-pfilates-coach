@@ -22,7 +22,6 @@ export function AskSara() {
   const [busy, setBusy] = useState(false)
   const [speaking, setSpeaking] = useState(false)
   const [muted, setMuted] = useState(() => isSaraMuted())
-  const [level, setLevel] = useState(0)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [voiceNote, setVoiceNote] = useState<string | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
@@ -46,14 +45,9 @@ export function AskSara() {
   const speakReply = (text: string) => {
     if (muted || !isVoiceReady()) return
     setVoiceNote(null)
-    setLevel(0)
     void speakSara(text, {
       onStart: () => setSpeaking(true),
-      onEnd: () => {
-        setSpeaking(false)
-        setLevel(0)
-      },
-      onLevel: setLevel,
+      onEnd: () => setSpeaking(false),
       onError: (message) => setVoiceNote(message),
     })
     prefetchTalk(text)
@@ -66,7 +60,6 @@ export function AskSara() {
     unlockSaraSpeech()
     stopSaraSpeech()
     setSpeaking(false)
-    setLevel(0)
     setVideoUrl(null)
     talkFor.current = null
     const you: ChatMessage = { id: uid(), from: 'you', text, at: nowIso() }
@@ -107,7 +100,6 @@ export function AskSara() {
             if (speaking && !muted) {
               stopSaraSpeech()
               setSpeaking(false)
-              setLevel(0)
               return
             }
             const next = !muted
@@ -115,7 +107,6 @@ export function AskSara() {
             setSaraMuted(next)
             if (next) {
               setSpeaking(false)
-              setLevel(0)
             }
           }}
         >
@@ -127,7 +118,6 @@ export function AskSara() {
         <TalkingPortrait
           talking={speaking}
           listening={busy || Boolean(draft.trim())}
-          level={level}
           videoUrl={videoUrl}
         />
         <p className="mt-1 text-center text-sm text-ink-mute">
@@ -166,7 +156,6 @@ export function AskSara() {
                   if (speaking) {
                     stopSaraSpeech()
                     setSpeaking(false)
-                    setLevel(0)
                     return
                   }
                   speakReply(m.text)

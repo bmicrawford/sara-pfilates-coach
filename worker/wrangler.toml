@@ -8,8 +8,9 @@ compatibility_date = "2026-09-14"
 [vars]
 XAI_MODEL = "grok-4.6"
 XAI_TTS_VOICE = "ara"
+SARA_AVATAR_URL = "https://sara-pfilates.surge.sh/avatar/sara-default.png"
 
 # Secrets — do not put keys here.
 #   printf '%s' "$XAI_API_KEY" | npx wrangler secret put XAI_API_KEY
-# D-ID talking-head video is paused (product). Leave DID_API_KEY unset.
+# DID_API_KEY is already set on sara-pfilates-ask. Do not commit it.
 #   printf '%s' "$DID_API_KEY" | npx wrangler secret put DID_API_KEY

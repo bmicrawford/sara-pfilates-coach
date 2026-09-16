@@ -1,7 +1,14 @@
 import { createServer } from 'node:http'
 import { askSaraGrok, corsHeaders, jsonResponse, GROK_MODEL, SARA_OFFLINE } from './askGrok.mjs'
 import { speakSaraTts, SARA_VOICE } from './speakSara.mjs'
-import { talkSaraDid } from './talkSara.mjs'
+import {
+  talkSaraDid,
+  getSaraTalk,
+  isTalkPath,
+  talkIdFromUrl,
+  talkStartResponse,
+  talkPollResponse,
+} from './talkSara.mjs'
 
 const PORT = Number(process.env.SARA_API_PORT || 8787)
 
@@ -26,6 +33,12 @@ function readBody(req, max = 80_000) {
 function sendJson(res, result, origin) {
   const out = jsonResponse(result.status, result.body, origin)
   res.writeHead(out.status, out.headers)
+  res.end(out.body)
+}
+
+function sendTalkJson(res, body, origin) {
+  const out = jsonResponse(200, body, origin)
+  res.writeHead(out.status, { ...out.headers, 'Cache-Control': 'no-store' })
   res.end(out.body)
 }
 
@@ -98,9 +111,18 @@ const server = createServer(async (req, res) => {
     return
   }
 
+  if (req.method === 'GET' && isTalkPath(url.pathname)) {
+    const talked = await getSaraTalk({
+      id: talkIdFromUrl(url),
+      apiKey: process.env.DID_API_KEY,
+    })
+    sendTalkJson(res, talkPollResponse(talked), origin)
+    return
+  }
+
   if (req.method === 'POST' && url.pathname === '/talk') {
     if (!process.env.DID_API_KEY) {
-      sendJson(res, { status: 200, body: { videoUrl: null, reason: 'missing_did_key' } }, origin)
+      sendTalkJson(res, talkStartResponse({ ok: false, reason: 'missing_did_key' }), origin)
       return
     }
     try {
@@ -112,27 +134,18 @@ const server = createServer(async (req, res) => {
         voice: process.env.XAI_TTS_VOICE || SARA_VOICE,
       })
       if (!spoken.ok) {
-        sendJson(res, { status: 200, body: { videoUrl: null, reason: spoken.error } }, origin)
+        sendTalkJson(res, talkStartResponse({ ok: false, reason: spoken.error }), origin)
         return
       }
       const talked = await talkSaraDid({
         audio: spoken.audio,
         contentType: spoken.contentType,
         apiKey: process.env.DID_API_KEY,
+        imageUrl: process.env.SARA_AVATAR_URL,
       })
-      sendJson(
-        res,
-        {
-          status: 200,
-          body: {
-            videoUrl: talked.ok ? talked.videoUrl : null,
-            reason: talked.ok ? undefined : talked.reason,
-          },
-        },
-        origin,
-      )
+      sendTalkJson(res, talkStartResponse(talked), origin)
     } catch {
-      sendJson(res, { status: 200, body: { videoUrl: null, reason: 'talk_failed' } }, origin)
+      sendTalkJson(res, talkStartResponse({ ok: false, reason: 'talk_failed' }), origin)
     }
     return
   }
