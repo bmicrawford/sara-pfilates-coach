@@ -8,6 +8,7 @@ import {
   talkStartResponse,
   talkPollResponse,
 } from '../../server/talkSara.mjs'
+import { mintSaraStreamKey, streamStartResponse } from '../../server/streamSara.mjs'
 
 function talkJson(status, body, origin) {
   const out = jsonResponse(status, body, origin)
@@ -31,6 +32,7 @@ export default {
           model: env.XAI_MODEL || GROK_MODEL,
           tts: env.XAI_TTS_VOICE || SARA_VOICE,
           talk: Boolean(env.DID_API_KEY),
+          stream: Boolean(env.DID_API_KEY && env.DID_AGENT_ID),
         },
         origin,
       )
@@ -44,6 +46,20 @@ export default {
       })
       const out = talkJson(200, talkPollResponse(talked), origin)
       return new Response(out.body, { status: out.status, headers: out.headers })
+    }
+
+    if (request.method === 'POST' && url.pathname === '/stream') {
+      try {
+        const minted = await mintSaraStreamKey({
+          apiKey: env.DID_API_KEY,
+          agentId: env.DID_AGENT_ID,
+        })
+        const out = talkJson(200, streamStartResponse(minted), origin)
+        return new Response(out.body, { status: out.status, headers: out.headers })
+      } catch {
+        const out = talkJson(200, streamStartResponse({ ok: false, reason: 'stream_failed' }), origin)
+        return new Response(out.body, { status: out.status, headers: out.headers })
+      }
     }
 
     let body = {}

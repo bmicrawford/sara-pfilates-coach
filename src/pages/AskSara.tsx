@@ -1,13 +1,20 @@
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Field, inputClass } from '../components/Chip'
 import { TalkingPortrait } from '../components/TalkingPortrait'
 import { askSaraRemote, isSaraUnreachable } from '../lib/askSara'
 import { readChat, writeChat } from '../lib/mockServer'
 import {
+  bindSaraStreamVideo,
+  connectSaraStream,
+  disconnectSaraStream,
+  setSaraStreamCallbacks,
+  speakSaraStream,
+  stopSaraStream,
+} from '../lib/saraStream'
+import {
   isSaraMuted,
   isVoiceReady,
-  requestSaraTalk,
   setSaraMuted,
   speakSara,
   stopSaraSpeech,
@@ -21,36 +28,49 @@ export function AskSara() {
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [speaking, setSpeaking] = useState(false)
+  const [streaming, setStreaming] = useState(false)
   const [muted, setMuted] = useState(() => isSaraMuted())
-  const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [voiceNote, setVoiceNote] = useState<string | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
-  const talkFor = useRef<string | null>(null)
+  const mutedRef = useRef(muted)
+  mutedRef.current = muted
+
+  const onVideoEl = useCallback((el: HTMLVideoElement | null) => {
+    bindSaraStreamVideo(el)
+  }, [])
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, busy])
 
-  useEffect(() => () => stopSaraSpeech(), [])
+  useEffect(() => {
+    setSaraStreamCallbacks({ onTalking: setStreaming })
+    void connectSaraStream()
+    return () => {
+      setSaraStreamCallbacks({})
+      disconnectSaraStream()
+      stopSaraSpeech()
+    }
+  }, [])
 
-  const prefetchTalk = (text: string) => {
-    if (muted || !isVoiceReady()) return
-    if (talkFor.current === text && videoUrl) return
-    talkFor.current = text
-    void requestSaraTalk(text).then((url) => {
-      if (url && talkFor.current === text) setVideoUrl(url)
-    })
+  const live = speaking || streaming
+
+  const haltPlayback = () => {
+    stopSaraSpeech()
+    stopSaraStream()
+    setSpeaking(false)
+    setStreaming(false)
   }
 
   const speakReply = (text: string) => {
-    if (muted || !isVoiceReady()) return
+    if (mutedRef.current || !isVoiceReady()) return
     setVoiceNote(null)
     void speakSara(text, {
       onStart: () => setSpeaking(true),
       onEnd: () => setSpeaking(false),
       onError: (message) => setVoiceNote(message),
     })
-    prefetchTalk(text)
+    void speakSaraStream(text)
   }
 
   const send = async (e: FormEvent) => {
@@ -58,10 +78,7 @@ export function AskSara() {
     const text = draft.trim()
     if (!text || busy) return
     unlockSaraSpeech()
-    stopSaraSpeech()
-    setSpeaking(false)
-    setVideoUrl(null)
-    talkFor.current = null
+    haltPlayback()
     const you: ChatMessage = { id: uid(), from: 'you', text, at: nowIso() }
     const prior = messages
     setMessages((cur) => [...cur, you])
@@ -97,20 +114,17 @@ export function AskSara() {
           type="button"
           className="text-xs text-sage-deep"
           onClick={() => {
-            if (speaking && !muted) {
-              stopSaraSpeech()
-              setSpeaking(false)
+            if (live && !muted) {
+              haltPlayback()
               return
             }
             const next = !muted
             setMuted(next)
             setSaraMuted(next)
-            if (next) {
-              setSpeaking(false)
-            }
+            if (next) haltPlayback()
           }}
         >
-          {muted ? 'Unmute' : speaking ? 'Stop' : 'Mute'}
+          {muted ? 'Unmute' : live ? 'Stop' : 'Mute'}
         </button>
       </header>
 
@@ -118,10 +132,11 @@ export function AskSara() {
         <TalkingPortrait
           talking={speaking}
           listening={busy || Boolean(draft.trim())}
-          videoUrl={videoUrl}
+          streaming={streaming}
+          onVideoEl={onVideoEl}
         />
         <p className="mt-1 text-center text-sm text-ink-mute">
-          {speaking ? 'Sara is talking.' : 'I’m listening — ask the real question.'}
+          {live ? 'Sara is talking.' : 'I’m listening — ask the real question.'}
         </p>
         {voiceNote ? (
           <p className="mt-1 text-center text-xs leading-snug text-ink-mute">{voiceNote}</p>
@@ -152,16 +167,15 @@ export function AskSara() {
                 type="button"
                 className="mt-2 block text-xs font-medium text-sage-deep"
                 onClick={() => {
-                  unlockSaraSpeech()
-                  if (speaking) {
-                    stopSaraSpeech()
-                    setSpeaking(false)
+                  if (live) {
+                    haltPlayback()
                     return
                   }
+                  unlockSaraSpeech()
                   speakReply(m.text)
                 }}
               >
-                {speaking ? 'Stop' : 'Play'}
+                {live ? 'Stop' : 'Play'}
               </button>
             ) : null}
           </div>

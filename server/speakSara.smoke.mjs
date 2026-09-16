@@ -10,6 +10,15 @@ import {
   DID_AUDIOS_URL,
   SARA_STILL_URL,
 } from './talkSara.mjs'
+import {
+  mintSaraStreamKey,
+  streamStartResponse,
+  saraAgentCreateBody,
+  resetStreamKeyCache,
+  STREAM_ALLOWED_DOMAINS,
+  STREAM_TTL_SECONDS,
+  DID_AGENTS_URL,
+} from './streamSara.mjs'
 
 function assert(cond, msg) {
   if (!cond) {
@@ -139,6 +148,62 @@ assert(errored.ok === false && errored.status === 'error' && !errored.videoUrl, 
 
 const noPollKey = await getSaraTalk({ id: 'talk_1', apiKey: '' })
 assert(noPollKey.reason === 'missing_did_key' && !noPollKey.videoUrl, 'GET without key does not crash')
+
+resetStreamKeyCache()
+const noStreamKey = await mintSaraStreamKey({ apiKey: '', agentId: 'agt_1' })
+assert(noStreamKey.reason === 'missing_did_key' && !noStreamKey.clientKey, 'stream mint without DID key is honest')
+
+const noAgent = await mintSaraStreamKey({ apiKey: 'did-test-key', agentId: '' })
+assert(noAgent.reason === 'missing_agent_id' && !noAgent.clientKey, 'stream mint without agent id is honest')
+
+const createdAgent = saraAgentCreateBody()
+assert(createdAgent.presenter.type === 'talk', 'Sara agent is a Talks V2 photo presenter')
+assert(createdAgent.presenter.source_url === SARA_STILL_URL, 'agent uses the locked Sara still')
+assert(createdAgent.presenter.thumbnail === SARA_STILL_URL, 'agent thumbnail is the same still')
+assert(createdAgent.embed === true, 'agent is embeddable for the Agents SDK')
+assert(!createdAgent.llm, 'D-ID agent has no LLM — Grok stays on our Worker')
+assert(STREAM_TTL_SECONDS >= 60 && STREAM_TTL_SECONDS <= 3600, 'client key TTL is short-lived')
+assert(
+  STREAM_ALLOWED_DOMAINS.includes('https://sara-pfilates.surge.sh') &&
+    STREAM_ALLOWED_DOMAINS.includes('https://sara-pfilates-coach.surge.sh'),
+  'stream client key allows both Surge hosts',
+)
+
+let mintCalls = 0
+const minted = await mintSaraStreamKey({
+  apiKey: 'did-test-key',
+  agentId: 'agt_sara',
+  now: () => 1_000,
+  fetchFn: async (url, init) => {
+    mintCalls += 1
+    assert(url === `${DID_AGENTS_URL}/agt_sara/client-keys`, 'mints POST /agents/:id/client-keys')
+    assert(/Basic /.test(init.headers.Authorization), 'stream mint uses DID_API_KEY Basic auth')
+    const body = JSON.parse(init.body)
+    assert(body.ttl_seconds === STREAM_TTL_SECONDS, 'mints a short-lived key')
+    assert(body.allowed_domains.includes('https://sara-pfilates.surge.sh'), 'key allowlist includes current Surge')
+    return {
+      ok: true,
+      json: async () => ({
+        client_key: 'ck_test_not_a_real_key',
+        allowed_domains: body.allowed_domains,
+        expires_at: '1970-01-01T00:10:01.000Z',
+      }),
+    }
+  },
+})
+assert(minted.ok && minted.clientKey === 'ck_test_not_a_real_key' && minted.agentId === 'agt_sara', 'mint returns clientKey + agentId')
+assert(streamStartResponse(minted).clientKey === 'ck_test_not_a_real_key', 'stream payload never includes DID_API_KEY')
+assert(!JSON.stringify(streamStartResponse(minted)).includes('did-test-key'), 'DID_API_KEY is not in the client payload')
+
+const cached = await mintSaraStreamKey({
+  apiKey: 'did-test-key',
+  agentId: 'agt_sara',
+  now: () => 2_000,
+  fetchFn: async () => {
+    throw new Error('should use cache')
+  },
+})
+assert(cached.ok && cached.clientKey === minted.clientKey && mintCalls === 1, 'reuses short-lived key until near expiry')
 
 if (process.exitCode) {
   console.error('speakSara smoke failed')
