@@ -154,7 +154,10 @@ export function AskSara() {
             }`}
           >
             {m.text}
-            {m.from === 'sara' && m.id === lastSara?.id && isVoiceReady() ? (
+            {m.from === 'sara' &&
+            m.id === lastSara?.id &&
+            isVoiceReady() &&
+            !isSaraUnreachable(m.text) ? (
               <button
                 type="button"
                 className="mt-2 block text-xs font-medium text-sage-deep"
