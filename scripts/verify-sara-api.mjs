@@ -134,21 +134,30 @@ async function selfTest() {
     ok('prints Surge rebuild reminder with Worker URL')
   } else fail('missing Surge rebuild reminder')
 
-  const before = process.exitCode || 0
-  const araOk = await withHealthServer({ ok: true, tts: 'ara', model: 'grok-4.6' }, (base) => checkHealth(base))
-  if (araOk && process.exitCode === before) ok('GET /health with tts=ara passes')
-  else fail('expected tts=ara health to pass')
+  let selfFailed = Boolean(process.exitCode)
+  process.exitCode = 0
+  const araOk = await withHealthServer({ ok: true, tts: 'ara', model: 'grok-4.6' }, (base) =>
+    checkHealth(base),
+  )
+  if (araOk && !process.exitCode) ok('GET /health with tts=ara passes')
+  else {
+    fail('expected tts=ara health to pass')
+    selfFailed = true
+  }
 
-  process.exitCode = before
+  process.exitCode = 0
   const wrongVoice = await withHealthServer({ ok: true, tts: 'alloy' }, (base) => checkHealth(base))
   if (!wrongVoice && process.exitCode) ok('GET /health with non-ara tts fails loudly')
-  else fail('non-ara tts should fail')
-  process.exitCode = before
+  else {
+    fail('non-ara tts should fail')
+    selfFailed = true
+  }
 
-  if (process.exitCode) {
+  if (selfFailed) {
     console.error('verify-sara-api self-test failed')
     process.exit(1)
   }
+  process.exitCode = 0
   console.log('verify-sara-api self-test passed')
 }
 

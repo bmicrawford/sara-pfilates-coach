@@ -2,7 +2,19 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-function rejectEphemeralSaraApiUrl(url = process.env.VITE_SARA_API_URL) {
+function envVar(name: string): string {
+  const g = globalThis as typeof globalThis & {
+    process?: { env?: Record<string, string | undefined> }
+  }
+  return String(g.process?.env?.[name] ?? '').trim()
+}
+
+function warn(message: string) {
+  const g = globalThis as typeof globalThis & { console?: { warn: (msg: string) => void } }
+  g.console?.warn?.(message)
+}
+
+function rejectEphemeralSaraApiUrl(url = envVar('VITE_SARA_API_URL')) {
   const value = String(url ?? '').trim()
   if (/(?:^https?:\/\/)?[^/]*\.trycloudflare\.com(?:[:/?#]|$)/i.test(value)) {
     throw new Error(
@@ -16,8 +28,8 @@ function rejectEphemeralSaraApiUrl(url = process.env.VITE_SARA_API_URL) {
 rejectEphemeralSaraApiUrl()
 
 export default defineConfig(({ command }) => {
-  if (command === 'build' && !String(process.env.VITE_SARA_API_URL ?? '').trim()) {
-    console.warn(
+  if (command === 'build' && !envVar('VITE_SARA_API_URL')) {
+    warn(
       '[sara] VITE_SARA_API_URL is empty. Local preview is fine (Vite proxies /ask /speak). ' +
         'A Surge rebuild for the phone demo must set it to the Worker *.workers.dev URL — not trycloudflare.',
     )
