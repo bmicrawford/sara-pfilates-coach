@@ -41,21 +41,19 @@ assert(/unlockSaraStream/.test(streamSrc), 'replays muted video from the Send/Pl
 assert(/compatibilityMode: 'on'/.test(streamSrc), 'VP8 compatibility mode for Safari WebRTC')
 
 assert(
+  shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: false }),
+  'reveals muted video once srcObject is ready — do not wait on START',
+)
+assert(
   shouldShowSaraStream({ streamReady: true, speaking: true, streamTalking: false }),
-  'reveals video when ara is talking even if D-ID START has not fired',
+  'keeps the stream visible while ara is talking',
 )
 assert(
-  shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: true }),
-  'reveals video on D-ID START',
+  !shouldShowSaraStream({ streamReady: false, speaking: true, streamTalking: true }),
+  'keeps the still when the stream is not attached',
 )
-assert(
-  !shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: false }),
-  'keeps the still when connected but idle',
-)
-assert(
-  !shouldShowSaraStream({ streamReady: false, speaking: true, streamTalking: false }),
-  'keeps the still when ara talks but the stream is not attached',
-)
+
+assert(!/audio\.load\(/.test(speakSrc), 'stop does not load() the audio element (that re-locks iOS)')
 
 const portraitSrc = readFileSync(new URL('../components/TalkingPortrait.tsx', import.meta.url), 'utf8')
 assert(!/<svg[\s>]/.test(portraitSrc), 'TalkingPortrait has no SVG mouth overlay')
@@ -66,6 +64,10 @@ assert(/playsInline/.test(portraitSrc), 'stream video is playsInline')
 const askSrc = readFileSync(new URL('../pages/AskSara.tsx', import.meta.url), 'utf8')
 assert(/unlockSaraSpeech/.test(askSrc), 'Send still unlocks ara audio for iOS')
 assert(/unlockSaraStream/.test(askSrc), 'Send unlocks the muted stream video on the same tap')
+assert(
+  /haltPlayback\(\)[\s\S]*unlockSaraSpeech\(\)[\s\S]*unlockSaraStream\(\)/.test(askSrc),
+  'Send stops the previous reply before unlocking so load/halt cannot undo the gesture',
+)
 assert(/speakSara\(/.test(askSrc), 'ara TTS starts immediately on reply')
 assert(/speakSaraStream/.test(askSrc), 'Agents stream speak runs alongside ara')
 assert(!/agentManager\.chat\(|\.chat\(/.test(askSrc), 'Ask Sara does not call agentManager.chat()')

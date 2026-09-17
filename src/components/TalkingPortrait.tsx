@@ -26,9 +26,18 @@ export function TalkingPortrait({
   useEffect(() => {
     const video = videoRef.current
     if (!showStream || !video) return
-    video.muted = true
-    video.playsInline = true
-    void video.play().catch(() => {})
+    const kick = () => {
+      video.muted = true
+      video.playsInline = true
+      void video.play().catch(() => {})
+    }
+    kick()
+    video.addEventListener('loadeddata', kick)
+    video.addEventListener('canplay', kick)
+    return () => {
+      video.removeEventListener('loadeddata', kick)
+      video.removeEventListener('canplay', kick)
+    }
   }, [showStream])
 
   return (

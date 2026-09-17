@@ -57,7 +57,7 @@ export function AskSara() {
   }, [])
 
   const streaming = shouldShowSaraStream({ streamReady, speaking, streamTalking })
-  const live = speaking || streamTalking || streaming
+  const live = speaking || streamTalking
 
   const haltPlayback = () => {
     stopSaraSpeech()
@@ -82,9 +82,9 @@ export function AskSara() {
     e.preventDefault()
     const text = draft.trim()
     if (!text || busy) return
+    haltPlayback()
     unlockSaraSpeech()
     unlockSaraStream()
-    haltPlayback()
     const you: ChatMessage = { id: uid(), from: 'you', text, at: nowIso() }
     const prior = messages
     setMessages((cur) => [...cur, you])

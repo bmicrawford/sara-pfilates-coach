@@ -40,10 +40,10 @@ const listeners: StreamCallbacks = {}
 
 export function shouldShowSaraStream(opts: {
   streamReady: boolean
-  speaking: boolean
-  streamTalking: boolean
+  speaking?: boolean
+  streamTalking?: boolean
 }): boolean {
-  return Boolean(opts.streamReady && (opts.speaking || opts.streamTalking))
+  return Boolean(opts.streamReady)
 }
 
 function primeVideo(video: HTMLVideoElement) {
