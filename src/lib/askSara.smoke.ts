@@ -1,5 +1,5 @@
 import { isSaraUnreachable, SARA_OFFLINE } from './askSara.ts'
-import { isSaraVideoLive, shouldShowSaraStream } from './saraStream.ts'
+import { isSaraVideoLive, shouldShowSaraStream, isSaraSessionCapError, isTransientStreamError } from './saraStream.ts'
 import { SARA_VOICE_OFFLINE } from './speakSara.ts'
 import { readFileSync } from 'node:fs'
 
@@ -43,6 +43,11 @@ assert(/streamWarmup:\s*false/.test(streamSrc), 'Talks V2 warmup is off so conne
 assert(/PLAY_RETRY_MS/.test(streamSrc), 'retries muted video.play() after srcObject')
 assert(/pageshow/.test(streamSrc), 'replays muted video when iOS PWA returns to foreground')
 assert(/isTransientStreamError/.test(streamSrc), 'treats early D-ID /streams 403 as retryable')
+assert(/isSaraSessionCapError/.test(streamSrc), 'detects Forbidden / Max user sessions as a hard cap')
+assert(/sessionCapped/.test(streamSrc), 'remembers the D-ID session cap so later Send/Play do not reconnect')
+assert(/not retrying \(retries hold sessions\)/.test(streamSrc), 'logs session cap without retrying')
+assert(/safeDisconnect/.test(streamSrc), 'releases the D-ID session on unmount and failed connect')
+assert(/Keep sessionCapped/.test(streamSrc), 'dropManager does not clear the session cap')
 assert(/\[sara-stream\]/.test(streamSrc), 'logs stream 403 / missing srcObject without secrets')
 assert(/ck_\[redacted\]/.test(streamSrc), 'redacts client keys from stream logs')
 assert(/elementHoldsStream/.test(streamSrc), '403 fallback checks the <video> srcObject, not a stale module flag')
@@ -53,6 +58,26 @@ assert(
 assert(
   !/isTransientStreamError\(error\) && session === sessionGen && manager && !deadMode/.test(streamSrc),
   '403 must not fake a successful connect when the video has no srcObject',
+)
+assert(
+  isSaraSessionCapError({ kind: 'Forbidden', status: 403, message: 'Max user sessions reached' }),
+  'Forbidden + Max user sessions is a session cap',
+)
+assert(
+  isSaraSessionCapError({ kind: 'InsufficientCreditsError', status: 402, message: 'not enough credits' }),
+  'zero D-ID credits is a hard cap, not a retry',
+)
+assert(
+  !isSaraSessionCapError({ kind: 'PermissionError', status: 403, message: 'user has no permission for stitch' }),
+  'other 403s are not the session cap',
+)
+assert(
+  !isTransientStreamError({ kind: 'Forbidden', status: 403, message: 'Max user sessions reached' }),
+  'session-cap 403 is not retried',
+)
+assert(
+  isTransientStreamError({ status: 403, kind: 'AuthorizationError', message: 'user unauthenticated' }),
+  'non-cap 403 can still be treated as a transient SDK retry',
 )
 
 assert(
@@ -115,6 +140,8 @@ assert(
 assert(/speakSara\(/.test(askSrc), 'ara TTS starts immediately on reply')
 assert(/speakSaraStream/.test(askSrc), 'Agents stream speak runs alongside ara')
 assert(/connectSaraStream\(\)/.test(askSrc), 'Send starts/joins stream connect in the same gesture as unlock')
+assert(/SARA_STREAM_CAPPED_NOTE/.test(askSrc), 'Ask Sara surfaces session-cap status while ara talks')
+assert(/disconnectSaraStream/.test(askSrc), 'Ask Sara disconnects the D-ID session on leave')
 assert(!/agentManager\.chat\(|\.chat\(/.test(askSrc), 'Ask Sara does not call agentManager.chat()')
 assert(!/requestSaraTalk/.test(askSrc), 'Ask Sara does not poll Talks mp4')
 assert(!/watchSaraTalk/.test(askSrc), 'Ask Sara does not wait minutes for an mp4')
@@ -123,7 +150,7 @@ const mainSrc = readFileSync(new URL('../main.tsx', import.meta.url), 'utf8')
 assert(/registration\.update\(/.test(mainSrc), 'service worker checks for a new bundle')
 
 const viteSrc = readFileSync(new URL('../../vite.config.ts', import.meta.url), 'utf8')
-assert(/sara-pwa-20260917-still/.test(viteSrc), 'PWA cacheId busts a phone still serving the PR8 motion bundle')
+assert(/sara-pwa-20260917-sessions/.test(viteSrc), 'PWA cacheId busts a phone still serving the PR9 still bundle')
 assert(/NetworkFirst/.test(viteSrc), 'navigations are NetworkFirst so iOS PWA gets new index.html')
 assert(!/\*\.\{js,css,html/.test(viteSrc), 'does not precache index.html (stale PWA)')
 

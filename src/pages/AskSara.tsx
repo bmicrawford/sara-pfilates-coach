@@ -8,6 +8,7 @@ import {
   bindSaraStreamVideo,
   connectSaraStream,
   disconnectSaraStream,
+  SARA_STREAM_CAPPED_NOTE,
   setSaraStreamCallbacks,
   shouldShowSaraStream,
   speakSaraStream,
@@ -33,6 +34,7 @@ export function AskSara() {
   const [streamReady, setStreamReady] = useState(false)
   const [streamTalking, setStreamTalking] = useState(false)
   const [videoLive, setVideoLive] = useState(false)
+  const [streamCapped, setStreamCapped] = useState(false)
   const [muted, setMuted] = useState(() => isSaraMuted())
   const [voiceNote, setVoiceNote] = useState<string | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
@@ -52,7 +54,14 @@ export function AskSara() {
   }, [messages, busy])
 
   useEffect(() => {
-    setSaraStreamCallbacks({ onTalking: setStreamTalking, onReady: setStreamReady })
+    setSaraStreamCallbacks({
+      onTalking: setStreamTalking,
+      onReady: setStreamReady,
+      onStatus: (status) => {
+        if (status === 'session_capped') setStreamCapped(true)
+        if (status === 'live') setStreamCapped(false)
+      },
+    })
     void connectSaraStream()
     return () => {
       setSaraStreamCallbacks({})
@@ -153,6 +162,8 @@ export function AskSara() {
         </p>
         {voiceNote ? (
           <p className="mt-1 text-center text-xs leading-snug text-ink-mute">{voiceNote}</p>
+        ) : live && streamCapped ? (
+          <p className="mt-1 text-center text-xs leading-snug text-ink-mute">{SARA_STREAM_CAPPED_NOTE}</p>
         ) : null}
       </div>
 
