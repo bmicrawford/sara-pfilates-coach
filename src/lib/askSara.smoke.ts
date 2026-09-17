@@ -39,6 +39,7 @@ assert(/onSrcObjectReady/.test(streamSrc), 'attaches the WebRTC stream on onSrcO
 assert(/onReady/.test(streamSrc), 'exposes streamReady so the still can yield before START')
 assert(/unlockSaraStream/.test(streamSrc), 'replays muted video from the Send/Play gesture')
 assert(/compatibilityMode: 'on'/.test(streamSrc), 'VP8 compatibility mode for Safari WebRTC')
+assert(/deadMode = true/.test(streamSrc), 'SDK onError / dead modes fail the session instead of looking connected')
 
 assert(
   shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: false }),
@@ -54,6 +55,8 @@ assert(
 )
 
 assert(!/audio\.load\(/.test(speakSrc), 'stop does not load() the audio element (that re-locks iOS)')
+assert(/loop = true/.test(speakSrc), 'Send-tap unlock holds a looping silent buffer so ara can start after Grok')
+assert(/decodeAudioData/.test(speakSrc), 'falls back to the unlocked AudioContext when element play is blocked')
 
 const portraitSrc = readFileSync(new URL('../components/TalkingPortrait.tsx', import.meta.url), 'utf8')
 assert(!/<svg[\s>]/.test(portraitSrc), 'TalkingPortrait has no SVG mouth overlay')
@@ -65,8 +68,10 @@ const askSrc = readFileSync(new URL('../pages/AskSara.tsx', import.meta.url), 'u
 assert(/unlockSaraSpeech/.test(askSrc), 'Send still unlocks ara audio for iOS')
 assert(/unlockSaraStream/.test(askSrc), 'Send unlocks the muted stream video on the same tap')
 assert(
-  /haltPlayback\(\)[\s\S]*unlockSaraSpeech\(\)[\s\S]*unlockSaraStream\(\)/.test(askSrc),
-  'Send stops the previous reply before unlocking so load/halt cannot undo the gesture',
+  /haltPlayback\(\)[\s\S]*unlockSaraSpeech\(\)[\s\S]*unlockSaraStream\(\)[\s\S]*connectSaraStream\(\)/.test(
+    askSrc,
+  ),
+  'Send stops the previous reply, unlocks ara+video, then connects the stream in the same tap',
 )
 assert(/speakSara\(/.test(askSrc), 'ara TTS starts immediately on reply')
 assert(/speakSaraStream/.test(askSrc), 'Agents stream speak runs alongside ara')

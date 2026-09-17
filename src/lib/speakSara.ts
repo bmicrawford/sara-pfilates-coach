@@ -42,6 +42,7 @@ type Engine = {
   ctx: AudioContext | null
   analyser: AnalyserNode | null
   source: MediaElementAudioSourceNode | null
+  bufferSource: AudioBufferSourceNode | null
   raf: number
   objectUrl: string | null
   generation: number
@@ -60,6 +61,7 @@ function ensureEngine(): Engine {
     ctx: null,
     analyser: null,
     source: null,
+    bufferSource: null,
     raf: 0,
     objectUrl: null,
     generation: 0,
@@ -99,11 +101,29 @@ function stopLevels(e: Engine): void {
   }
 }
 
+function stopBuffer(e: Engine) {
+  if (!e.bufferSource) return
+  try {
+    e.bufferSource.onended = null
+    e.bufferSource.stop()
+  } catch {
+    /* already stopped */
+  }
+  try {
+    e.bufferSource.disconnect()
+  } catch {
+    /* ignore */
+  }
+  e.bufferSource = null
+}
+
 export function stopSaraSpeech(): void {
   if (!engine) return
   engine.generation += 1
   stopLevels(engine)
+  stopBuffer(engine)
   try {
+    engine.audio.loop = false
     engine.audio.pause()
     engine.audio.removeAttribute('src')
   } catch {
@@ -119,12 +139,10 @@ export function unlockSaraSpeech(): void {
   try {
     attachGraph(e)
     if (e.ctx?.state === 'suspended') void e.ctx.resume()
+    e.audio.loop = true
     e.audio.muted = true
     e.audio.src = SILENT_WAV
-    void e.audio.play().then(() => {
-      e.audio.pause()
-      e.audio.muted = false
-    }).catch(() => {
+    void e.audio.play().catch(() => {
       e.audio.muted = false
     })
   } catch {
@@ -214,19 +232,23 @@ export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<voi
   }
 
   releaseObjectUrl(e)
+  stopBuffer(e)
   const url = URL.createObjectURL(blob)
   e.objectUrl = url
+  e.audio.loop = false
   e.audio.muted = false
   e.audio.src = url
 
   const startedAt = performance.now()
+  let clipDuration = 0
 
   const tick = () => {
     if (gen !== e.generation) {
       opts.onLevel?.(0)
       return
     }
-    const duration = e.audio.duration && Number.isFinite(e.audio.duration) ? e.audio.duration : 0
+    const fromEl = e.audio.duration && Number.isFinite(e.audio.duration) ? e.audio.duration : 0
+    const duration = fromEl || clipDuration
     const elapsed = (performance.now() - startedAt) / 1000
     let level = visemePulse(elapsed, duration || Math.max(elapsed + 0.4, 1.2))
     if (e.analyser) {
@@ -240,6 +262,7 @@ export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<voi
   const finish = () => {
     if (gen !== e.generation) return
     stopLevels(e)
+    stopBuffer(e)
     opts.onLevel?.(0)
     opts.onEnd?.()
   }
@@ -252,8 +275,31 @@ export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<voi
     if (gen !== e.generation) return
     opts.onStart?.()
     e.raf = requestAnimationFrame(tick)
+    return
   } catch {
-    opts.onError?.(SARA_VOICE_OFFLINE)
-    finish()
+    /* element play is often blocked after Grok returns; AudioContext stays unlocked */
   }
+
+  if (e.ctx) {
+    try {
+      if (e.ctx.state === 'suspended') await e.ctx.resume()
+      const buffer = await e.ctx.decodeAudioData(await blob.arrayBuffer())
+      if (gen !== e.generation) return
+      clipDuration = buffer.duration
+      const src = e.ctx.createBufferSource()
+      src.buffer = buffer
+      src.connect(e.analyser || e.ctx.destination)
+      e.bufferSource = src
+      src.onended = finish
+      src.start()
+      opts.onStart?.()
+      e.raf = requestAnimationFrame(tick)
+      return
+    } catch {
+      /* honest fail below */
+    }
+  }
+
+  opts.onError?.(SARA_VOICE_OFFLINE)
+  finish()
 }
