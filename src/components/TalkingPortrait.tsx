@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { isSaraVideoLive } from '../lib/saraStream'
 
 const STILL = '/avatar/sara-default.png'
 
@@ -33,32 +34,43 @@ export function TalkingPortrait({
       video.playsInline = true
       video.setAttribute('webkit-playsinline', 'true')
       void video.play().catch(() => {})
-      onVideoLive?.(video.videoWidth > 0 && !video.paused)
     }
+    const reportLive = () => {
+      onVideoLive?.(isSaraVideoLive(video))
+    }
+    const reportDead = () => onVideoLive?.(false)
     kick()
+    reportLive()
     video.addEventListener('loadeddata', kick)
     video.addEventListener('canplay', kick)
     video.addEventListener('playing', kick)
-    video.addEventListener('pause', kick)
+    video.addEventListener('playing', reportLive)
+    video.addEventListener('loadeddata', reportLive)
+    video.addEventListener('emptied', reportDead)
+    video.addEventListener('error', reportDead)
     return () => {
       onVideoLive?.(false)
       video.removeEventListener('loadeddata', kick)
       video.removeEventListener('canplay', kick)
       video.removeEventListener('playing', kick)
-      video.removeEventListener('pause', kick)
+      video.removeEventListener('playing', reportLive)
+      video.removeEventListener('loadeddata', reportLive)
+      video.removeEventListener('emptied', reportDead)
+      video.removeEventListener('error', reportDead)
     }
   }, [showStream, onVideoLive])
 
   return (
     <div className="flex flex-col items-center text-center">
       <div
-        className={`sara-portrait relative h-40 w-40 bg-sage-mist shadow-card ring-[6px] sm:h-44 sm:w-44 ${
+        className={`sara-portrait relative h-40 w-40 overflow-hidden rounded-full bg-sage-mist shadow-card ring-[6px] sm:h-44 sm:w-44 ${
           talking || streaming ? 'ring-sage/45' : 'ring-sage/25'
         }`}
       >
         <video
           ref={videoRef}
           className="sara-stream-video absolute inset-0 z-0 h-full w-full object-cover object-[center_18%]"
+          poster={STILL}
           playsInline
           muted
           autoPlay

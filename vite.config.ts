@@ -73,7 +73,7 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
-          cacheId: 'sara-pwa-20260917-motion',
+          cacheId: 'sara-pwa-20260917-still',
           skipWaiting: true,
           clientsClaim: true,
           cleanupOutdatedCaches: true,
