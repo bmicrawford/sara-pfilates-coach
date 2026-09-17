@@ -68,6 +68,24 @@ select {
   z-index: 2;
 }
 
+/*
+  iOS Safari will freeze a WebRTC <video> that is cropped with
+  overflow:hidden + border-radius, or skip decoding while opacity is 0.
+  Mask the circle on the stage; keep the video painted under the still.
+*/
+.sara-portrait {
+  border-radius: 9999px;
+  isolation: isolate;
+  transform: translateZ(0);
+  -webkit-mask-image: -webkit-radial-gradient(circle, #fff 98%, transparent 100%);
+  mask-image: radial-gradient(circle, #fff 98%, transparent 100%);
+}
+
+.sara-stream-video {
+  border-radius: inherit;
+  transform: translateZ(0);
+}
+
 .ask-sara-thread {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;

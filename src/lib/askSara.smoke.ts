@@ -39,14 +39,19 @@ assert(/onSrcObjectReady/.test(streamSrc), 'attaches the WebRTC stream on onSrcO
 assert(/onReady/.test(streamSrc), 'exposes streamReady so the still can yield before START')
 assert(/unlockSaraStream/.test(streamSrc), 'replays muted video from the Send/Play gesture')
 assert(/compatibilityMode: 'on'/.test(streamSrc), 'VP8 compatibility mode for Safari WebRTC')
+assert(/streamWarmup:\s*false/.test(streamSrc), 'Talks V2 warmup is off so connect() is not gated on decoded frames')
 
 assert(
-  shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: false }),
-  'reveals muted video once srcObject is ready — do not wait on START',
+  !shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: false }),
+  'keeps the still over an idle attached track — do not flash a black first frame',
 )
 assert(
   shouldShowSaraStream({ streamReady: true, speaking: true, streamTalking: false }),
-  'keeps the stream visible while ara is talking',
+  'reveals muted video while ara is talking',
+)
+assert(
+  shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: true }),
+  'reveals muted video when D-ID reports talking',
 )
 assert(
   !shouldShowSaraStream({ streamReady: false, speaking: true, streamTalking: true }),
@@ -60,6 +65,8 @@ assert(!/<svg[\s>]/.test(portraitSrc), 'TalkingPortrait has no SVG mouth overlay
 assert(!/talking\s*&&\s*videoUrl/.test(portraitSrc), 'portrait is not gated on Talks mp4')
 assert(/streaming/.test(portraitSrc), 'portrait shows the live Agents stream')
 assert(/playsInline/.test(portraitSrc), 'stream video is playsInline')
+assert(/sara-stream-video/.test(portraitSrc), 'stream video stays painted under the still')
+assert(!/overflow-hidden/.test(portraitSrc), 'does not crop WebRTC video with overflow-hidden')
 
 const askSrc = readFileSync(new URL('../pages/AskSara.tsx', import.meta.url), 'utf8')
 assert(/unlockSaraSpeech/.test(askSrc), 'Send still unlocks ara audio for iOS')
