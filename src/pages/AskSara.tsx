@@ -9,8 +9,10 @@ import {
   connectSaraStream,
   disconnectSaraStream,
   setSaraStreamCallbacks,
+  shouldShowSaraStream,
   speakSaraStream,
   stopSaraStream,
+  unlockSaraStream,
 } from '../lib/saraStream'
 import {
   isSaraMuted,
@@ -28,7 +30,8 @@ export function AskSara() {
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [speaking, setSpeaking] = useState(false)
-  const [streaming, setStreaming] = useState(false)
+  const [streamReady, setStreamReady] = useState(false)
+  const [streamTalking, setStreamTalking] = useState(false)
   const [muted, setMuted] = useState(() => isSaraMuted())
   const [voiceNote, setVoiceNote] = useState<string | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
@@ -44,7 +47,7 @@ export function AskSara() {
   }, [messages, busy])
 
   useEffect(() => {
-    setSaraStreamCallbacks({ onTalking: setStreaming })
+    setSaraStreamCallbacks({ onTalking: setStreamTalking, onReady: setStreamReady })
     void connectSaraStream()
     return () => {
       setSaraStreamCallbacks({})
@@ -53,16 +56,19 @@ export function AskSara() {
     }
   }, [])
 
-  const live = speaking || streaming
+  const streaming = shouldShowSaraStream({ streamReady, speaking, streamTalking })
+  const live = speaking || streamTalking || streaming
 
   const haltPlayback = () => {
     stopSaraSpeech()
     stopSaraStream()
     setSpeaking(false)
-    setStreaming(false)
+    setStreamTalking(false)
   }
 
   const speakReply = (text: string) => {
+    unlockSaraStream()
+    void speakSaraStream(text)
     if (mutedRef.current || !isVoiceReady()) return
     setVoiceNote(null)
     void speakSara(text, {
@@ -70,7 +76,6 @@ export function AskSara() {
       onEnd: () => setSpeaking(false),
       onError: (message) => setVoiceNote(message),
     })
-    void speakSaraStream(text)
   }
 
   const send = async (e: FormEvent) => {
@@ -78,6 +83,7 @@ export function AskSara() {
     const text = draft.trim()
     if (!text || busy) return
     unlockSaraSpeech()
+    unlockSaraStream()
     haltPlayback()
     const you: ChatMessage = { id: uid(), from: 'you', text, at: nowIso() }
     const prior = messages
