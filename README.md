@@ -74,6 +74,8 @@ Ask Sara pins Sara’s portrait while the chat scrolls. Idle is the locked still
 
 **Motion** is D-ID **Agents Streams** (WebRTC) via `@d-id/client-sdk`. The Worker mints a short-lived `client_key` (`POST /stream`) for the allowed Surge origins. The browser calls `agentManager.speak({ type: 'text', input })` with the Grok reply. The stream video is muted so ara is the only voice. Do not call `agentManager.chat()` — Grok stays the brain (`POST /ask`).
 
+Head motion needs **D-ID credits and a free stream slot**. Live `POST /agents/{id}/streams` `403 Forbidden` / `Max user sessions reached` is **not** retried (retries hold sessions and make the cap worse). Ara and the still portrait still work. Humans top up credits in the D-ID dashboard; do not recreate the agent or rotate Worker secrets for this error.
+
 Human setup (once): create a Talks V2 **photo** Agent from `https://sara-pfilates.surge.sh/avatar/sara-default.png` (no D-ID LLM), put `DID_AGENT_ID` on the Worker, keep `DID_API_KEY` as a Worker secret. The Worker mints client keys with allowed origins `https://sara-pfilates.surge.sh`, `https://sara-pfilates-coach.surge.sh`, and local Vite (`http://localhost:43147`). Default still URL: `https://sara-pfilates.surge.sh/avatar/sara-default.png`. Do not fall back to OS `speechSynthesis` as the “good” path.
 
 Create the photo Agent (human; `DID_API_KEY` already in that shell — do not paste it into chat):

@@ -1,4 +1,7 @@
-/** D-ID Agents SDK (WebRTC). Credentials come from POST /stream — never the server API key. */
+/** D-ID Agents SDK (WebRTC). Credentials come from POST /stream — never the server API key.
+ * Live POST /agents/{id}/streams 403 `{ kind: "Forbidden", description: "Max user sessions reached" }`
+ * means the trial/session cap (or zero credits) — do not retry connect/speak; keep still + ara.
+ */
 
 function apiBase(): string {
   return (import.meta.env.VITE_SARA_API_URL ?? '').replace(/\/$/, '')
@@ -18,10 +21,16 @@ type AgentManagerLike = {
   getIsInterruptAvailable?: () => boolean
 }
 
+export type SaraStreamStatus = 'live' | 'unavailable' | 'session_capped'
+
 type StreamCallbacks = {
   onTalking?: (talking: boolean) => void
   onReady?: (ready: boolean) => void
+  onStatus?: (status: SaraStreamStatus) => void
 }
+
+/** Quiet UI line when D-ID is at the session/credit cap. Ara still plays. */
+export const SARA_STREAM_CAPPED_NOTE = "I'll keep talking. The portrait stays still for now."
 
 /** Speak-only. Skips D-ID chat/LLM so Grok stays the brain. */
 const SPEAK_MODE = 'DirectPlayback'
@@ -39,6 +48,8 @@ let speakGen = 0
 let sessionGen = 0
 let streamReady = false
 let deadMode = false
+/** D-ID 403 Forbidden / Max user sessions — do not retry; retries hold sessions. */
+let sessionCapped = false
 let foregroundBound = false
 const playTimers = new Set<number>()
 const listeners: StreamCallbacks = {}
@@ -162,19 +173,23 @@ function bindForegroundReplay() {
   window.addEventListener('pageshow', replay)
 }
 
+function safeDisconnect(agent: AgentManagerLike | null) {
+  if (!agent) return
+  try {
+    void agent.disconnect()
+  } catch {
+    /* already closed */
+  }
+}
+
 function dropManager() {
   sessionGen += 1
   const current = manager
   manager = null
   connectPromise = null
-  deadMode = false
-  if (current) {
-    try {
-      void current.disconnect()
-    } catch {
-      /* ignore */
-    }
-  }
+  // Keep sessionCapped. Clearing it would reconnect and leak more D-ID sessions.
+  if (!sessionCapped) deadMode = false
+  safeDisconnect(current)
 }
 
 export function bindSaraStreamVideo(el: HTMLVideoElement | null) {
@@ -203,7 +218,9 @@ export function unlockSaraStream(): void {
 export function setSaraStreamCallbacks(next: StreamCallbacks) {
   listeners.onTalking = next.onTalking
   listeners.onReady = next.onReady
+  listeners.onStatus = next.onStatus
   if (next.onReady) next.onReady(streamReady)
+  if (next.onStatus && sessionCapped) next.onStatus('session_capped')
 }
 
 export async function fetchSaraStreamCreds(): Promise<SaraStreamCreds | null> {
@@ -244,11 +261,42 @@ function markDeadFromError(error: unknown) {
   if (/TextOnly|Playground|Maintenance|downgrad/i.test(blob)) deadMode = true
 }
 
-function isTransientStreamError(error: unknown): boolean {
+function errorBlob(error: unknown): string {
+  const err = error as { kind?: string; message?: string } | undefined
+  return `${err?.kind || ''} ${err?.message || error || ''}`
+}
+
+/**
+ * D-ID POST /agents/{id}/streams 403 { kind: "Forbidden", description: "Max user sessions reached" }.
+ * Also 402 InsufficientCredits. Do not retry — retries hold sessions and worsen the cap.
+ * Worker mint / Origin / agent id are not this error.
+ */
+export function isSaraSessionCapError(error: unknown): boolean {
+  const err = error as { kind?: string; message?: string } | undefined
+  const blob = errorBlob(error)
+  if (/Max user sessions reached/i.test(blob)) return true
+  if (/InsufficientCredits/i.test(blob)) return true
+  return err?.kind === 'Forbidden' || /^\s*Forbidden\b/i.test(blob)
+}
+
+/** Early origin/auth 403s the SDK retries. Session-cap Forbidden is not transient. */
+export function isTransientStreamError(error: unknown): boolean {
+  if (isSaraSessionCapError(error)) return false
   const err = error as { status?: number; kind?: string; message?: string } | undefined
   const status = Number(err?.status)
-  const blob = `${err?.kind || ''} ${err?.message || error || ''}`
+  const blob = errorBlob(error)
   return status === 403 || /403|PermissionError|AuthorizationError/i.test(blob)
+}
+
+function markSessionCapped(error?: unknown) {
+  sessionCapped = true
+  deadMode = true
+  logStream(
+    'D-ID session cap — not retrying (retries hold sessions); still + ara',
+    error ? describeError(error) : '',
+  )
+  listeners.onStatus?.('session_capped')
+  setReady(false)
 }
 
 function speakLooksDead(result: unknown): boolean {
@@ -260,96 +308,119 @@ function speakLooksDead(result: unknown): boolean {
 }
 
 export async function connectSaraStream(): Promise<boolean> {
+  if (sessionCapped) {
+    logStream('D-ID session cap — not retrying; still + ara')
+    listeners.onStatus?.('session_capped')
+    return false
+  }
   if (manager && !deadMode && elementHoldsStream()) return true
   if (connectPromise) return connectPromise
   if (manager) dropManager()
   const session = ++sessionGen
   connectPromise = (async () => {
-    deadMode = false
-    const creds = await fetchSaraStreamCreds()
-    if (!creds || session !== sessionGen) {
-      logStream('no stream credentials — keeping still')
-      return false
-    }
-    const create = await loadSdk()
-    if (!create || session !== sessionGen) return false
-    const created = await create(creds.agentId, {
-      auth: { type: 'key', clientKey: creds.clientKey },
-      mode: SPEAK_MODE,
-      enableAnalytics: false,
-      streamOptions: {
-        compatibilityMode: 'on',
-        // iOS often never decodes warmup; gating connect() on that leaves speak() dead.
-        streamWarmup: false,
-        outputResolution: 512,
-      },
-      callbacks: {
-        onSrcObjectReady(value: MediaStream) {
-          attachSrcObject(value)
-          return value
+    let created: AgentManagerLike | null = null
+    let keepSession = false
+    try {
+      if (sessionCapped) {
+        listeners.onStatus?.('session_capped')
+        return false
+      }
+      deadMode = false
+      const creds = await fetchSaraStreamCreds()
+      if (!creds || session !== sessionGen) {
+        logStream('no stream credentials — keeping still')
+        return false
+      }
+      const create = await loadSdk()
+      if (!create || session !== sessionGen) return false
+      created = await create(creds.agentId, {
+        auth: { type: 'key', clientKey: creds.clientKey },
+        mode: SPEAK_MODE,
+        enableAnalytics: false,
+        streamOptions: {
+          compatibilityMode: 'on',
+          // iOS often never decodes warmup; gating connect() on that leaves speak() dead.
+          streamWarmup: false,
+          outputResolution: 512,
         },
-        onVideoStateChange(state: string) {
-          const talking = String(state).toUpperCase() !== 'STOP'
-          if (srcObject && videoEl) schedulePlay(videoEl)
-          listeners.onTalking?.(talking)
-        },
-        onConnectionStateChange(state: string) {
-          const s = String(state).toLowerCase()
-          if (s === 'connected' && srcObject) {
-            attachSrcObject(srcObject)
-          }
-          // Early D-ID /streams 403 retries emit fail/disconnected. Keep the
-          // still up unless the <video> actually holds a stream.
-          if ((s === 'fail' || s === 'disconnected' || s === 'closed') && !elementHoldsStream()) {
-            logStream('peer has no video srcObject — keeping still', s)
-            setReady(false)
-          }
-        },
-        onModeChange(mode: string) {
-          if (DEAD_MODES.has(String(mode))) deadMode = true
-        },
-        onError(error: Error) {
-          if (isTransientStreamError(error)) {
-            if (!elementHoldsStream()) {
-              logStream('D-ID /streams 403 — keeping still; ara continues', describeError(error))
+        callbacks: {
+          onSrcObjectReady(value: MediaStream) {
+            attachSrcObject(value)
+            return value
+          },
+          onVideoStateChange(state: string) {
+            const talking = String(state).toUpperCase() !== 'STOP'
+            if (srcObject && videoEl) schedulePlay(videoEl)
+            listeners.onTalking?.(talking)
+          },
+          onConnectionStateChange(state: string) {
+            const s = String(state).toLowerCase()
+            if (s === 'connected' && srcObject) {
+              attachSrcObject(srcObject)
+            }
+            if ((s === 'fail' || s === 'disconnected' || s === 'closed') && !elementHoldsStream()) {
+              logStream('peer has no video srcObject — keeping still', s)
               setReady(false)
             }
-            return
-          }
-          logStream('stream error', describeError(error))
-          markDeadFromError(error)
+          },
+          onModeChange(mode: string) {
+            if (DEAD_MODES.has(String(mode))) deadMode = true
+          },
+          onError(error: Error) {
+            if (isSaraSessionCapError(error)) {
+              markSessionCapped(error)
+              return
+            }
+            if (isTransientStreamError(error)) {
+              if (!elementHoldsStream()) {
+                logStream('D-ID /streams 403 — keeping still; ara continues', describeError(error))
+                setReady(false)
+              }
+              return
+            }
+            logStream('stream error', describeError(error))
+            markDeadFromError(error)
+          },
         },
-      },
-    })
-    if (session !== sessionGen) {
-      try {
-        void created.disconnect()
-      } catch {
-        /* superseded */
+      })
+      if (session !== sessionGen || sessionCapped) return false
+      manager = created
+      await created.connect()
+      if (session !== sessionGen || deadMode || sessionCapped) return false
+      if (srcObject) attachSrcObject(srcObject)
+      if (!elementHoldsStream()) {
+        logStream('connect finished with no video srcObject — keeping still')
+        listeners.onStatus?.('unavailable')
+        return false
       }
-      return false
-    }
-    manager = created
-    await created.connect()
-    if (session !== sessionGen || deadMode) return false
-    if (srcObject) attachSrcObject(srcObject)
-    if (!elementHoldsStream()) {
-      logStream('connect finished with no video srcObject — keeping still')
-      return false
-    }
-    return true
-  })().catch((error) => {
-    const transient = isTransientStreamError(error)
-    if (transient && session === sessionGen && elementHoldsStream() && !deadMode) {
-      logStream('transient 403 after srcObject attached — keeping stream')
+      listeners.onStatus?.('live')
+      keepSession = true
       return true
+    } catch (error) {
+      if (isSaraSessionCapError(error)) {
+        markSessionCapped(error)
+        return false
+      }
+      const transient = isTransientStreamError(error)
+      if (transient && session === sessionGen && elementHoldsStream() && !deadMode && !sessionCapped) {
+        logStream('transient 403 after srcObject attached — keeping stream')
+        keepSession = true
+        return true
+      }
+      logStream(
+        transient ? 'D-ID /streams 403 after retries — keeping still; ara continues' : 'connect failed — keeping still',
+        describeError(error),
+      )
+      listeners.onStatus?.('unavailable')
+      return false
+    } finally {
+      // Failed or superseded connect must release the D-ID session so we do not leak slots.
+      if (!keepSession && created) {
+        if (manager === created) manager = null
+        safeDisconnect(created)
+      }
     }
-    logStream(
-      transient ? 'D-ID /streams 403 after retries — keeping still; ara continues' : 'connect failed — keeping still',
-      describeError(error),
-    )
-    return false
-  })
+  })()
   const ok = await connectPromise
   connectPromise = null
   if (!ok && session === sessionGen) {
@@ -362,11 +433,15 @@ export async function connectSaraStream(): Promise<boolean> {
 export async function speakSaraStream(text: string): Promise<void> {
   const clean = text.replace(/\s+/g, ' ').trim()
   if (!clean) return
+  if (sessionCapped) {
+    listeners.onStatus?.('session_capped')
+    return
+  }
   const gen = ++speakGen
 
   const attempt = async () => {
     const ok = await connectSaraStream()
-    if (!ok || gen !== speakGen || !manager || deadMode) return
+    if (!ok || gen !== speakGen || !manager || deadMode || sessionCapped) return
     unlockSaraStream()
     const result = await manager.speak({ type: 'text', input: clean })
     unlockSaraStream()
@@ -379,22 +454,31 @@ export async function speakSaraStream(text: string): Promise<void> {
   try {
     await attempt()
   } catch (error) {
+    if (isSaraSessionCapError(error)) {
+      markSessionCapped(error)
+      if (!elementHoldsStream()) fallBackToStill('session cap — keeping still; ara continues', describeError(error))
+      return
+    }
     if (isTransientStreamError(error)) {
       logStream('speak 403 — ara continues; still stays unless video is live', describeError(error))
-      if (gen !== speakGen) return
+      if (gen !== speakGen || sessionCapped) return
       try {
         await attempt()
       } catch (retryError) {
+        if (isSaraSessionCapError(retryError)) {
+          markSessionCapped(retryError)
+        }
         if (!elementHoldsStream()) fallBackToStill('speak 403 retries exhausted', describeError(retryError))
       }
       return
     }
     markDeadFromError(error)
-    if (gen !== speakGen) return
+    if (gen !== speakGen || sessionCapped) return
     dropManager()
     try {
       await attempt()
-    } catch {
+    } catch (retryError) {
+      if (isSaraSessionCapError(retryError)) markSessionCapped(retryError)
       /* ara audio still plays; motion is best-effort */
     }
   }
