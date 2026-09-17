@@ -7,6 +7,7 @@ type Props = {
   listening?: boolean
   streaming?: boolean
   onVideoEl?: (el: HTMLVideoElement | null) => void
+  onVideoLive?: (live: boolean) => void
 }
 
 export function TalkingPortrait({
@@ -14,6 +15,7 @@ export function TalkingPortrait({
   listening = false,
   streaming = false,
   onVideoEl,
+  onVideoLive,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const showStream = Boolean(streaming)
@@ -25,45 +27,50 @@ export function TalkingPortrait({
 
   useEffect(() => {
     const video = videoRef.current
-    if (!showStream || !video) return
+    if (!video) return
     const kick = () => {
       video.muted = true
       video.playsInline = true
+      video.setAttribute('webkit-playsinline', 'true')
       void video.play().catch(() => {})
+      onVideoLive?.(video.videoWidth > 0 && !video.paused)
     }
     kick()
     video.addEventListener('loadeddata', kick)
     video.addEventListener('canplay', kick)
+    video.addEventListener('playing', kick)
+    video.addEventListener('pause', kick)
     return () => {
+      onVideoLive?.(false)
       video.removeEventListener('loadeddata', kick)
       video.removeEventListener('canplay', kick)
+      video.removeEventListener('playing', kick)
+      video.removeEventListener('pause', kick)
     }
-  }, [showStream])
+  }, [showStream, onVideoLive])
 
   return (
     <div className="flex flex-col items-center text-center">
       <div
-        className={`relative h-40 w-40 overflow-hidden rounded-full bg-sage-mist shadow-card ring-[6px] sm:h-44 sm:w-44 ${
+        className={`sara-portrait relative h-40 w-40 bg-sage-mist shadow-card ring-[6px] sm:h-44 sm:w-44 ${
           talking || streaming ? 'ring-sage/45' : 'ring-sage/25'
         }`}
       >
-        <img
-          src={STILL}
-          alt="Sara"
-          className={`absolute inset-0 h-full w-full object-cover object-[center_18%] ${
-            showStream ? 'opacity-0' : 'opacity-100'
-          }`}
-        />
         <video
           ref={videoRef}
-          className={`absolute inset-0 h-full w-full object-cover object-[center_18%] ${
-            showStream ? 'opacity-100' : 'opacity-0'
-          }`}
+          className="sara-stream-video absolute inset-0 z-0 h-full w-full object-cover object-[center_18%]"
           playsInline
           muted
           autoPlay
           loop={false}
           aria-hidden
+        />
+        <img
+          src={STILL}
+          alt="Sara"
+          className={`absolute inset-0 z-10 h-full w-full object-cover object-[center_18%] ${
+            showStream ? 'opacity-0' : 'opacity-100'
+          }`}
         />
       </div>
       <p className="mt-3 min-h-[1.75rem] font-serif text-xl text-ink">

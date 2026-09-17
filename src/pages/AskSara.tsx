@@ -32,6 +32,7 @@ export function AskSara() {
   const [speaking, setSpeaking] = useState(false)
   const [streamReady, setStreamReady] = useState(false)
   const [streamTalking, setStreamTalking] = useState(false)
+  const [videoLive, setVideoLive] = useState(false)
   const [muted, setMuted] = useState(() => isSaraMuted())
   const [voiceNote, setVoiceNote] = useState<string | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
@@ -40,6 +41,10 @@ export function AskSara() {
 
   const onVideoEl = useCallback((el: HTMLVideoElement | null) => {
     bindSaraStreamVideo(el)
+  }, [])
+
+  const onVideoLive = useCallback((live: boolean) => {
+    setVideoLive(live)
   }, [])
 
   useEffect(() => {
@@ -56,7 +61,7 @@ export function AskSara() {
     }
   }, [])
 
-  const streaming = shouldShowSaraStream({ streamReady, speaking, streamTalking })
+  const streaming = shouldShowSaraStream({ streamReady, speaking, streamTalking, videoLive })
   const live = speaking || streamTalking
 
   const haltPlayback = () => {
@@ -85,6 +90,7 @@ export function AskSara() {
     haltPlayback()
     unlockSaraSpeech()
     unlockSaraStream()
+    void connectSaraStream()
     const you: ChatMessage = { id: uid(), from: 'you', text, at: nowIso() }
     const prior = messages
     setMessages((cur) => [...cur, you])
@@ -140,6 +146,7 @@ export function AskSara() {
           listening={busy || Boolean(draft.trim())}
           streaming={streaming}
           onVideoEl={onVideoEl}
+          onVideoLive={onVideoLive}
         />
         <p className="mt-1 text-center text-sm text-ink-mute">
           {live ? 'Sara is talking.' : 'I’m listening — ask the real question.'}
