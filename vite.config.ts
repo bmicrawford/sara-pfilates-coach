@@ -73,8 +73,23 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+          cacheId: 'sara-pwa-20260917-motion',
+          skipWaiting: true,
+          clientsClaim: true,
+          cleanupOutdatedCaches: true,
+          globPatterns: ['**/*.{js,css,svg,png,woff2}'],
           navigateFallback: '/index.html',
+          runtimeCaching: [
+            {
+              urlPattern: ({ request }) => request.mode === 'navigate',
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'sara-pages',
+                networkTimeoutSeconds: 2,
+                expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 },
+              },
+            },
+          ],
         },
       }),
     ],

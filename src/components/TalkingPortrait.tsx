@@ -31,6 +31,7 @@ export function TalkingPortrait({
     const kick = () => {
       video.muted = true
       video.playsInline = true
+      video.setAttribute('webkit-playsinline', 'true')
       void video.play().catch(() => {})
       onVideoLive?.(video.videoWidth > 0 && !video.paused)
     }
@@ -38,13 +39,13 @@ export function TalkingPortrait({
     video.addEventListener('loadeddata', kick)
     video.addEventListener('canplay', kick)
     video.addEventListener('playing', kick)
-    video.addEventListener('emptied', kick)
+    video.addEventListener('pause', kick)
     return () => {
       onVideoLive?.(false)
       video.removeEventListener('loadeddata', kick)
       video.removeEventListener('canplay', kick)
       video.removeEventListener('playing', kick)
-      video.removeEventListener('emptied', kick)
+      video.removeEventListener('pause', kick)
     }
   }, [showStream, onVideoLive])
 

@@ -40,22 +40,21 @@ assert(/onReady/.test(streamSrc), 'exposes streamReady so the still can yield be
 assert(/unlockSaraStream/.test(streamSrc), 'replays muted video from the Send/Play gesture')
 assert(/compatibilityMode: 'on'/.test(streamSrc), 'VP8 compatibility mode for Safari WebRTC')
 assert(/streamWarmup:\s*false/.test(streamSrc), 'Talks V2 warmup is off so connect() is not gated on decoded frames')
+assert(/PLAY_RETRY_MS/.test(streamSrc), 'retries muted video.play() after srcObject')
+assert(/pageshow/.test(streamSrc), 'replays muted video when iOS PWA returns to foreground')
+assert(/isTransientStreamError/.test(streamSrc), 'treats early D-ID /streams 403 as retryable')
+assert(
+  /s === 'closed' && !srcObject/.test(streamSrc),
+  '403 fail/disconnected must not hide an attached stream',
+)
 
 assert(
-  !shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: false }),
-  'keeps the still over an idle attached track — do not flash a black first frame',
+  shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: false }),
+  'reveals muted video once srcObject is ready — do not wait on START',
 )
 assert(
-  !shouldShowSaraStream({ streamReady: true, speaking: true, streamTalking: false }),
-  'keeps the still while ara talks if D-ID has not produced frames (avoid black circle)',
-)
-assert(
-  shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: true }),
-  'reveals muted video when D-ID reports talking',
-)
-assert(
-  shouldShowSaraStream({ streamReady: true, speaking: true, streamTalking: false, videoLive: true }),
-  'reveals muted video once the element has decoded frames',
+  shouldShowSaraStream({ streamReady: true, speaking: true, streamTalking: false }),
+  'keeps the stream visible while ara is talking even if START never fires',
 )
 assert(
   !shouldShowSaraStream({ streamReady: false, speaking: true, streamTalking: true }),
@@ -81,10 +80,18 @@ assert(
 )
 assert(/speakSara\(/.test(askSrc), 'ara TTS starts immediately on reply')
 assert(/speakSaraStream/.test(askSrc), 'Agents stream speak runs alongside ara')
-assert(/onVideoLive/.test(askSrc), 'Ask Sara only lifts the still once the stream has frames')
+assert(/connectSaraStream\(\)/.test(askSrc), 'Send starts/joins stream connect in the same gesture as unlock')
 assert(!/agentManager\.chat\(|\.chat\(/.test(askSrc), 'Ask Sara does not call agentManager.chat()')
 assert(!/requestSaraTalk/.test(askSrc), 'Ask Sara does not poll Talks mp4')
 assert(!/watchSaraTalk/.test(askSrc), 'Ask Sara does not wait minutes for an mp4')
+
+const mainSrc = readFileSync(new URL('../main.tsx', import.meta.url), 'utf8')
+assert(/registration\.update\(/.test(mainSrc), 'service worker checks for a new bundle')
+
+const viteSrc = readFileSync(new URL('../../vite.config.ts', import.meta.url), 'utf8')
+assert(/sara-pwa-20260917-motion/.test(viteSrc), 'PWA cacheId busts a phone still serving PR5')
+assert(/NetworkFirst/.test(viteSrc), 'navigations are NetworkFirst so iOS PWA gets new index.html')
+assert(!/\*\.\{js,css,html/.test(viteSrc), 'does not precache index.html (stale PWA)')
 
 if (process.exitCode) {
   console.error('askSara copy smoke failed')

@@ -90,6 +90,7 @@ export function AskSara() {
     haltPlayback()
     unlockSaraSpeech()
     unlockSaraStream()
+    void connectSaraStream()
     const you: ChatMessage = { id: uid(), from: 'you', text, at: nowIso() }
     const prior = messages
     setMessages((cur) => [...cur, you])
