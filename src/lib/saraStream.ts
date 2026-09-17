@@ -199,13 +199,18 @@ export async function connectSaraStream(): Promise<boolean> {
           const s = String(state).toLowerCase()
           if (s === 'fail' || s === 'closed') {
             setReady(false)
+            deadMode = true
           }
         },
         onModeChange(mode: string) {
-          if (DEAD_MODES.has(String(mode))) deadMode = true
+          if (DEAD_MODES.has(String(mode))) {
+            deadMode = true
+            setReady(false)
+          }
         },
         onError() {
-          /* connect/speak treat missing stream as failure; ara still plays */
+          deadMode = true
+          setReady(false)
         },
       },
     })
@@ -253,7 +258,8 @@ export async function speakSaraStream(text: string): Promise<void> {
     try {
       await attempt()
     } catch {
-      /* ara audio still plays; motion is best-effort */
+      deadMode = true
+      setReady(false)
     }
   }
 }
