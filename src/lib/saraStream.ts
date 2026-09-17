@@ -44,8 +44,11 @@ const playTimers = new Set<number>()
 const listeners: StreamCallbacks = {}
 
 /**
- * Reveal the muted WebRTC video as soon as srcObject is attached.
- * iOS often never fires onVideoStateChange START; do not wait on it.
+ * The PNG still stays up unless the <video> itself has a srcObject AND
+ * decoded frames. streamReady (module flag / SDK callback) is not enough:
+ * Chromium on PR8 hid the still at opacity 0 while video.srcObject was
+ * null and D-ID /streams 403'd — a blank sage circle. Ara-only must not
+ * lift the PNG. Do not wait on D-ID START (iOS often never fires it).
  */
 export function shouldShowSaraStream(opts: {
   streamReady: boolean
@@ -53,7 +56,31 @@ export function shouldShowSaraStream(opts: {
   streamTalking?: boolean
   videoLive?: boolean
 }): boolean {
-  return Boolean(opts.streamReady)
+  return Boolean(opts.videoLive)
+}
+
+/** True only when the element holds a real stream with a decoded frame. */
+export function isSaraVideoLive(video: HTMLVideoElement | null | undefined): boolean {
+  if (!video || !video.srcObject) return false
+  return video.videoWidth > 0
+}
+
+function elementHoldsStream(): boolean {
+  return Boolean(videoEl?.srcObject)
+}
+
+function logStream(event: string, detail?: unknown) {
+  try {
+    console.info('[sara-stream]', event, detail ?? '')
+  } catch {
+    /* ignore */
+  }
+}
+
+function describeError(error: unknown): string {
+  const err = error as { status?: number; kind?: string; message?: string } | undefined
+  const raw = `${err?.kind || ''} ${err?.status ?? ''} ${err?.message || error || ''}`.trim()
+  return raw.replace(/ck_[A-Za-z0-9_-]+/g, 'ck_[redacted]').slice(0, 180)
 }
 
 function primeVideo(video: HTMLVideoElement) {
@@ -97,7 +124,8 @@ function schedulePlay(video: HTMLVideoElement) {
 function attachSrcObject(stream: MediaStream | null) {
   srcObject = stream
   if (!videoEl) {
-    setReady(Boolean(stream))
+    // Never mark ready until the <video> node actually holds the stream.
+    setReady(false)
     return
   }
   primeVideo(videoEl)
@@ -113,7 +141,13 @@ function attachSrcObject(stream: MediaStream | null) {
       /* ignore */
     }
   }
-  setReady(Boolean(stream))
+  setReady(elementHoldsStream())
+}
+
+function fallBackToStill(reason: string, detail?: unknown) {
+  logStream(reason, detail)
+  setReady(false)
+  if (srcObject || videoEl?.srcObject) attachSrcObject(null)
 }
 
 function bindForegroundReplay() {
@@ -146,7 +180,13 @@ function dropManager() {
 export function bindSaraStreamVideo(el: HTMLVideoElement | null) {
   videoEl = el
   bindForegroundReplay()
-  if (el) attachSrcObject(srcObject)
+  if (el) {
+    attachSrcObject(srcObject)
+    return
+  }
+  // Video node gone (StrictMode remount, leave page) — do not leave streamReady
+  // true or the still stays at opacity 0 over an empty sage circle.
+  setReady(false)
 }
 
 /** Call from Send / Play — same user-gesture window as ara unlock. */
@@ -220,14 +260,17 @@ function speakLooksDead(result: unknown): boolean {
 }
 
 export async function connectSaraStream(): Promise<boolean> {
-  if (manager && !deadMode) return true
+  if (manager && !deadMode && elementHoldsStream()) return true
   if (connectPromise) return connectPromise
   if (manager) dropManager()
   const session = ++sessionGen
   connectPromise = (async () => {
     deadMode = false
     const creds = await fetchSaraStreamCreds()
-    if (!creds || session !== sessionGen) return false
+    if (!creds || session !== sessionGen) {
+      logStream('no stream credentials — keeping still')
+      return false
+    }
     const create = await loadSdk()
     if (!create || session !== sessionGen) return false
     const created = await create(creds.agentId, {
@@ -255,15 +298,25 @@ export async function connectSaraStream(): Promise<boolean> {
           if (s === 'connected' && srcObject) {
             attachSrcObject(srcObject)
           }
-          // Early D-ID /streams 403 retries emit fail/disconnected. Keep a live
-          // srcObject revealed; only closed means the peer is gone.
-          if (s === 'closed' && !srcObject) setReady(false)
+          // Early D-ID /streams 403 retries emit fail/disconnected. Keep the
+          // still up unless the <video> actually holds a stream.
+          if ((s === 'fail' || s === 'disconnected' || s === 'closed') && !elementHoldsStream()) {
+            logStream('peer has no video srcObject — keeping still', s)
+            setReady(false)
+          }
         },
         onModeChange(mode: string) {
           if (DEAD_MODES.has(String(mode))) deadMode = true
         },
         onError(error: Error) {
-          if (isTransientStreamError(error)) return
+          if (isTransientStreamError(error)) {
+            if (!elementHoldsStream()) {
+              logStream('D-ID /streams 403 — keeping still; ara continues', describeError(error))
+              setReady(false)
+            }
+            return
+          }
+          logStream('stream error', describeError(error))
           markDeadFromError(error)
         },
       },
@@ -280,18 +333,28 @@ export async function connectSaraStream(): Promise<boolean> {
     await created.connect()
     if (session !== sessionGen || deadMode) return false
     if (srcObject) attachSrcObject(srcObject)
+    if (!elementHoldsStream()) {
+      logStream('connect finished with no video srcObject — keeping still')
+      return false
+    }
     return true
   })().catch((error) => {
-    if (isTransientStreamError(error) && session === sessionGen && manager && !deadMode) {
+    const transient = isTransientStreamError(error)
+    if (transient && session === sessionGen && elementHoldsStream() && !deadMode) {
+      logStream('transient 403 after srcObject attached — keeping stream')
       return true
     }
+    logStream(
+      transient ? 'D-ID /streams 403 after retries — keeping still; ara continues' : 'connect failed — keeping still',
+      describeError(error),
+    )
     return false
   })
   const ok = await connectPromise
   connectPromise = null
   if (!ok && session === sessionGen) {
     dropManager()
-    attachSrcObject(null)
+    fallBackToStill('stream unavailable — still stays visible')
   }
   return ok
 }
@@ -317,11 +380,12 @@ export async function speakSaraStream(text: string): Promise<void> {
     await attempt()
   } catch (error) {
     if (isTransientStreamError(error)) {
+      logStream('speak 403 — ara continues; still stays unless video is live', describeError(error))
       if (gen !== speakGen) return
       try {
         await attempt()
-      } catch {
-        /* ara still plays */
+      } catch (retryError) {
+        if (!elementHoldsStream()) fallBackToStill('speak 403 retries exhausted', describeError(retryError))
       }
       return
     }

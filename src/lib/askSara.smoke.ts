@@ -1,5 +1,5 @@
 import { isSaraUnreachable, SARA_OFFLINE } from './askSara.ts'
-import { shouldShowSaraStream } from './saraStream.ts'
+import { isSaraVideoLive, shouldShowSaraStream } from './saraStream.ts'
 import { SARA_VOICE_OFFLINE } from './speakSara.ts'
 import { readFileSync } from 'node:fs'
 
@@ -43,22 +43,49 @@ assert(/streamWarmup:\s*false/.test(streamSrc), 'Talks V2 warmup is off so conne
 assert(/PLAY_RETRY_MS/.test(streamSrc), 'retries muted video.play() after srcObject')
 assert(/pageshow/.test(streamSrc), 'replays muted video when iOS PWA returns to foreground')
 assert(/isTransientStreamError/.test(streamSrc), 'treats early D-ID /streams 403 as retryable')
+assert(/\[sara-stream\]/.test(streamSrc), 'logs stream 403 / missing srcObject without secrets')
+assert(/ck_\[redacted\]/.test(streamSrc), 'redacts client keys from stream logs')
+assert(/elementHoldsStream/.test(streamSrc), '403 fallback checks the <video> srcObject, not a stale module flag')
 assert(
-  /s === 'closed' && !srcObject/.test(streamSrc),
-  '403 fail/disconnected must not hide an attached stream',
+  /D-ID \/streams 403 after retries/.test(streamSrc),
+  'persistent 403 falls back to the still and keeps ara',
+)
+assert(
+  !/isTransientStreamError\(error\) && session === sessionGen && manager && !deadMode/.test(streamSrc),
+  '403 must not fake a successful connect when the video has no srcObject',
 )
 
 assert(
-  shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: false }),
-  'reveals muted video once srcObject is ready — do not wait on START',
+  !shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: false, videoLive: false }),
+  'keeps the still when streamReady is a false positive (Chromium PR8 hole)',
 )
 assert(
-  shouldShowSaraStream({ streamReady: true, speaking: true, streamTalking: false }),
-  'keeps the stream visible while ara is talking even if START never fires',
+  !shouldShowSaraStream({ streamReady: true, speaking: true, streamTalking: false, videoLive: false }),
+  'keeps the still over a black/empty track while ara talks',
 )
 assert(
-  !shouldShowSaraStream({ streamReady: false, speaking: true, streamTalking: true }),
-  'keeps the still when the stream is not attached',
+  shouldShowSaraStream({ streamReady: false, speaking: false, streamTalking: false, videoLive: true }),
+  'reveals muted video once the element has a playing srcObject — do not wait on START',
+)
+assert(
+  shouldShowSaraStream({ streamReady: true, speaking: true, streamTalking: true, videoLive: true }),
+  'shows muted stream while D-ID is talking and frames are live',
+)
+assert(
+  !isSaraVideoLive(null),
+  'null video is not live',
+)
+assert(
+  !isSaraVideoLive({ srcObject: null, videoWidth: 0 } as HTMLVideoElement),
+  'empty video (readyState 0, no srcObject) is not live',
+)
+assert(
+  !isSaraVideoLive({ srcObject: {}, videoWidth: 0 } as HTMLVideoElement),
+  'srcObject without decoded frames is not live',
+)
+assert(
+  isSaraVideoLive({ srcObject: {}, videoWidth: 512 } as HTMLVideoElement),
+  'decoded frames on a srcObject count as live',
 )
 
 assert(!/audio\.load\(/.test(speakSrc), 'stop does not load() the audio element (that re-locks iOS)')
@@ -69,7 +96,14 @@ assert(!/talking\s*&&\s*videoUrl/.test(portraitSrc), 'portrait is not gated on T
 assert(/streaming/.test(portraitSrc), 'portrait shows the live Agents stream')
 assert(/playsInline/.test(portraitSrc), 'stream video is playsInline')
 assert(/sara-stream-video/.test(portraitSrc), 'stream video stays painted under the still')
-assert(!/overflow-hidden/.test(portraitSrc), 'does not crop WebRTC video with overflow-hidden')
+assert(/poster=\{STILL\}/.test(portraitSrc), 'video poster is the idle still so an empty track is not a hole')
+assert(/overflow-hidden/.test(portraitSrc), 'crops the portrait circle with overflow-hidden like SaraPortrait')
+assert(/opacity-100/.test(portraitSrc), 'idle still is opacity-100 unless the stream is actually live')
+assert(/isSaraVideoLive/.test(portraitSrc), 'portrait reports live only when the video has srcObject + frames')
+
+const cssSrc = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
+assert(!/mask-image/.test(cssSrc), 'does not CSS-mask the portrait (iOS can composite that to a blank hole)')
+assert(!/translateZ\(0\)/.test(cssSrc), 'does not promote the portrait onto a 3D layer that hides the still')
 
 const askSrc = readFileSync(new URL('../pages/AskSara.tsx', import.meta.url), 'utf8')
 assert(/unlockSaraSpeech/.test(askSrc), 'Send still unlocks ara audio for iOS')
@@ -89,7 +123,7 @@ const mainSrc = readFileSync(new URL('../main.tsx', import.meta.url), 'utf8')
 assert(/registration\.update\(/.test(mainSrc), 'service worker checks for a new bundle')
 
 const viteSrc = readFileSync(new URL('../../vite.config.ts', import.meta.url), 'utf8')
-assert(/sara-pwa-20260917-motion/.test(viteSrc), 'PWA cacheId busts a phone still serving PR5')
+assert(/sara-pwa-20260917-still/.test(viteSrc), 'PWA cacheId busts a phone still serving the PR8 motion bundle')
 assert(/NetworkFirst/.test(viteSrc), 'navigations are NetworkFirst so iOS PWA gets new index.html')
 assert(!/\*\.\{js,css,html/.test(viteSrc), 'does not precache index.html (stale PWA)')
 
