@@ -7,6 +7,7 @@ type Props = {
   listening?: boolean
   streaming?: boolean
   onVideoEl?: (el: HTMLVideoElement | null) => void
+  onVideoLive?: (live: boolean) => void
 }
 
 export function TalkingPortrait({
@@ -14,6 +15,7 @@ export function TalkingPortrait({
   listening = false,
   streaming = false,
   onVideoEl,
+  onVideoLive,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const showStream = Boolean(streaming)
@@ -30,17 +32,21 @@ export function TalkingPortrait({
       video.muted = true
       video.playsInline = true
       void video.play().catch(() => {})
+      onVideoLive?.(video.videoWidth > 0 && !video.paused)
     }
     kick()
     video.addEventListener('loadeddata', kick)
     video.addEventListener('canplay', kick)
     video.addEventListener('playing', kick)
+    video.addEventListener('emptied', kick)
     return () => {
+      onVideoLive?.(false)
       video.removeEventListener('loadeddata', kick)
       video.removeEventListener('canplay', kick)
       video.removeEventListener('playing', kick)
+      video.removeEventListener('emptied', kick)
     }
-  }, [showStream])
+  }, [showStream, onVideoLive])
 
   return (
     <div className="flex flex-col items-center text-center">

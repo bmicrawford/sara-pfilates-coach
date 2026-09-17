@@ -40,16 +40,17 @@ let deadMode = false
 const listeners: StreamCallbacks = {}
 
 /**
- * Hide the PNG still only when the WebRTC stream is attached AND we are in a
- * talk turn. An attached-but-idle Talks V2 track is often a black/first frame;
- * keep the still over it until ara/D-ID are actually speaking.
+ * Hide the PNG still only when the WebRTC stream is attached AND D-ID is
+ * actually talking (or the element has decoded frames). Ara-only is not
+ * enough — a failed speak() leaves a black track that must stay covered.
  */
 export function shouldShowSaraStream(opts: {
   streamReady: boolean
   speaking?: boolean
   streamTalking?: boolean
+  videoLive?: boolean
 }): boolean {
-  return Boolean(opts.streamReady && (opts.speaking || opts.streamTalking))
+  return Boolean(opts.streamReady && (opts.streamTalking || opts.videoLive))
 }
 
 function primeVideo(video: HTMLVideoElement) {

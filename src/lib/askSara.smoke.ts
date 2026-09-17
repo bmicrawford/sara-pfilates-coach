@@ -46,12 +46,16 @@ assert(
   'keeps the still over an idle attached track — do not flash a black first frame',
 )
 assert(
-  shouldShowSaraStream({ streamReady: true, speaking: true, streamTalking: false }),
-  'reveals muted video while ara is talking',
+  !shouldShowSaraStream({ streamReady: true, speaking: true, streamTalking: false }),
+  'keeps the still while ara talks if D-ID has not produced frames (avoid black circle)',
 )
 assert(
   shouldShowSaraStream({ streamReady: true, speaking: false, streamTalking: true }),
   'reveals muted video when D-ID reports talking',
+)
+assert(
+  shouldShowSaraStream({ streamReady: true, speaking: true, streamTalking: false, videoLive: true }),
+  'reveals muted video once the element has decoded frames',
 )
 assert(
   !shouldShowSaraStream({ streamReady: false, speaking: true, streamTalking: true }),
@@ -77,6 +81,7 @@ assert(
 )
 assert(/speakSara\(/.test(askSrc), 'ara TTS starts immediately on reply')
 assert(/speakSaraStream/.test(askSrc), 'Agents stream speak runs alongside ara')
+assert(/onVideoLive/.test(askSrc), 'Ask Sara only lifts the still once the stream has frames')
 assert(!/agentManager\.chat\(|\.chat\(/.test(askSrc), 'Ask Sara does not call agentManager.chat()')
 assert(!/requestSaraTalk/.test(askSrc), 'Ask Sara does not poll Talks mp4')
 assert(!/watchSaraTalk/.test(askSrc), 'Ask Sara does not wait minutes for an mp4')
