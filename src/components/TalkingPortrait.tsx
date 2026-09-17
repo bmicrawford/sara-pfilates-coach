@@ -23,6 +23,23 @@ export function TalkingPortrait({
     return () => onVideoEl?.(null)
   }, [onVideoEl])
 
+  useEffect(() => {
+    const video = videoRef.current
+    if (!showStream || !video) return
+    const kick = () => {
+      video.muted = true
+      video.playsInline = true
+      void video.play().catch(() => {})
+    }
+    kick()
+    video.addEventListener('loadeddata', kick)
+    video.addEventListener('canplay', kick)
+    return () => {
+      video.removeEventListener('loadeddata', kick)
+      video.removeEventListener('canplay', kick)
+    }
+  }, [showStream])
+
   return (
     <div className="flex flex-col items-center text-center">
       <div

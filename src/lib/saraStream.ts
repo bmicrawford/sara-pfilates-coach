@@ -19,14 +19,32 @@ type AgentManagerLike = {
 
 type StreamCallbacks = {
   onTalking?: (talking: boolean) => void
+  onReady?: (ready: boolean) => void
 }
+
+/** Speak-only. Skips D-ID chat/LLM so Grok stays the brain. */
+const SPEAK_MODE = 'DirectPlayback'
+
+/** Modes where the SDK no-ops speak() or tears down streamingManager. */
+const DEAD_MODES = new Set(['TextOnly', 'Playground', 'Maintenance', 'Off'])
 
 let videoEl: HTMLVideoElement | null = null
 let srcObject: MediaStream | null = null
 let manager: AgentManagerLike | null = null
 let connectPromise: Promise<boolean> | null = null
 let speakGen = 0
+let sessionGen = 0
+let streamReady = false
+let deadMode = false
 const listeners: StreamCallbacks = {}
+
+export function shouldShowSaraStream(opts: {
+  streamReady: boolean
+  speaking?: boolean
+  streamTalking?: boolean
+}): boolean {
+  return Boolean(opts.streamReady)
+}
 
 function primeVideo(video: HTMLVideoElement) {
   video.setAttribute('playsinline', 'true')
@@ -34,15 +52,63 @@ function primeVideo(video: HTMLVideoElement) {
   video.playsInline = true
   video.autoplay = true
   video.muted = true
+  video.defaultMuted = true
+  video.volume = 0
+}
+
+function setReady(next: boolean) {
+  streamReady = next
+  listeners.onReady?.(next)
 }
 
 function attachSrcObject(stream: MediaStream | null) {
   srcObject = stream
-  if (!videoEl) return
+  if (!videoEl) {
+    setReady(Boolean(stream))
+    return
+  }
   primeVideo(videoEl)
-  videoEl.srcObject = stream
-  videoEl.muted = true
-  if (stream) void videoEl.play().catch(() => {})
+  if (stream) {
+    if (videoEl.src) videoEl.src = ''
+    videoEl.srcObject = stream
+    videoEl.muted = true
+    void videoEl.play().catch(() => {})
+  } else {
+    try {
+      videoEl.srcObject = null
+    } catch {
+      /* ignore */
+    }
+  }
+  setReady(Boolean(stream))
+}
+
+function waitUntil(pred: () => boolean, ms: number): Promise<boolean> {
+  if (pred()) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const started = Date.now()
+    const id = window.setInterval(() => {
+      if (pred() || Date.now() - started >= ms) {
+        window.clearInterval(id)
+        resolve(pred())
+      }
+    }, 50)
+  })
+}
+
+function dropManager() {
+  sessionGen += 1
+  const current = manager
+  manager = null
+  connectPromise = null
+  deadMode = false
+  if (current) {
+    try {
+      void current.disconnect()
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export function bindSaraStreamVideo(el: HTMLVideoElement | null) {
@@ -50,8 +116,22 @@ export function bindSaraStreamVideo(el: HTMLVideoElement | null) {
   if (el) attachSrcObject(srcObject)
 }
 
+/** Call from Send / Play — same user-gesture window as ara unlock. */
+export function unlockSaraStream(): void {
+  if (!videoEl) return
+  primeVideo(videoEl)
+  if (srcObject && videoEl.srcObject !== srcObject) {
+    if (videoEl.src) videoEl.src = ''
+    videoEl.srcObject = srcObject
+  }
+  videoEl.muted = true
+  void videoEl.play().catch(() => {})
+}
+
 export function setSaraStreamCallbacks(next: StreamCallbacks) {
   listeners.onTalking = next.onTalking
+  listeners.onReady = next.onReady
+  if (next.onReady) next.onReady(streamReady)
 }
 
 export async function fetchSaraStreamCreds(): Promise<SaraStreamCreds | null> {
@@ -87,37 +167,68 @@ async function loadSdk() {
 }
 
 export async function connectSaraStream(): Promise<boolean> {
-  if (manager) return true
+  if (manager && streamReady && !deadMode) return true
   if (connectPromise) return connectPromise
+  if (manager) dropManager()
+  const session = ++sessionGen
   connectPromise = (async () => {
+    deadMode = false
     const creds = await fetchSaraStreamCreds()
-    if (!creds) return false
+    if (!creds || session !== sessionGen) return false
     const create = await loadSdk()
-    if (!create) return false
+    if (!create || session !== sessionGen) return false
     const created = await create(creds.agentId, {
       auth: { type: 'key', clientKey: creds.clientKey },
+      mode: SPEAK_MODE,
       enableAnalytics: false,
-      streamOptions: { compatibilityMode: 'auto', streamWarmup: true },
+      streamOptions: { compatibilityMode: 'on', streamWarmup: true },
       callbacks: {
         onSrcObjectReady(value: MediaStream) {
           attachSrcObject(value)
           return value
         },
-        onVideoStateChange(state: string) {
-          listeners.onTalking?.(String(state).toUpperCase() !== 'STOP')
+        onStreamReady() {
+          if (srcObject) attachSrcObject(srcObject)
         },
-        onConnectionStateChange() {},
-        onError() {},
+        onVideoStateChange(state: string) {
+          const talking = String(state).toUpperCase() !== 'STOP'
+          if (talking) attachSrcObject(srcObject)
+          listeners.onTalking?.(talking)
+        },
+        onConnectionStateChange(state: string) {
+          const s = String(state).toLowerCase()
+          if (s === 'fail' || s === 'closed') {
+            setReady(false)
+          }
+        },
+        onModeChange(mode: string) {
+          if (DEAD_MODES.has(String(mode))) deadMode = true
+        },
+        onError() {
+          /* connect/speak treat missing stream as failure; ara still plays */
+        },
       },
     })
+    if (session !== sessionGen) {
+      try {
+        void created.disconnect()
+      } catch {
+        /* superseded */
+      }
+      return false
+    }
     manager = created
     await created.connect()
+    if (session !== sessionGen) return false
+    const ready = await waitUntil(() => streamReady && !deadMode, 8_000)
+    if (!ready || session !== sessionGen) return false
     return true
   })().catch(() => false)
   const ok = await connectPromise
-  if (!ok) {
-    connectPromise = null
-    manager = null
+  connectPromise = null
+  if (!ok && session === sessionGen) {
+    dropManager()
+    attachSrcObject(null)
   }
   return ok
 }
@@ -126,12 +237,24 @@ export async function speakSaraStream(text: string): Promise<void> {
   const clean = text.replace(/\s+/g, ' ').trim()
   if (!clean) return
   const gen = ++speakGen
-  const ok = await connectSaraStream()
-  if (!ok || gen !== speakGen || !manager) return
-  try {
+
+  const attempt = async () => {
+    const ok = await connectSaraStream()
+    if (!ok || gen !== speakGen || !manager || deadMode) return
+    unlockSaraStream()
     await manager.speak({ type: 'text', input: clean })
+  }
+
+  try {
+    await attempt()
   } catch {
-    /* ara audio still plays; motion is best-effort */
+    if (gen !== speakGen) return
+    dropManager()
+    try {
+      await attempt()
+    } catch {
+      /* ara audio still plays; motion is best-effort */
+    }
   }
 }
 
@@ -139,7 +262,7 @@ export function stopSaraStream(): void {
   speakGen += 1
   listeners.onTalking?.(false)
   try {
-    manager?.interrupt?.()
+    manager?.interrupt?.({ type: 'manual' })
   } catch {
     /* Talks V2 agents may not support interrupt */
   }
@@ -147,22 +270,6 @@ export function stopSaraStream(): void {
 
 export function disconnectSaraStream(): void {
   stopSaraStream()
-  const current = manager
-  manager = null
-  connectPromise = null
-  srcObject = null
-  if (videoEl) {
-    try {
-      videoEl.srcObject = null
-    } catch {
-      /* ignore */
-    }
-  }
-  if (current) {
-    try {
-      void current.disconnect()
-    } catch {
-      /* ignore */
-    }
-  }
+  dropManager()
+  attachSrcObject(null)
 }

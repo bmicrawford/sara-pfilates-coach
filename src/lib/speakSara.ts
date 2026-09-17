@@ -106,7 +106,6 @@ export function stopSaraSpeech(): void {
   try {
     engine.audio.pause()
     engine.audio.removeAttribute('src')
-    engine.audio.load()
   } catch {
     /* ignore */
   }
