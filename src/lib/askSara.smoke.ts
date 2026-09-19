@@ -5,7 +5,8 @@ import {
   isSaraSessionCapError,
   isTransientStreamError,
   streamVideoShouldBeMuted,
-  STREAM_VOICE_BUDGET_MS,
+  streamVideoShouldUnlockElement,
+  STREAM_AV_READY_MS,
 } from './saraStream.ts'
 import { SARA_VOICE_OFFLINE } from './speakSara.ts'
 import { readFileSync } from 'node:fs'
@@ -43,7 +44,13 @@ assert(/\/stream/.test(streamSrc), 'fetches stream credentials from the Worker')
 assert(!/DID_API_KEY/.test(streamSrc), 'Agents SDK client never sees DID_API_KEY')
 assert(/applyHeardMute/.test(streamSrc), 'video mute follows D-ID-heard vs ara fallback')
 assert(/volume = 1/.test(streamSrc), 'unmutes D-ID audio when stream speak is the heard voice')
-assert(/STREAM_VOICE_BUDGET_MS/.test(streamSrc), 'waits a short budget for stream speak START before ara')
+assert(/STREAM_AV_READY_MS/.test(streamSrc), 'waits for playable AV after speak before ara')
+assert(/gateAudioTracks/.test(streamSrc), 'disables WebRTC audio tracks until frames + speak')
+assert(/maybePromoteHeard/.test(streamSrc), 'promotes heard voice only when speak started and frames are live')
+assert(/readyState >= 2/.test(streamSrc), 'unmutes only after the video is playing decoded frames')
+assert(/videoEl\.paused/.test(streamSrc), 'does not unmute a paused stream that has dimensions')
+assert(/onFirstAudioDetected/.test(streamSrc), 'first audio does not unmute before video frames')
+assert(/holding mute until video frames/.test(streamSrc), 'logs that early audio is held until frames')
 assert(/fallbackLocked/.test(streamSrc), 'late START after ara fallback must not unmute (no double voice)')
 assert(/onSrcObjectReady/.test(streamSrc), 'attaches the WebRTC stream on onSrcObjectReady')
 assert(/onReady/.test(streamSrc), 'exposes streamReady so the still can yield before START')
@@ -84,8 +91,20 @@ assert(
   'speak() does not wait for ara before D-ID speak()',
 )
 assert(
-  /STREAM_VOICE_BUDGET_MS/.test(streamSrc) && /falling back to ara/.test(streamSrc),
-  'waits a short budget for stream START before ara fallback',
+  /STREAM_AV_READY_MS/.test(streamSrc) && /falling back to ara/.test(streamSrc),
+  'waits for playable AV after speak before ara fallback',
+)
+assert(
+  !/STREAM_VOICE_BUDGET_MS/.test(streamSrc),
+  'short START-only voice budget is gone — that unmuted before frames',
+)
+assert(
+  !/Promise\.race\(\[\s*runAttempts/.test(streamSrc),
+  'does not race connect+speak against a short overall timeout that starts ara early',
+)
+assert(
+  /Do not start ara while D-ID is still coming up/.test(streamSrc),
+  'speak() documents no ara while D-ID is still connecting or decoding',
 )
 assert(
   /Do not connect\(\) on Ask Sara mount/.test(streamSrc),
@@ -155,7 +174,7 @@ assert(
   isSaraVideoLive({ srcObject: {}, videoWidth: 512 } as HTMLVideoElement),
   'decoded frames on a srcObject count as live',
 )
-assert(STREAM_VOICE_BUDGET_MS >= 800 && STREAM_VOICE_BUDGET_MS <= 4000, 'START budget is short so ara is not late')
+assert(STREAM_AV_READY_MS >= 5000 && STREAM_AV_READY_MS <= 12000, 'AV-ready budget outlasts first-frame decode')
 assert(
   streamVideoShouldBeMuted({ voicePath: 'idle', userMuted: false }),
   'idle stream video stays muted',
@@ -165,16 +184,32 @@ assert(
   'ara fallback remutes D-ID so voices do not overlap',
 )
 assert(
-  streamVideoShouldBeMuted({ voicePath: 'did', userMuted: true }),
+  streamVideoShouldBeMuted({ voicePath: 'did', userMuted: true, videoLive: true }),
   'user mute keeps D-ID silent even when stream speak is heard',
 )
 assert(
-  !streamVideoShouldBeMuted({ voicePath: 'did', userMuted: false }),
-  'unmutes D-ID when stream speak is the heard voice',
+  streamVideoShouldBeMuted({ voicePath: 'did', userMuted: false, videoLive: false }),
+  'keeps D-ID silent after START until visible frames',
 )
 assert(
-  !streamVideoShouldBeMuted({ voicePath: 'pending', userMuted: false }),
-  'pending after Send/Play stays unmuted so iOS can hear stream audio',
+  streamVideoShouldBeMuted({ voicePath: 'pending', userMuted: false, videoLive: false }),
+  'pending after Send/Play stays silent so audio cannot lead the mouth',
+)
+assert(
+  streamVideoShouldBeMuted({ voicePath: 'pending', userMuted: false, videoLive: true }),
+  'pending with frames stays silent until speak has started',
+)
+assert(
+  !streamVideoShouldBeMuted({ voicePath: 'did', userMuted: false, videoLive: true }),
+  'unmutes D-ID only when stream speak is heard and frames are live',
+)
+assert(
+  streamVideoShouldUnlockElement({ voicePath: 'pending', userMuted: false }),
+  'pending unlocks the element so iOS can hear later',
+)
+assert(
+  !streamVideoShouldUnlockElement({ voicePath: 'idle', userMuted: false }),
+  'idle does not leave the element unlocked',
 )
 
 assert(!/audio\.load\(/.test(speakSrc), 'stop does not load() the audio element (that re-locks iOS)')
@@ -216,6 +251,10 @@ assert(
   'skips ara when D-ID stream audio is heard',
 )
 assert(
+  /no playable AV/.test(askSrc),
+  'ara waits until stream failure / cap / timeout with no playable AV',
+)
+assert(
   !/void speakSaraStream\(text\)\s*\n\s*if \(mutedRef/.test(askSrc),
   'ara is not started in parallel with stream speak',
 )
@@ -244,7 +283,7 @@ const mainSrc = readFileSync(new URL('../main.tsx', import.meta.url), 'utf8')
 assert(/registration\.update\(/.test(mainSrc), 'service worker checks for a new bundle')
 
 const viteSrc = readFileSync(new URL('../../vite.config.ts', import.meta.url), 'utf8')
-assert(/sara-pwa-20260919-stream-voice/.test(viteSrc), 'PWA cacheId busts a phone still serving muted-D-ID + always-ara')
+assert(/sara-pwa-20260919-av-lockstep/.test(viteSrc), 'PWA cacheId busts a phone still serving early-unmute D-ID audio')
 assert(/NetworkFirst/.test(viteSrc), 'navigations are NetworkFirst so iOS PWA gets new index.html')
 assert(!/\*\.\{js,css,html/.test(viteSrc), 'does not precache index.html (stale PWA)')
 
