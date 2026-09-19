@@ -1,6 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Field, inputClass } from '../components/Chip'
 import { TalkingPortrait } from '../components/TalkingPortrait'
 import { askSaraRemote, isSaraUnreachable } from '../lib/askSara'
 import { readChat, writeChat } from '../lib/mockServer'
@@ -178,114 +177,124 @@ export function AskSara() {
 
   const lastSara = [...messages].reverse().find((m) => m.from === 'sara')
 
-  return (
-    <main className="ask-sara mx-auto flex h-dvh max-h-dvh max-w-[430px] flex-col overflow-hidden px-5 safe-top">
-      <header className="flex shrink-0 items-center justify-between pb-1">
-        <Link to="/" className="text-sm text-sage-deep">
-          ← Home
-        </Link>
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-ink-faint">Ask Sara</p>
-        <button
-          type="button"
-          className="text-xs text-sage-deep"
-          onClick={() => {
-            if (live && !muted) {
-              haltPlayback()
-              return
-            }
-            const next = !muted
-            setMuted(next)
-            setSaraMuted(next)
-            if (next) haltPlayback()
-          }}
-        >
-          {muted ? 'Unmute' : live ? 'Stop' : 'Mute'}
-        </button>
-      </header>
+  const listening = busy || Boolean(draft.trim())
+  const greeting = live ? "I'm with you." : listening ? "I'm listening." : "Hey — it's Sara."
 
-      <div className="ask-sara-stage shrink-0 bg-cream pb-2 pt-2">
+  return (
+    <main className="ask-sara relative isolate h-dvh max-h-dvh overflow-hidden">
+      <div className="ask-sara-stage">
         <TalkingPortrait
           talking={speaking}
-          listening={busy || Boolean(draft.trim())}
+          listening={listening}
           streaming={streaming}
           onVideoEl={onVideoEl}
           onVideoLive={onVideoLive}
         />
-        <p className="mt-1 text-center text-sm text-ink-mute">
-          {live ? 'Sara is talking.' : 'I’m listening — ask the real question.'}
-        </p>
-        {voiceNote ? (
-          <p className="mt-1 text-center text-xs leading-snug text-ink-mute">{voiceNote}</p>
-        ) : live && streamCapped ? (
-          <p className="mt-1 text-center text-xs leading-snug text-ink-mute">{SARA_STREAM_CAPPED_NOTE}</p>
-        ) : null}
       </div>
 
-      <div className="ask-sara-thread min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-3">
-        {messages.length === 0 ? (
-          <p className="rounded-2xl bg-cream-card px-4 py-3 text-sm text-ink-mute shadow-card">
-            Try “how much water?”, “why did I leak when I sneezed?”, or “what are symptoms of a UTI?”
+      <div className="ask-sara-overlay relative z-10 flex h-full min-h-0 flex-col">
+        <div className="ask-sara-chrome shrink-0 pb-6">
+          <header className="flex items-center justify-between px-5 pb-2 safe-top">
+            <Link to="/" className="text-sm font-medium text-cream">
+              ← Home
+            </Link>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-cream/80">Ask Sara</p>
+            <button
+              type="button"
+              className="text-xs font-medium text-cream"
+              onClick={() => {
+                if (live && !muted) {
+                  haltPlayback()
+                  return
+                }
+                const next = !muted
+                setMuted(next)
+                setSaraMuted(next)
+                if (next) haltPlayback()
+              }}
+            >
+              {muted ? 'Unmute' : live ? 'Stop' : 'Mute'}
+            </button>
+          </header>
+          <p className="ask-sara-greeting px-5 text-center font-serif text-xl text-cream">{greeting}</p>
+          <p className="px-5 pt-0.5 text-center text-sm text-cream/90">
+            {live ? 'Sara is talking.' : 'I’m listening — ask the real question.'}
           </p>
-        ) : null}
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-              m.from === 'you'
-                ? 'ml-auto bg-sage text-white'
-                : 'bg-cream-card text-ink shadow-card'
-            }`}
-          >
-            {m.text}
-            {m.from === 'sara' &&
-            m.id === lastSara?.id &&
-            isVoiceReady() &&
-            !isSaraUnreachable(m.text) ? (
-              <button
-                type="button"
-                className="mt-2 block text-xs font-medium text-sage-deep"
-                onClick={() => {
-                  if (live) {
-                    haltPlayback()
-                    return
-                  }
-                  unlockSaraSpeech()
-                  unlockSaraStream()
-                  void connectSaraStream()
-                  speakReply(m.text)
-                }}
-              >
-                {live ? 'Stop' : 'Play'}
-              </button>
-            ) : null}
-          </div>
-        ))}
-        {busy ? (
-          <div className="max-w-[85%] rounded-2xl bg-cream-card px-4 py-3 text-sm text-ink-mute shadow-card">
-            Listening…
-          </div>
-        ) : null}
-        <div ref={bottom} />
-      </div>
+        </div>
 
-      <form onSubmit={send} className="ask-sara-compose shrink-0 space-y-3 bg-cream pb-4 pt-2 safe-bottom">
-        <Field label="Your note">
-          <textarea
-            className={`${inputClass} min-h-[4.5rem] resize-none`}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="What’s going on?"
-            disabled={busy}
-          />
-        </Field>
-        <button
-          type="submit"
-          className="w-full rounded-full bg-sage py-3 font-semibold text-white disabled:opacity-40"
-          disabled={!draft.trim() || busy}
+        <div className="ask-sara-mid flex min-h-0 flex-1 flex-col justify-end px-5 pb-2 pt-3">
+          {voiceNote ? (
+            <p className="ask-sara-note mb-2 text-center text-xs leading-snug">{voiceNote}</p>
+          ) : live && streamCapped ? (
+            <p className="ask-sara-note mb-2 text-center text-xs leading-snug">{SARA_STREAM_CAPPED_NOTE}</p>
+          ) : null}
+
+          <div className="ask-sara-panel min-h-0 space-y-3 overflow-y-auto overscroll-contain">
+            {messages.length === 0 ? (
+              <p className="text-sm leading-relaxed text-ink">
+                Try “how much water?”, “why did I leak when I sneezed?”, or “what are symptoms of a
+                UTI?”
+              </p>
+            ) : null}
+            {messages.map((m) => (
+              <div
+                key={m.id}
+                className={`max-w-[90%] text-sm leading-relaxed ${
+                  m.from === 'you' ? 'ml-auto text-right font-medium text-sage-deep' : 'text-ink'
+                }`}
+              >
+                {m.text}
+                {m.from === 'sara' &&
+                m.id === lastSara?.id &&
+                isVoiceReady() &&
+                !isSaraUnreachable(m.text) ? (
+                  <button
+                    type="button"
+                    className="mt-2 block text-xs font-medium text-sage-deep"
+                    onClick={() => {
+                      if (live) {
+                        haltPlayback()
+                        return
+                      }
+                      unlockSaraSpeech()
+                      unlockSaraStream()
+                      void connectSaraStream()
+                      speakReply(m.text)
+                    }}
+                  >
+                    {live ? 'Stop' : 'Play'}
+                  </button>
+                ) : null}
+              </div>
+            ))}
+            {busy ? <div className="text-sm text-ink-mute">Listening…</div> : null}
+            <div ref={bottom} />
+          </div>
+        </div>
+
+        <form
+          onSubmit={send}
+          className="ask-sara-compose shrink-0 space-y-2.5 px-5 pt-2 safe-bottom"
         >
-          {busy ? 'Sara is thinking…' : 'Send to Sara'}
-        </button>
-      </form>
+          <label className="block">
+            <span className="sr-only">Your note</span>
+            <textarea
+              className="ask-sara-input min-h-[4.5rem] w-full resize-none rounded-2xl px-3.5 py-3 text-ink outline-none placeholder:text-ink-faint disabled:opacity-70"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="What’s going on?"
+              disabled={busy}
+            />
+          </label>
+          <button
+            type="submit"
+            className="w-full rounded-full bg-sage py-3 font-semibold text-white shadow-card disabled:opacity-40"
+            disabled={!draft.trim() || busy}
+          >
+            {busy ? 'Sara is thinking…' : 'Send to Sara'}
+          </button>
+        </form>
+      </div>
     </main>
   )
 }

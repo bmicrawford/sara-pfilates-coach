@@ -25,8 +25,10 @@ export default function App() {
   return (
     <div className="flex min-h-dvh justify-center bg-[#E8E3DA]">
       <div
-        className={`min-h-dvh w-full max-w-[430px] bg-cream shadow-[0_0_60px_rgba(61,58,54,0.08)] ${
-          location.pathname === '/ask' ? 'h-dvh overflow-hidden' : ''
+        className={`min-h-dvh w-full max-w-[430px] shadow-[0_0_60px_rgba(61,58,54,0.08)] ${
+          location.pathname === '/ask'
+            ? 'h-dvh overflow-hidden bg-sage-mist'
+            : 'bg-cream'
         }`}
       >
         <Routes location={location}>

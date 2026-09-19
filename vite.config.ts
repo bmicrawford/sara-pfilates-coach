@@ -73,7 +73,7 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
-          cacheId: 'sara-pwa-20260919-src-attach',
+          cacheId: 'sara-pwa-20260919-fullscreen-avatar',
           skipWaiting: true,
           clientsClaim: true,
           cleanupOutdatedCaches: true,
