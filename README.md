@@ -72,7 +72,7 @@ Ask Sara pins Sara’s portrait while the chat scrolls. Idle is the locked still
 
 **Voice** is immediate xAI `ara` (`POST /speak`). Never wait on a D-ID mp4.
 
-**Motion** is D-ID **Agents Streams** (WebRTC) via `@d-id/client-sdk`. The Worker mints a short-lived `client_key` (`POST /stream`) for the allowed Surge origins. The browser calls `agentManager.speak({ type: 'text', input })` with the Grok reply. The stream video is muted so ara is the only voice. Do not call `agentManager.chat()` — Grok stays the brain (`POST /ask`).
+**Motion** is D-ID **Agents Streams** (WebRTC) via `@d-id/client-sdk`. The Worker mints a short-lived `client_key` (`POST /stream`) for the allowed Surge origins. Ask Sara **pre-warms** `connect()` when the page mounts and keeps that session even before the `<video>` has frames, then calls `agentManager.speak({ type: 'text', input })` as soon as the Grok reply exists (parallel with `POST /speak` ara — do not wait for ara or D-ID START). Leaving the page (and `pagehide`) disconnects so idle slots are not held. The stream video is muted so ara is the only voice. Do not call `agentManager.chat()` — Grok stays the brain (`POST /ask`).
 
 Head motion needs **D-ID credits and a free stream slot**. Live `POST /agents/{id}/streams` `403 Forbidden` / `Max user sessions reached` is **not** retried (retries hold sessions and make the cap worse). Ara and the still portrait still work. Humans top up credits in the D-ID dashboard; do not recreate the agent or rotate Worker secrets for this error.
 

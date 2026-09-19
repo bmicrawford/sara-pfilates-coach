@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { isSaraVideoLive } from '../lib/saraStream'
 
 const STILL = '/avatar/sara-default.png'
@@ -21,10 +21,14 @@ export function TalkingPortrait({
   const videoRef = useRef<HTMLVideoElement>(null)
   const showStream = Boolean(streaming)
 
-  useEffect(() => {
-    onVideoEl?.(videoRef.current)
-    return () => onVideoEl?.(null)
-  }, [onVideoEl])
+  // Bind during commit so mount pre-warm can attach srcObject before effects run.
+  const setVideoNode = useCallback(
+    (el: HTMLVideoElement | null) => {
+      videoRef.current = el
+      onVideoEl?.(el)
+    },
+    [onVideoEl],
+  )
 
   useEffect(() => {
     const video = videoRef.current
@@ -68,7 +72,7 @@ export function TalkingPortrait({
         }`}
       >
         <video
-          ref={videoRef}
+          ref={setVideoNode}
           className="sara-stream-video absolute inset-0 z-0 h-full w-full object-cover object-[center_18%]"
           poster={STILL}
           playsInline

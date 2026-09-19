@@ -1,6 +1,11 @@
 /** D-ID Agents SDK (WebRTC). Credentials come from POST /stream — never the server API key.
  * Live POST /agents/{id}/streams 403 `{ kind: "Forbidden", description: "Max user sessions reached" }`
  * means the trial/session cap (or zero credits) — do not retry connect/speak; keep still + ara.
+ *
+ * Pre-warm on Ask Sara mount: connect() and keep the session even before the <video>
+ * has frames (streamWarmup is off so iOS does not gate speak() on a warmup decode).
+ * speak() fires as soon as Grok text exists — do not wait for ara or D-ID START.
+ * Release on leave / pagehide so idle slots are not held.
  */
 
 function apiBase(): string {
@@ -39,11 +44,14 @@ const SPEAK_MODE = 'DirectPlayback'
 const DEAD_MODES = new Set(['TextOnly', 'Playground', 'Maintenance', 'Off'])
 
 const PLAY_RETRY_MS = [0, 50, 200, 500, 1200, 3000]
+/** Delay so React StrictMode remount reuses the in-flight session instead of burning a slot. */
+const RELEASE_MS = 400
 
 let videoEl: HTMLVideoElement | null = null
 let srcObject: MediaStream | null = null
 let manager: AgentManagerLike | null = null
 let connectPromise: Promise<boolean> | null = null
+let sdkPromise: Promise<((id: string, opts: unknown) => Promise<AgentManagerLike>) | null> | null = null
 let speakGen = 0
 let sessionGen = 0
 let streamReady = false
@@ -51,8 +59,16 @@ let deadMode = false
 /** D-ID 403 Forbidden / Max user sessions — do not retry; retries hold sessions. */
 let sessionCapped = false
 let foregroundBound = false
+let lifecycleBound = false
+/** Ask Sara wants a live session (mount / pageshow). pagehide drops the peer but keeps this. */
+let streamWanted = false
+let releaseTimer: number | null = null
 const playTimers = new Set<number>()
 const listeners: StreamCallbacks = {}
+
+function hasLiveManager(): boolean {
+  return Boolean(manager && !deadMode && !sessionCapped)
+}
 
 /**
  * The PNG still stays up unless the <video> itself has a srcObject AND
@@ -192,6 +208,56 @@ function dropManager() {
   safeDisconnect(current)
 }
 
+function cancelRelease() {
+  if (releaseTimer == null) return
+  window.clearTimeout(releaseTimer)
+  releaseTimer = null
+}
+
+/** Tear down the WebRTC peer now. Does not clear streamWanted (pageshow can restore). */
+function dropLiveSession() {
+  cancelRelease()
+  stopSaraStream()
+  dropManager()
+  attachSrcObject(null)
+}
+
+function bindSessionLifecycle() {
+  if (lifecycleBound || typeof window === 'undefined') return
+  lifecycleBound = true
+  window.addEventListener('pagehide', () => {
+    logStream('pagehide — releasing D-ID session')
+    dropLiveSession()
+  })
+  window.addEventListener('pageshow', () => {
+    if (streamWanted && !sessionCapped) void connectSaraStream()
+  })
+}
+
+/** Connect on Ask Sara mount / idle so speak() does not pay WebRTC setup after Grok replies. */
+export function warmSaraStream(): void {
+  streamWanted = true
+  cancelRelease()
+  bindSessionLifecycle()
+  void loadSdk()
+  void connectSaraStream()
+}
+
+/** Debounced disconnect for React unmount. StrictMode remount cancels this and reuses the session. */
+export function releaseSaraStream(): void {
+  streamWanted = false
+  bindSessionLifecycle()
+  cancelRelease()
+  if (typeof window === 'undefined') {
+    dropLiveSession()
+    return
+  }
+  releaseTimer = window.setTimeout(() => {
+    releaseTimer = null
+    if (!streamWanted) dropLiveSession()
+  }, RELEASE_MS)
+}
+
 export function bindSaraStreamVideo(el: HTMLVideoElement | null) {
   videoEl = el
   bindForegroundReplay()
@@ -248,11 +314,18 @@ export async function fetchSaraStreamCreds(): Promise<SaraStreamCreds | null> {
 }
 
 async function loadSdk() {
-  const mod = (await import('@d-id/client-sdk')) as {
-    createAgentManager?: (id: string, opts: unknown) => Promise<AgentManagerLike>
-    default?: { createAgentManager?: (id: string, opts: unknown) => Promise<AgentManagerLike> }
+  if (!sdkPromise) {
+    sdkPromise = import('@d-id/client-sdk')
+      .then((mod) => {
+        const sdk = mod as {
+          createAgentManager?: (id: string, opts: unknown) => Promise<AgentManagerLike>
+          default?: { createAgentManager?: (id: string, opts: unknown) => Promise<AgentManagerLike> }
+        }
+        return sdk.createAgentManager || sdk.default?.createAgentManager || null
+      })
+      .catch(() => null)
   }
-  return mod.createAgentManager || mod.default?.createAgentManager || null
+  return sdkPromise
 }
 
 function markDeadFromError(error: unknown) {
@@ -308,12 +381,15 @@ function speakLooksDead(result: unknown): boolean {
 }
 
 export async function connectSaraStream(): Promise<boolean> {
+  bindSessionLifecycle()
   if (sessionCapped) {
     logStream('D-ID session cap — not retrying; still + ara')
     listeners.onStatus?.('session_capped')
     return false
   }
-  if (manager && !deadMode && elementHoldsStream()) return true
+  // Reuse a pre-warmed manager even before the <video> has a srcObject.
+  // streamWarmup is off; frames arrive on speak(). Dropping here re-pays connect (~2s).
+  if (hasLiveManager()) return true
   if (connectPromise) return connectPromise
   if (manager) dropManager()
   const session = ++sessionGen
@@ -326,12 +402,11 @@ export async function connectSaraStream(): Promise<boolean> {
         return false
       }
       deadMode = false
-      const creds = await fetchSaraStreamCreds()
+      const [creds, create] = await Promise.all([fetchSaraStreamCreds(), loadSdk()])
       if (!creds || session !== sessionGen) {
         logStream('no stream credentials — keeping still')
         return false
       }
-      const create = await loadSdk()
       if (!create || session !== sessionGen) return false
       created = await create(creds.agentId, {
         auth: { type: 'key', clientKey: creds.clientKey },
@@ -346,6 +421,7 @@ export async function connectSaraStream(): Promise<boolean> {
         callbacks: {
           onSrcObjectReady(value: MediaStream) {
             attachSrcObject(value)
+            if (elementHoldsStream() && !sessionCapped) listeners.onStatus?.('live')
             return value
           },
           onVideoStateChange(state: string) {
@@ -358,7 +434,11 @@ export async function connectSaraStream(): Promise<boolean> {
             if (s === 'connected' && srcObject) {
               attachSrcObject(srcObject)
             }
-            if ((s === 'fail' || s === 'disconnected' || s === 'closed') && !elementHoldsStream()) {
+            if (s === 'fail' || s === 'closed') {
+              logStream('peer closed — will reconnect on next speak', s)
+              deadMode = true
+              setReady(false)
+            } else if (s === 'disconnected' && !elementHoldsStream()) {
               logStream('peer has no video srcObject — keeping still', s)
               setReady(false)
             }
@@ -388,12 +468,12 @@ export async function connectSaraStream(): Promise<boolean> {
       await created.connect()
       if (session !== sessionGen || deadMode || sessionCapped) return false
       if (srcObject) attachSrcObject(srcObject)
+      // Keep the session without frames. Warmup is off; speak() attaches the talking track.
       if (!elementHoldsStream()) {
-        logStream('connect finished with no video srcObject — keeping still')
-        listeners.onStatus?.('unavailable')
-        return false
+        logStream('pre-warm connected — no video frames yet; session kept for speak()')
+      } else {
+        listeners.onStatus?.('live')
       }
-      listeners.onStatus?.('live')
       keepSession = true
       return true
     } catch (error) {
@@ -440,6 +520,7 @@ export async function speakSaraStream(text: string): Promise<void> {
   const gen = ++speakGen
 
   const attempt = async () => {
+    // Join the mount pre-warm. Do not wait for ara, video START, or decoded frames.
     const ok = await connectSaraStream()
     if (!ok || gen !== speakGen || !manager || deadMode || sessionCapped) return
     unlockSaraStream()
@@ -497,7 +578,6 @@ export function stopSaraStream(): void {
 }
 
 export function disconnectSaraStream(): void {
-  stopSaraStream()
-  dropManager()
-  attachSrcObject(null)
+  streamWanted = false
+  dropLiveSession()
 }

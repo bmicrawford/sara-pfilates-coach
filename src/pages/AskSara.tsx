@@ -7,13 +7,14 @@ import { readChat, writeChat } from '../lib/mockServer'
 import {
   bindSaraStreamVideo,
   connectSaraStream,
-  disconnectSaraStream,
+  releaseSaraStream,
   SARA_STREAM_CAPPED_NOTE,
   setSaraStreamCallbacks,
   shouldShowSaraStream,
   speakSaraStream,
   stopSaraStream,
   unlockSaraStream,
+  warmSaraStream,
 } from '../lib/saraStream'
 import {
   isSaraMuted,
@@ -62,10 +63,10 @@ export function AskSara() {
         if (status === 'live') setStreamCapped(false)
       },
     })
-    void connectSaraStream()
+    warmSaraStream()
     return () => {
       setSaraStreamCallbacks({})
-      disconnectSaraStream()
+      releaseSaraStream()
       stopSaraSpeech()
     }
   }, [])
@@ -82,6 +83,7 @@ export function AskSara() {
 
   const speakReply = (text: string) => {
     unlockSaraStream()
+    // D-ID speak as soon as Grok text exists — parallel with ara, not after it or START.
     void speakSaraStream(text)
     if (mutedRef.current || !isVoiceReady()) return
     setVoiceNote(null)
