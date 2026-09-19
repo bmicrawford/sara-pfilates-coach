@@ -11,6 +11,8 @@ import {
   releaseSaraStream,
   SARA_STREAM_CAPPED_NOTE,
   setSaraStreamCallbacks,
+  setSaraStreamUserMuted,
+  settleSaraStreamVoice,
   shouldShowSaraStream,
   speakSaraStream,
   stopSaraStream,
@@ -41,6 +43,8 @@ export function AskSara() {
   const bottom = useRef<HTMLDivElement>(null)
   const mutedRef = useRef(muted)
   mutedRef.current = muted
+  /** True while D-ID stream audio is the heard voice — do not let a late STOP cancel ara. */
+  const streamVoiceRef = useRef(false)
 
   const onVideoEl = useCallback((el: HTMLVideoElement | null) => {
     bindSaraStreamVideo(el)
@@ -55,8 +59,18 @@ export function AskSara() {
   }, [messages, busy])
 
   useEffect(() => {
+    setSaraStreamUserMuted(muted)
+  }, [muted])
+
+  useEffect(() => {
     setSaraStreamCallbacks({
-      onTalking: setStreamTalking,
+      onTalking: (talking) => {
+        setStreamTalking(talking)
+        if (!talking && streamVoiceRef.current) {
+          streamVoiceRef.current = false
+          setSpeaking(false)
+        }
+      },
       onReady: setStreamReady,
       onStatus: (status) => {
         if (status === 'session_capped') setStreamCapped(true)
@@ -75,6 +89,7 @@ export function AskSara() {
   const live = speaking || streamTalking
 
   const haltPlayback = () => {
+    streamVoiceRef.current = false
     stopSaraSpeech()
     stopSaraStream()
     setSpeaking(false)
@@ -83,15 +98,29 @@ export function AskSara() {
 
   const speakReply = (text: string) => {
     unlockSaraStream()
-    // D-ID speak as soon as Grok text exists — parallel with ara, not after it or START.
-    void speakSaraStream(text)
-    if (mutedRef.current || !isVoiceReady()) return
-    setVoiceNote(null)
-    void speakSara(text, {
-      onStart: () => setSpeaking(true),
-      onEnd: () => setSpeaking(false),
-      onError: (message) => setVoiceNote(message),
-    })
+    // D-ID speak as soon as Grok text exists. Heard voice is stream audio when
+    // START (or a real speak result) arrives in budget; ara only on failure.
+    if (mutedRef.current) {
+      void speakSaraStream(text)
+      return
+    }
+    void (async () => {
+      const outcome = await speakSaraStream(text)
+      if (outcome === 'heard') {
+        streamVoiceRef.current = true
+        setVoiceNote(null)
+        setSpeaking(true)
+        return
+      }
+      streamVoiceRef.current = false
+      if (mutedRef.current || !isVoiceReady()) return
+      setVoiceNote(null)
+      void speakSara(text, {
+        onStart: () => setSpeaking(true),
+        onEnd: () => setSpeaking(false),
+        onError: (message) => setVoiceNote(message),
+      })
+    })()
   }
 
   const send = async (e: FormEvent) => {
@@ -116,6 +145,7 @@ export function AskSara() {
     })
     setBusy(false)
     if (isSaraUnreachable(reply)) {
+      settleSaraStreamVoice('idle')
       setVoiceNote(
         "I couldn't reach my voice either. Same connection — try Send again in a moment.",
       )
@@ -198,6 +228,8 @@ export function AskSara() {
                     return
                   }
                   unlockSaraSpeech()
+                  unlockSaraStream()
+                  void connectSaraStream()
                   speakReply(m.text)
                 }}
               >

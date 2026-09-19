@@ -70,9 +70,9 @@ The durable public origin is the **Cloudflare Worker**, not an ephemeral tryclou
 
 Ask Sara pins Sara’s portrait while the chat scrolls. Idle is the locked still (`public/avatar/sara-default.png`) — no SVG mouth overlay.
 
-**Voice** is immediate xAI `ara` (`POST /speak`). Never wait on a D-ID mp4.
+**Heard voice** is D-ID Agents stream audio when `speak()` START (or a real speak result) arrives in a short budget. Unmute the WebRTC element then — do **not** also play xAI `ara` (no double voice). If connect/speak fails, hits the Lite session cap, or is slow past that budget, fall back to `POST /speak` ara + still (or muted video if frames exist without audio). Never wait on a D-ID mp4.
 
-**Motion** is D-ID **Agents Streams** (WebRTC) via `@d-id/client-sdk`. The Worker mints a short-lived `client_key` (`POST /stream`) for the allowed Surge origins. Ask Sara does **not** open WebRTC on mount (Lite’s concurrent stream cap is small; idle phone + laptop + Studio tabs exhaust it). Mint + `connect()` start on **Send / Play**, then `agentManager.speak({ type: 'text', input })` as soon as the Grok reply exists (parallel with `POST /speak` ara — do not wait for ara or D-ID START). Leaving the page (and `pagehide`) disconnects so idle slots are not held. The stream video is muted so ara is the only voice. Do not call `agentManager.chat()` — Grok stays the brain (`POST /ask`).
+**Motion** is D-ID **Agents Streams** (WebRTC) via `@d-id/client-sdk`. The Worker mints a short-lived `client_key` (`POST /stream`) for the allowed Surge origins. Ask Sara does **not** open WebRTC on mount (Lite’s concurrent stream cap is small; idle phone + laptop + Studio tabs exhaust it). Mint + `connect()` start on **Send / Play**, then `agentManager.speak({ type: 'text', input })` as soon as the Grok reply exists (do not wait for ara). Leaving the page (and `pagehide`) disconnects so idle slots are not held. Do not call `agentManager.chat()` — Grok stays the brain (`POST /ask`).
 
 Head motion needs **D-ID credits and a free stream slot**. Live `POST /agents/{id}/streams` `403 Forbidden` / `Max user sessions reached` is **not** retried (retries hold sessions and make the cap worse). Ara and the still portrait still work. Humans top up credits in the D-ID dashboard; do not recreate the agent or rotate Worker secrets for this error.
 
@@ -132,7 +132,7 @@ npx surge ./dist https://sara-pfilates.surge.sh
 - Stub move-to-new-phone at `/move`
 - Home with Sara’s portrait and quick logs: drink, void/leak, pad change (time + reason only), exercise, Ask Sara
 - Bottom sheets for those forms
-- Ask Sara via Grok (`POST /ask` + short chat history), spoken immediately with xAI neural TTS (`POST /speak`, voice `ara`). Realtime head motion is D-ID Agents Streams (WebRTC), not an offline mp4. Mute / Stop / Play stay in the UI. Portrait stays pinned while the thread scrolls.
+- Ask Sara via Grok (`POST /ask` + short chat history). Heard voice is D-ID Agents stream audio when speak is ready; xAI neural TTS (`POST /speak`, voice `ara`) is the fallback. Realtime head motion is D-ID Agents Streams (WebRTC), not an offline mp4. Mute / Stop / Play stay in the UI. Portrait stays pinned while the thread scrolls.
 
 ## TODO (later)
 

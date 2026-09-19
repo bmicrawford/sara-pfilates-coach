@@ -73,7 +73,7 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
-          cacheId: 'sara-pwa-20260919-send-stream',
+          cacheId: 'sara-pwa-20260919-stream-voice',
           skipWaiting: true,
           clientsClaim: true,
           cleanupOutdatedCaches: true,
