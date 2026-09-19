@@ -9,11 +9,15 @@
  * speak() fires as soon as Grok text exists — do not wait for ara, and do
  * not start ara while D-ID is still connecting or decoding. Heard voice is
  * D-ID stream audio only when speak has started AND the <video> has visible
- * playing frames; unmute / enable audio tracks in that same moment so audio
- * cannot lead the mouth. If connect/speak fails, is capped, or a longer
- * budget elapses with no playable AV, fall back to ara + still (or muted
- * video if frames exist without audio). streamWarmup stays off so iOS does
- * not gate speak() on a warmup decode.
+ * playing frames; keep the element muted (so late play() can decode) until
+ * that moment, then unmute / enable audio tracks together so audio cannot
+ * lead the mouth. If connect/speak fails, is capped, srcObject never
+ * attaches, or a short budget elapses with no playable AV, fall back to
+ * ara + still (or muted video if frames exist without audio). Do not skip
+ * ara after a false "heard". streamWarmup stays off so iOS does not gate
+ * speak() on a warmup decode. D-ID SDP finalize 400 is SessionError
+ * (missing session_id) — keep the 201 stream and re-attach srcObject after
+ * the SDK retry; do not treat that flap as a dead session.
  */
 
 function apiBase(): string {
@@ -42,13 +46,18 @@ type StreamCallbacks = {
   onTalking?: (talking: boolean) => void
   onReady?: (ready: boolean) => void
   onStatus?: (status: SaraStreamStatus) => void
+  /** Fired when a previously-heard D-ID path dies and ara must take over. */
+  onVoiceFallback?: () => void
 }
 
 /** Quiet UI line when D-ID is at the session/credit cap. Ara still plays. */
 export const SARA_STREAM_CAPPED_NOTE = "I'll keep talking. The portrait stays still for now."
 
-/** After speak() is sent, wait this long for playable AV before ara. */
-export const STREAM_AV_READY_MS = 8000
+/** After speak() is sent, wait this long for srcObject before ara. */
+export const STREAM_SRC_WAIT_MS = 3500
+
+/** After speak(), if srcObject exists, wait this long for playable frames. */
+export const STREAM_AV_READY_MS = 4500
 
 /** Heard D-ID audio only when the stream is the voice path AND frames are on screen. */
 export function streamVideoShouldBeMuted(opts: {
@@ -60,13 +69,13 @@ export function streamVideoShouldBeMuted(opts: {
   return !(opts.voicePath === 'did' && opts.videoLive)
 }
 
-/** iOS: keep the element unlocked after Send/Play so a later unmute can play. */
+/** Unlock (muted=false) only when D-ID is the heard path — pending stays muted so late play() can decode. */
 export function streamVideoShouldUnlockElement(opts: {
   voicePath: SaraStreamVoicePath
   userMuted: boolean
 }): boolean {
   if (opts.userMuted) return false
-  return opts.voicePath === 'pending' || opts.voicePath === 'did'
+  return opts.voicePath === 'did'
 }
 
 /** Speak-only. Skips D-ID chat/LLM so Grok stays the brain. */
@@ -108,6 +117,10 @@ const avReadyWaiters: Array<(ready: boolean) => void> = []
 const talkingEndTimers = new Set<number>()
 const AV_CUE_EVENTS = ['loadedmetadata', 'loadeddata', 'playing', 'resize'] as const
 let avCueVideo: HTMLVideoElement | null = null
+/** session_id from stream/created — D-ID SDP finalize 400s without it. */
+let streamSessionId: string | null = null
+let didFetchPatched = false
+const lateTrackStreams = new WeakSet<MediaStream>()
 
 export function setSaraStreamUserMuted(muted: boolean): void {
   userMuted = muted
@@ -175,8 +188,7 @@ function gateAudioTracks(enabled: boolean) {
 function applyHeardMute(video: HTMLVideoElement) {
   const videoLive = isSaraVideoLive(video)
   const audible = !streamVideoShouldBeMuted({ voicePath, userMuted, videoLive })
-  const unlocked = streamVideoShouldUnlockElement({ voicePath, userMuted })
-  // Disable tracks first so a pending unlock cannot leak audio before frames.
+  // Disable tracks first so a pending path cannot leak audio before frames.
   gateAudioTracks(audible)
   if (audible) {
     video.muted = false
@@ -185,17 +197,96 @@ function applyHeardMute(video: HTMLVideoElement) {
     video.volume = 1
     return
   }
+  // Keep muted until did+frames. Unmuted play() after async connect is blocked
+  // by autoplay rules, so the <video> never decodes and srcObject looks dead.
   video.volume = 0
-  if (unlocked) {
-    // iOS often ignores volume; unlocked + disabled tracks stay silent until promote.
-    video.muted = false
-    video.defaultMuted = false
-    video.removeAttribute('muted')
-    return
-  }
   video.muted = true
   video.defaultMuted = true
   video.setAttribute('muted', '')
+}
+
+function rememberStreamSession(info: { stream_id?: string; session_id?: string }) {
+  const sid = String(info.session_id || '').trim()
+  streamSessionId = sid || null
+  logStream(
+    'D-ID stream created',
+    sid ? 'session_id present' : 'session_id missing — SDP finalize may 400',
+  )
+}
+
+function isDidStreamWrite(url: string, method: string): boolean {
+  if (!/https?:\/\/api\.d-id\.com\/agents\/[^/]+\/streams\//i.test(url)) return false
+  return method === 'POST' || method === 'PUT'
+}
+
+/** Insert session_id so D-ID SDP finalize does not 400 SessionError. */
+export function ensureDidStreamSessionBody(
+  raw: string,
+  sessionId: string | null,
+): { body: string; patched: boolean } {
+  try {
+    const json = JSON.parse(raw) as Record<string, unknown>
+    if (!json || typeof json !== 'object') return { body: raw, patched: false }
+    if (typeof json.session_id === 'string' && json.session_id) return { body: raw, patched: false }
+    if (typeof json.sessionId === 'string' && json.sessionId) {
+      json.session_id = json.sessionId
+    } else if (sessionId) {
+      json.session_id = sessionId
+    } else {
+      return { body: raw, patched: false }
+    }
+    return { body: JSON.stringify(json), patched: true }
+  } catch {
+    return { body: raw, patched: false }
+  }
+}
+
+function withDidSessionId(raw: string): { body: string; patched: boolean } {
+  return ensureDidStreamSessionBody(raw, streamSessionId)
+}
+
+/** First SDP finalize 400 is SessionError (no session_id). Insert it from stream/created. */
+function patchDidSessionFetch() {
+  if (didFetchPatched || typeof window === 'undefined') return
+  didFetchPatched = true
+  const nativeFetch = window.fetch.bind(window)
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    if (!streamSessionId) return nativeFetch(input, init)
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    const method = String(
+      init?.method || (typeof Request !== 'undefined' && input instanceof Request ? input.method : 'GET'),
+    ).toUpperCase()
+    if (!isDidStreamWrite(url, method)) return nativeFetch(input, init)
+    if (typeof init?.body !== 'string') return nativeFetch(input, init)
+    const next = withDidSessionId(init.body)
+    if (!next.patched) return nativeFetch(input, init)
+    logStream('SDP/ICE request missing session_id — inserting from stream/created')
+    return nativeFetch(input, { ...init, body: next.body })
+  }
+}
+
+function isSessionIdError(error: unknown): boolean {
+  const blob = `${describeError(error)} ${errorBlob(error)}`
+  return /SessionError|missing or invalid session_id/i.test(blob)
+}
+
+function bindLateTracks(stream: MediaStream) {
+  if (lateTrackStreams.has(stream)) return
+  lateTrackStreams.add(stream)
+  const refresh = () => {
+    if (srcObject !== stream || !videoEl) return
+    // WebKit often ignores a video track added after srcObject is set (warmup off).
+    if (videoEl.src) videoEl.src = ''
+    if (videoEl.srcObject === stream) videoEl.srcObject = null
+    videoEl.srcObject = stream
+    applyHeardMute(videoEl)
+    schedulePlay(videoEl)
+    maybePromoteHeard()
+  }
+  stream.addEventListener('addtrack', refresh)
+  stream.getVideoTracks().forEach((track) => {
+    track.addEventListener('unmute', refresh)
+  })
 }
 
 function setVoicePath(next: SaraStreamVoicePath) {
@@ -227,17 +318,37 @@ function maybePromoteHeard() {
   resolveAvReady(true)
 }
 
-function waitForAvReady(ms: number): Promise<boolean> {
-  if (voicePath === 'did' && speakingStarted && streamHasLiveFrames()) return Promise.resolve(true)
+function avBudgetMs(): number {
+  return elementHoldsStream() ? STREAM_AV_READY_MS : STREAM_SRC_WAIT_MS
+}
+
+function framesArePlayable(): boolean {
+  return speakingStarted && streamHasLiveFrames() && elementHoldsStream()
+}
+
+function waitForAvReady(): Promise<boolean> {
+  if (voicePath === 'did' && framesArePlayable()) return Promise.resolve(true)
   return new Promise((resolve) => {
+    const started = Date.now()
+    let settled = false
     const finish = (ready: boolean) => {
-      window.clearTimeout(timer)
+      if (settled) return
+      settled = true
+      window.clearInterval(poll)
+      window.clearTimeout(cap)
       const idx = avReadyWaiters.indexOf(onReady)
       if (idx >= 0) avReadyWaiters.splice(idx, 1)
       resolve(ready)
     }
     const onReady = (ready: boolean) => finish(ready)
-    const timer = window.setTimeout(() => finish(false), ms)
+    const poll = window.setInterval(() => {
+      if (voicePath === 'did' && framesArePlayable()) {
+        finish(true)
+        return
+      }
+      if (Date.now() - started >= avBudgetMs()) finish(false)
+    }, 120)
+    const cap = window.setTimeout(() => finish(false), STREAM_AV_READY_MS)
     avReadyWaiters.push(onReady)
   })
 }
@@ -330,7 +441,8 @@ function attachSrcObject(stream: MediaStream | null) {
   if (stream) {
     if (videoEl.src) videoEl.src = ''
     if (videoEl.srcObject !== stream) videoEl.srcObject = stream
-    // Keep audio tracks off until speak + visible frames, even if the element is unlocked.
+    bindLateTracks(stream)
+    // Keep muted + tracks off until speak + visible frames so late play() can decode.
     applyHeardMute(videoEl)
     schedulePlay(videoEl)
     maybePromoteHeard()
@@ -377,6 +489,7 @@ function dropManager() {
   const current = manager
   manager = null
   connectPromise = null
+  streamSessionId = null
   // Keep sessionCapped. Clearing it would reconnect and leak more D-ID sessions.
   if (!sessionCapped) deadMode = false
   safeDisconnect(current)
@@ -441,7 +554,7 @@ export function bindSaraStreamVideo(el: HTMLVideoElement | null) {
 }
 
 /** Call from Send / Play — same user-gesture window as ara unlock.
- * Unlocks the element (iOS) but keeps D-ID audio silent until frames + speak.
+ * Starts muted play() so later srcObject can decode. Does not unmute.
  */
 export function unlockSaraStream(): void {
   if (voicePath === 'idle') setVoicePath('pending')
@@ -472,6 +585,7 @@ export function setSaraStreamCallbacks(next: StreamCallbacks) {
   listeners.onTalking = next.onTalking
   listeners.onReady = next.onReady
   listeners.onStatus = next.onStatus
+  listeners.onVoiceFallback = next.onVoiceFallback
   if (next.onReady) next.onReady(streamReady)
   if (next.onStatus && sessionCapped) next.onStatus('session_capped')
 }
@@ -571,6 +685,7 @@ export async function connectSaraStream(): Promise<boolean> {
   streamWanted = true
   cancelRelease()
   bindSessionLifecycle()
+  patchDidSessionFetch()
   if (sessionCapped) {
     logStream('D-ID session cap — not retrying; still + ara')
     listeners.onStatus?.('session_capped')
@@ -609,14 +724,31 @@ export async function connectSaraStream(): Promise<boolean> {
         },
         callbacks: {
           onSrcObjectReady(value: MediaStream) {
-            attachSrcObject(value)
-            if (elementHoldsStream() && !sessionCapped) listeners.onStatus?.('live')
+            // disconnect() also fires this, often with an empty stream, during
+            // the SDP finalize 400 → retry 200 flap. Keep a usable srcObject.
+            const tracks = typeof value?.getTracks === 'function' ? value.getTracks() : []
+            if (value && tracks.length) {
+              attachSrcObject(value)
+              if (elementHoldsStream() && !sessionCapped) listeners.onStatus?.('live')
+              return value
+            }
+            if (srcObject) {
+              logStream('onSrcObjectReady empty — keeping existing srcObject')
+              attachSrcObject(srcObject)
+              return srcObject
+            }
+            if (value) attachSrcObject(value)
             return value
+          },
+          onStreamCreated(info: { stream_id?: string; session_id?: string }) {
+            rememberStreamSession(info)
           },
           onVideoStateChange(state: string) {
             const talking = String(state).toUpperCase() !== 'STOP'
             if (talking) {
               speakingStarted = true
+              // Official D-ID demo re-assigns srcObject on START (warmup-off tracks arrive here).
+              if (srcObject) attachSrcObject(srcObject)
               // Do not unmute on START alone — wait for decoded frames.
               maybePromoteHeard()
             }
@@ -636,16 +768,23 @@ export async function connectSaraStream(): Promise<boolean> {
           },
           onConnectionStateChange(state: string) {
             const s = String(state).toLowerCase()
-            if (s === 'connected' && srcObject) {
-              attachSrcObject(srcObject)
+            if (s === 'connected') {
+              if (srcObject) attachSrcObject(srcObject)
+              else logStream('peer connected — waiting for srcObject')
             }
             if (s === 'fail' || s === 'closed') {
               logStream('peer closed — will reconnect on next speak', s)
               deadMode = true
               setReady(false)
+              resolveAvReady(false)
+              if (voicePath === 'did') markVoiceFallback('peer closed without playable video — falling back to ara')
             } else if (s === 'disconnected' && !elementHoldsStream()) {
               logStream('peer has no video srcObject — keeping still', s)
               setReady(false)
+              // Intermediate 400 flap: do not resolveAvReady(false) — the 200 retry may attach.
+              if (voicePath === 'did') {
+                markVoiceFallback('peer has no video srcObject — falling back to ara')
+              }
             }
           },
           onModeChange(mode: string) {
@@ -654,6 +793,10 @@ export async function connectSaraStream(): Promise<boolean> {
           onError(error: Error) {
             if (isSaraSessionCapError(error)) {
               markSessionCapped(error)
+              return
+            }
+            if (isSessionIdError(error)) {
+              logStream('D-ID session_id finalize error — waiting for SDK retry', describeError(error))
               return
             }
             if (isTransientStreamError(error)) {
@@ -719,16 +862,18 @@ function markHeard(result: unknown, gen: number): SaraStreamSpeakResult {
   if (gen !== speakGen || fallbackLocked) return 'fallback'
   speakingStarted = true
   maybePromoteHeard()
-  if (voicePath !== 'did' || !streamHasLiveFrames()) return 'fallback'
+  if (voicePath !== 'did' || !framesArePlayable()) return 'fallback'
   scheduleTalkingEnd(result, gen)
   logStream('D-ID stream audio is the heard voice — skipping ara')
   return 'heard'
 }
 
 function markVoiceFallback(reason: string, detail?: unknown): SaraStreamSpeakResult {
+  const wasHeard = voicePath === 'did'
   setVoicePath('ara')
   if (videoEl) applyHeardMute(videoEl)
   logStream(reason, detail)
+  if (wasHeard) listeners.onVoiceFallback?.()
   return 'fallback'
 }
 
@@ -750,7 +895,7 @@ export async function speakSaraStream(text: string): Promise<SaraStreamSpeakResu
     const ok = await connectSaraStream()
     if (!ok || gen !== speakGen || !manager || deadMode || sessionCapped) return 'fallback'
     unlockSaraStream()
-    const avReady = waitForAvReady(STREAM_AV_READY_MS)
+    const avReady = waitForAvReady()
     const speakPromise = manager.speak({ type: 'text', input: clean }).then((result) => {
       if (speakLooksDead(result)) {
         deadMode = true
@@ -759,6 +904,7 @@ export async function speakSaraStream(text: string): Promise<SaraStreamSpeakResu
       }
       if (speakHasVideo(result)) {
         speakingStarted = true
+        if (srcObject) attachSrcObject(srcObject)
         maybePromoteHeard()
       }
       return result
@@ -775,9 +921,12 @@ export async function speakSaraStream(text: string): Promise<SaraStreamSpeakResu
     if (first.kind === 'speak') {
       const ready = await avReady
       if (gen !== speakGen || fallbackLocked) return 'fallback'
-      if (ready || (voicePath === 'did' && streamHasLiveFrames())) {
+      if (ready || (voicePath === 'did' && framesArePlayable())) {
         return markHeard(first.result, gen)
       }
+    }
+    if (!elementHoldsStream()) {
+      logStream('speak finished with no video srcObject — will fall back to ara')
     }
     return 'fallback'
   }
@@ -819,7 +968,7 @@ export async function speakSaraStream(text: string): Promise<SaraStreamSpeakResu
   try {
     const outcome = await runAttempts()
     if (gen !== speakGen) return 'fallback'
-    if (outcome === 'heard' && !fallbackLocked && streamHasLiveFrames()) return 'heard'
+    if (outcome === 'heard' && !fallbackLocked && framesArePlayable()) return 'heard'
     return markVoiceFallback('stream voice unavailable — falling back to ara')
   } catch (error) {
     if (isSaraSessionCapError(error)) markSessionCapped(error)

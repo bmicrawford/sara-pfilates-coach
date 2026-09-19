@@ -75,6 +75,7 @@ export function TalkingPortrait({
           className="sara-stream-video absolute inset-0 z-0 h-full w-full object-cover object-[center_18%]"
           poster={STILL}
           playsInline
+          muted
           autoPlay
           loop={false}
           aria-hidden

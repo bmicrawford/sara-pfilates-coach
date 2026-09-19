@@ -45,6 +45,8 @@ export function AskSara() {
   mutedRef.current = muted
   /** True while D-ID stream audio is the heard voice — do not let a late STOP cancel ara. */
   const streamVoiceRef = useRef(false)
+  const fallbackTextRef = useRef<string | null>(null)
+  const araPlayingRef = useRef(false)
 
   const onVideoEl = useCallback((el: HTMLVideoElement | null) => {
     bindSaraStreamVideo(el)
@@ -62,6 +64,24 @@ export function AskSara() {
     setSaraStreamUserMuted(muted)
   }, [muted])
 
+  const playAra = useCallback((text: string) => {
+    if (mutedRef.current || !isVoiceReady() || araPlayingRef.current) return
+    araPlayingRef.current = true
+    streamVoiceRef.current = false
+    setVoiceNote(null)
+    void speakSara(text, {
+      onStart: () => setSpeaking(true),
+      onEnd: () => {
+        araPlayingRef.current = false
+        setSpeaking(false)
+      },
+      onError: (message) => {
+        araPlayingRef.current = false
+        setVoiceNote(message)
+      },
+    })
+  }, [])
+
   useEffect(() => {
     setSaraStreamCallbacks({
       onTalking: (talking) => {
@@ -76,6 +96,10 @@ export function AskSara() {
         if (status === 'session_capped') setStreamCapped(true)
         if (status === 'live') setStreamCapped(false)
       },
+      onVoiceFallback: () => {
+        const text = fallbackTextRef.current
+        if (text) playAra(text)
+      },
     })
     preloadSaraStream()
     return () => {
@@ -83,13 +107,15 @@ export function AskSara() {
       releaseSaraStream()
       stopSaraSpeech()
     }
-  }, [])
+  }, [playAra])
 
   const streaming = shouldShowSaraStream({ streamReady, speaking, streamTalking, videoLive })
   const live = speaking || streamTalking
 
   const haltPlayback = () => {
     streamVoiceRef.current = false
+    araPlayingRef.current = false
+    fallbackTextRef.current = null
     stopSaraSpeech()
     stopSaraStream()
     setSpeaking(false)
@@ -97,6 +123,8 @@ export function AskSara() {
   }
 
   const speakReply = (text: string) => {
+    fallbackTextRef.current = text
+    araPlayingRef.current = false
     unlockSaraStream()
     // D-ID speak as soon as Grok text exists. Heard voice is stream audio when
     // speak has started AND video frames are playing; ara only after failure
@@ -113,14 +141,7 @@ export function AskSara() {
         setSpeaking(true)
         return
       }
-      streamVoiceRef.current = false
-      if (mutedRef.current || !isVoiceReady()) return
-      setVoiceNote(null)
-      void speakSara(text, {
-        onStart: () => setSpeaking(true),
-        onEnd: () => setSpeaking(false),
-        onError: (message) => setVoiceNote(message),
-      })
+      playAra(text)
     })()
   }
 
