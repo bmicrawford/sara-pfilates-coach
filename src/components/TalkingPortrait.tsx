@@ -21,7 +21,7 @@ export function TalkingPortrait({
   const videoRef = useRef<HTMLVideoElement>(null)
   const showStream = Boolean(streaming)
 
-  // Bind during commit so mount pre-warm can attach srcObject before effects run.
+  // Bind during commit so Send/Play connect can attach srcObject before effects run.
   const setVideoNode = useCallback(
     (el: HTMLVideoElement | null) => {
       videoRef.current = el
