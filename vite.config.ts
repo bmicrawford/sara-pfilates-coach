@@ -73,7 +73,7 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
-          cacheId: 'sara-pwa-20260919-prewarm',
+          cacheId: 'sara-pwa-20260919-send-stream',
           skipWaiting: true,
           clientsClaim: true,
           cleanupOutdatedCaches: true,

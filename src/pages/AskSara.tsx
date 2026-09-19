@@ -7,6 +7,7 @@ import { readChat, writeChat } from '../lib/mockServer'
 import {
   bindSaraStreamVideo,
   connectSaraStream,
+  disconnectSaraStream,
   releaseSaraStream,
   SARA_STREAM_CAPPED_NOTE,
   setSaraStreamCallbacks,
@@ -14,7 +15,6 @@ import {
   speakSaraStream,
   stopSaraStream,
   unlockSaraStream,
-  warmSaraStream,
 } from '../lib/saraStream'
 import {
   isSaraMuted,
@@ -63,7 +63,6 @@ export function AskSara() {
         if (status === 'live') setStreamCapped(false)
       },
     })
-    warmSaraStream()
     return () => {
       setSaraStreamCallbacks({})
       releaseSaraStream()
@@ -119,6 +118,7 @@ export function AskSara() {
       setVoiceNote(
         "I couldn't reach my voice either. Same connection — try Send again in a moment.",
       )
+      disconnectSaraStream()
       return
     }
     speakReply(reply)
@@ -198,6 +198,8 @@ export function AskSara() {
                     return
                   }
                   unlockSaraSpeech()
+                  unlockSaraStream()
+                  void connectSaraStream()
                   speakReply(m.text)
                 }}
               >

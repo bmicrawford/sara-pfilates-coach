@@ -48,19 +48,24 @@ assert(/sessionCapped/.test(streamSrc), 'remembers the D-ID session cap so later
 assert(/not retrying \(retries hold sessions\)/.test(streamSrc), 'logs session cap without retrying')
 assert(/safeDisconnect/.test(streamSrc), 'releases the D-ID session on unmount and failed connect')
 assert(/Keep sessionCapped/.test(streamSrc), 'dropManager does not clear the session cap')
-assert(/warmSaraStream/.test(streamSrc), 'exposes warmSaraStream so Ask Sara can pre-connect on mount')
+assert(!/warmSaraStream/.test(streamSrc), 'does not expose a mount pre-warm that holds a Lite session')
 assert(/releaseSaraStream/.test(streamSrc), 'debounces disconnect so StrictMode remount does not burn a slot')
 assert(/RELEASE_MS/.test(streamSrc), 'delayed release reuses the in-flight session across remount')
+assert(/IDLE_RELEASE_MS/.test(streamSrc), 'releases the D-ID session after idle speak')
+assert(/SPEAK_WATCHDOG_MS/.test(streamSrc), 'watchdog releases if D-ID never fires STOP')
 assert(/pagehide/.test(streamSrc), 'releases the D-ID session on pagehide so a frozen PWA does not hold a slot')
-assert(/pageshow/.test(streamSrc), 'restores a wanted session after pagehide/bfcache')
-assert(/Promise\.all/.test(streamSrc), 'fetches client key and SDK in parallel while pre-warming')
+assert(
+  !/if \(streamWanted && !sessionCapped\) void connectSaraStream\(\)/.test(streamSrc),
+  'pageshow must not reconnect an idle session (Lite cap)',
+)
+assert(/Promise\.all/.test(streamSrc), 'fetches client key and SDK in parallel on Send')
 assert(/hasLiveManager/.test(streamSrc), 'reuses a connected manager before the video has frames')
 assert(
   !/if \(manager && !deadMode && elementHoldsStream\(\)\) return true/.test(streamSrc),
-  'must not drop a pre-warmed session just because srcObject is not attached yet',
+  'must not drop a Send-time session just because srcObject is not attached yet',
 )
 assert(
-  /pre-warm connected — no video frames yet; session kept for speak\(\)/.test(streamSrc),
+  /connected — no video frames yet; session kept for speak\(\)/.test(streamSrc),
   'connect keeps the session without gating speak() on decoded frames',
 )
 assert(
@@ -148,7 +153,7 @@ assert(/poster=\{STILL\}/.test(portraitSrc), 'video poster is the idle still so 
 assert(/overflow-hidden/.test(portraitSrc), 'crops the portrait circle with overflow-hidden like SaraPortrait')
 assert(/opacity-100/.test(portraitSrc), 'idle still is opacity-100 unless the stream is actually live')
 assert(/isSaraVideoLive/.test(portraitSrc), 'portrait reports live only when the video has srcObject + frames')
-assert(/setVideoNode/.test(portraitSrc), 'binds the stream video during commit so mount pre-warm can attach')
+assert(/setVideoNode/.test(portraitSrc), 'binds the stream video during commit so Send-time connect can attach')
 
 const cssSrc = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
 assert(!/mask-image/.test(cssSrc), 'does not CSS-mask the portrait (iOS can composite that to a blank hole)')
@@ -171,11 +176,15 @@ assert(
   /void speakSaraStream\(text\)\s*\n\s*if \(mutedRef/.test(askSrc),
   'D-ID speak is not gated on mute or ara being ready',
 )
-assert(/warmSaraStream\(\)/.test(askSrc), 'Ask Sara pre-warms the Agents stream on mount')
+assert(!/warmSaraStream/.test(askSrc), 'Ask Sara does not pre-warm the Agents stream on mount')
+assert(
+  /setSaraStreamCallbacks\(\{[\s\S]*?\}\)\s*return \(\) =>/.test(askSrc),
+  'mount only registers callbacks — connect waits for Send/Play',
+)
 assert(/connectSaraStream\(\)/.test(askSrc), 'Send starts/joins stream connect in the same gesture as unlock')
 assert(/SARA_STREAM_CAPPED_NOTE/.test(askSrc), 'Ask Sara surfaces session-cap status while ara talks')
 assert(/releaseSaraStream/.test(askSrc), 'Ask Sara releases the D-ID session on leave')
-assert(!/disconnectSaraStream/.test(askSrc), 'Ask Sara uses delayed release, not an immediate disconnect on unmount')
+assert(/disconnectSaraStream/.test(askSrc), 'unused Send connect is dropped if Grok is unreachable')
 assert(!/agentManager\.chat\(|\.chat\(/.test(askSrc), 'Ask Sara does not call agentManager.chat()')
 assert(!/requestSaraTalk/.test(askSrc), 'Ask Sara does not poll Talks mp4')
 assert(!/watchSaraTalk/.test(askSrc), 'Ask Sara does not wait minutes for an mp4')
@@ -184,7 +193,7 @@ const mainSrc = readFileSync(new URL('../main.tsx', import.meta.url), 'utf8')
 assert(/registration\.update\(/.test(mainSrc), 'service worker checks for a new bundle')
 
 const viteSrc = readFileSync(new URL('../../vite.config.ts', import.meta.url), 'utf8')
-assert(/sara-pwa-20260919-prewarm/.test(viteSrc), 'PWA cacheId busts a phone still serving the PR10 session-cap bundle')
+assert(/sara-pwa-20260919-send-stream/.test(viteSrc), 'PWA cacheId busts a phone still serving the PR11 pre-warm bundle')
 assert(/NetworkFirst/.test(viteSrc), 'navigations are NetworkFirst so iOS PWA gets new index.html')
 assert(!/\*\.\{js,css,html/.test(viteSrc), 'does not precache index.html (stale PWA)')
 
