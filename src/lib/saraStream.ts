@@ -2,10 +2,10 @@
  * Live POST /agents/{id}/streams 403 `{ kind: "Forbidden", description: "Max user sessions reached" }`
  * means the trial/session cap (or zero credits) — do not retry connect/speak; keep still + ara.
  *
- * Pre-warm on Ask Sara mount: connect() and keep the session even before the <video>
- * has frames (streamWarmup is off so iOS does not gate speak() on a warmup decode).
+ * Connect on Send / Play (parallel with /ask + ara). Do not pre-warm on Ask Sara mount —
+ * Lite session caps are small; an idle WebRTC peer fills them (laptop + phone + Studio).
  * speak() fires as soon as Grok text exists — do not wait for ara or D-ID START.
- * Release on leave / pagehide so idle slots are not held.
+ * Release on leave / unmount / pagehide, and after a short idle once speak settles.
  */
 
 function apiBase(): string {
@@ -46,6 +46,10 @@ const DEAD_MODES = new Set(['TextOnly', 'Playground', 'Maintenance', 'Off'])
 const PLAY_RETRY_MS = [0, 50, 200, 500, 1200, 3000]
 /** Delay so React StrictMode remount reuses the in-flight session instead of burning a slot. */
 const RELEASE_MS = 400
+/** Drop the peer after speak settles so an idle Ask Sara tab does not hold a Lite slot. */
+const IDLE_RELEASE_MS = 20_000
+/** If D-ID never fires STOP after speak(), do not hold the slot forever. */
+const SPEAK_WATCHDOG_MS = 90_000
 
 let videoEl: HTMLVideoElement | null = null
 let srcObject: MediaStream | null = null
@@ -60,9 +64,11 @@ let deadMode = false
 let sessionCapped = false
 let foregroundBound = false
 let lifecycleBound = false
-/** Ask Sara wants a live session (mount / pageshow). pagehide drops the peer but keeps this. */
+/** True while Send/Play wants a session. Idle / leave / pagehide clear this. */
 let streamWanted = false
+let spokeThisSession = false
 let releaseTimer: number | null = null
+let idleTimer: number | null = null
 const playTimers = new Set<number>()
 const listeners: StreamCallbacks = {}
 
@@ -214,12 +220,35 @@ function cancelRelease() {
   releaseTimer = null
 }
 
-/** Tear down the WebRTC peer now. Does not clear streamWanted (pageshow can restore). */
+function cancelIdleRelease() {
+  if (idleTimer == null) return
+  window.clearTimeout(idleTimer)
+  idleTimer = null
+}
+
+function scheduleIdleRelease(ms: number, reason: string) {
+  cancelIdleRelease()
+  if (typeof window === 'undefined') {
+    streamWanted = false
+    dropLiveSession()
+    return
+  }
+  idleTimer = window.setTimeout(() => {
+    idleTimer = null
+    logStream(reason)
+    streamWanted = false
+    dropLiveSession()
+  }, ms)
+}
+
+/** Tear down the WebRTC peer now. pagehide / idle / leave do not reconnect. */
 function dropLiveSession() {
   cancelRelease()
+  cancelIdleRelease()
   stopSaraStream()
   dropManager()
   attachSrcObject(null)
+  spokeThisSession = false
 }
 
 function bindSessionLifecycle() {
@@ -227,20 +256,9 @@ function bindSessionLifecycle() {
   lifecycleBound = true
   window.addEventListener('pagehide', () => {
     logStream('pagehide — releasing D-ID session')
+    streamWanted = false
     dropLiveSession()
   })
-  window.addEventListener('pageshow', () => {
-    if (streamWanted && !sessionCapped) void connectSaraStream()
-  })
-}
-
-/** Connect on Ask Sara mount / idle so speak() does not pay WebRTC setup after Grok replies. */
-export function warmSaraStream(): void {
-  streamWanted = true
-  cancelRelease()
-  bindSessionLifecycle()
-  void loadSdk()
-  void connectSaraStream()
 }
 
 /** Debounced disconnect for React unmount. StrictMode remount cancels this and reuses the session. */
@@ -387,7 +405,10 @@ export async function connectSaraStream(): Promise<boolean> {
     listeners.onStatus?.('session_capped')
     return false
   }
-  // Reuse a pre-warmed manager even before the <video> has a srcObject.
+  streamWanted = true
+  cancelRelease()
+  cancelIdleRelease()
+  // Reuse a Send-time manager even before the <video> has a srcObject.
   // streamWarmup is off; frames arrive on speak(). Dropping here re-pays connect (~2s).
   if (hasLiveManager()) return true
   if (connectPromise) return connectPromise
@@ -428,6 +449,11 @@ export async function connectSaraStream(): Promise<boolean> {
             const talking = String(state).toUpperCase() !== 'STOP'
             if (srcObject && videoEl) schedulePlay(videoEl)
             listeners.onTalking?.(talking)
+            if (talking) {
+              cancelIdleRelease()
+            } else if (spokeThisSession) {
+              scheduleIdleRelease(IDLE_RELEASE_MS, 'idle after speak — releasing D-ID session')
+            }
           },
           onConnectionStateChange(state: string) {
             const s = String(state).toLowerCase()
@@ -470,7 +496,7 @@ export async function connectSaraStream(): Promise<boolean> {
       if (srcObject) attachSrcObject(srcObject)
       // Keep the session without frames. Warmup is off; speak() attaches the talking track.
       if (!elementHoldsStream()) {
-        logStream('pre-warm connected — no video frames yet; session kept for speak()')
+        logStream('connected — no video frames yet; session kept for speak()')
       } else {
         listeners.onStatus?.('live')
       }
@@ -520,11 +546,13 @@ export async function speakSaraStream(text: string): Promise<void> {
   const gen = ++speakGen
 
   const attempt = async () => {
-    // Join the mount pre-warm. Do not wait for ara, video START, or decoded frames.
+    // Connect on Send/Play. Do not wait for ara, video START, or decoded frames.
     const ok = await connectSaraStream()
     if (!ok || gen !== speakGen || !manager || deadMode || sessionCapped) return
     unlockSaraStream()
     const result = await manager.speak({ type: 'text', input: clean })
+    spokeThisSession = true
+    scheduleIdleRelease(SPEAK_WATCHDOG_MS, 'speak watchdog — releasing D-ID session')
     unlockSaraStream()
     if (speakLooksDead(result)) {
       deadMode = true
@@ -561,6 +589,10 @@ export async function speakSaraStream(text: string): Promise<void> {
     } catch (retryError) {
       if (isSaraSessionCapError(retryError)) markSessionCapped(retryError)
       /* ara audio still plays; motion is best-effort */
+    }
+  } finally {
+    if (!sessionCapped && hasLiveManager() && !spokeThisSession) {
+      scheduleIdleRelease(IDLE_RELEASE_MS, 'speak did not start — releasing D-ID session')
     }
   }
 }
