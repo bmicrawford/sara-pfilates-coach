@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { isSaraVideoLive } from '../lib/saraStream'
+import { isSaraVideoLive, replaySaraStreamVideo } from '../lib/saraStream'
 
 const STILL = '/avatar/sara-default.png'
 
@@ -34,10 +34,9 @@ export function TalkingPortrait({
     const video = videoRef.current
     if (!video) return
     const kick = () => {
-      video.muted = true
       video.playsInline = true
       video.setAttribute('webkit-playsinline', 'true')
-      void video.play().catch(() => {})
+      replaySaraStreamVideo()
     }
     const reportLive = () => {
       onVideoLive?.(isSaraVideoLive(video))
@@ -76,7 +75,6 @@ export function TalkingPortrait({
           className="sara-stream-video absolute inset-0 z-0 h-full w-full object-cover object-[center_18%]"
           poster={STILL}
           playsInline
-          muted
           autoPlay
           loop={false}
           aria-hidden
