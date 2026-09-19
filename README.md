@@ -68,7 +68,7 @@ The durable public origin is the **Cloudflare Worker**, not an ephemeral tryclou
 
 ### Talking-head / lip-sync
 
-Ask Sara pins Sara’s portrait while the chat scrolls. Idle is the locked still (`public/avatar/sara-default.png`) — no SVG mouth overlay.
+Ask Sara is a fullscreen talking surface: the idle still and the live stream **cover the viewport** (edge to edge). Questions and answers sit in a **transparent overlay** so Sara’s face stays visible behind the text. Idle is the locked still (`public/avatar/sara-default.png`) — no SVG mouth overlay.
 
 **Heard voice** is D-ID Agents stream audio when `speak()` has started **and** the WebRTC `<video>` has visible playing frames. Keep the element muted until that moment so late `play()` can decode, then unmute / enable audio tracks together so audio cannot lead the mouth — do **not** also play xAI `ara` (no double voice). Do not start ara while waiting for D-ID. If connect/speak fails, hits the Lite session cap, `srcObject` never attaches, or a short budget elapses with **no playable AV**, fall back to `POST /speak` ara + still (or muted video if frames exist without audio). Never wait on a D-ID mp4. Never skip ara after a frozen / empty video.
 
@@ -132,7 +132,7 @@ npx surge ./dist https://sara-pfilates.surge.sh
 - Stub move-to-new-phone at `/move`
 - Home with Sara’s portrait and quick logs: drink, void/leak, pad change (time + reason only), exercise, Ask Sara
 - Bottom sheets for those forms
-- Ask Sara via Grok (`POST /ask` + short chat history). Heard voice is D-ID Agents stream audio when speak is ready; xAI neural TTS (`POST /speak`, voice `ara`) is the fallback. Realtime head motion is D-ID Agents Streams (WebRTC), not an offline mp4. Mute / Stop / Play stay in the UI. Portrait stays pinned while the thread scrolls.
+- Ask Sara via Grok (`POST /ask` + short chat history). Heard voice is D-ID Agents stream audio when speak is ready; xAI neural TTS (`POST /speak`, voice `ara`) is the fallback. Realtime head motion is D-ID Agents Streams (WebRTC), not an offline mp4. Mute / Stop / Play stay in the UI. The still and stream fill the Ask Sara screen; the thread is a see-through overlay.
 
 ## TODO (later)
 
