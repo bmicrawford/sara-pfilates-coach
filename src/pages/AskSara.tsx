@@ -99,7 +99,8 @@ export function AskSara() {
   const speakReply = (text: string) => {
     unlockSaraStream()
     // D-ID speak as soon as Grok text exists. Heard voice is stream audio when
-    // START (or a real speak result) arrives in budget; ara only on failure.
+    // speak has started AND video frames are playing; ara only after failure
+    // / cap / timeout with no playable AV — not while D-ID is still coming up.
     if (mutedRef.current) {
       void speakSaraStream(text)
       return

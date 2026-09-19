@@ -70,7 +70,7 @@ The durable public origin is the **Cloudflare Worker**, not an ephemeral tryclou
 
 Ask Sara pins Sara’s portrait while the chat scrolls. Idle is the locked still (`public/avatar/sara-default.png`) — no SVG mouth overlay.
 
-**Heard voice** is D-ID Agents stream audio when `speak()` START (or a real speak result) arrives in a short budget. Unmute the WebRTC element then — do **not** also play xAI `ara` (no double voice). If connect/speak fails, hits the Lite session cap, or is slow past that budget, fall back to `POST /speak` ara + still (or muted video if frames exist without audio). Never wait on a D-ID mp4.
+**Heard voice** is D-ID Agents stream audio when `speak()` has started **and** the WebRTC `<video>` has visible playing frames. Unmute / enable audio tracks in that same moment so audio cannot lead the mouth — do **not** also play xAI `ara` (no double voice). Do not start ara while waiting for D-ID. If connect/speak fails, hits the Lite session cap, or a longer budget elapses with **no playable AV**, fall back to `POST /speak` ara + still (or muted video if frames exist without audio). Never wait on a D-ID mp4.
 
 **Motion** is D-ID **Agents Streams** (WebRTC) via `@d-id/client-sdk`. The Worker mints a short-lived `client_key` (`POST /stream`) for the allowed Surge origins. Ask Sara does **not** open WebRTC on mount (Lite’s concurrent stream cap is small; idle phone + laptop + Studio tabs exhaust it). Mint + `connect()` start on **Send / Play**, then `agentManager.speak({ type: 'text', input })` as soon as the Grok reply exists (do not wait for ara). Leaving the page (and `pagehide`) disconnects so idle slots are not held. Do not call `agentManager.chat()` — Grok stays the brain (`POST /ask`).
 

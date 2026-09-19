@@ -73,7 +73,7 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
-          cacheId: 'sara-pwa-20260919-stream-voice',
+          cacheId: 'sara-pwa-20260919-av-lockstep',
           skipWaiting: true,
           clientsClaim: true,
           cleanupOutdatedCaches: true,
