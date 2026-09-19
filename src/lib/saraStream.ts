@@ -2,10 +2,12 @@
  * Live POST /agents/{id}/streams 403 `{ kind: "Forbidden", description: "Max user sessions reached" }`
  * means the trial/session cap (or zero credits) — do not retry connect/speak; keep still + ara.
  *
- * Pre-warm on Ask Sara mount: connect() and keep the session even before the <video>
- * has frames (streamWarmup is off so iOS does not gate speak() on a warmup decode).
+ * Do not connect() on Ask Sara mount. Lite’s concurrent stream cap is small; idle
+ * tabs (phone + laptop PWA + Studio) exhaust it and freeze the still. Mint + WebRTC
+ * start on Send / Play, in parallel with Grok + ara. Keep the session after connect
+ * so the next speak() does not re-pay WebRTC; release on leave / unmount / pagehide.
  * speak() fires as soon as Grok text exists — do not wait for ara or D-ID START.
- * Release on leave / pagehide so idle slots are not held.
+ * streamWarmup stays off so iOS does not gate speak() on a warmup decode.
  */
 
 function apiBase(): string {
@@ -60,7 +62,7 @@ let deadMode = false
 let sessionCapped = false
 let foregroundBound = false
 let lifecycleBound = false
-/** Ask Sara wants a live session (mount / pageshow). pagehide drops the peer but keeps this. */
+/** True after Send / Play asks for a session. Idle mount does not set this. */
 let streamWanted = false
 let releaseTimer: number | null = null
 const playTimers = new Set<number>()
@@ -214,7 +216,7 @@ function cancelRelease() {
   releaseTimer = null
 }
 
-/** Tear down the WebRTC peer now. Does not clear streamWanted (pageshow can restore). */
+/** Tear down the WebRTC peer now. */
 function dropLiveSession() {
   cancelRelease()
   stopSaraStream()
@@ -227,20 +229,15 @@ function bindSessionLifecycle() {
   lifecycleBound = true
   window.addEventListener('pagehide', () => {
     logStream('pagehide — releasing D-ID session')
+    streamWanted = false
     dropLiveSession()
-  })
-  window.addEventListener('pageshow', () => {
-    if (streamWanted && !sessionCapped) void connectSaraStream()
   })
 }
 
-/** Connect on Ask Sara mount / idle so speak() does not pay WebRTC setup after Grok replies. */
-export function warmSaraStream(): void {
-  streamWanted = true
-  cancelRelease()
+/** Load the Agents SDK only. Does not mint or open WebRTC — idle Ask Sara must not hold a Lite slot. */
+export function preloadSaraStream(): void {
   bindSessionLifecycle()
   void loadSdk()
-  void connectSaraStream()
 }
 
 /** Debounced disconnect for React unmount. StrictMode remount cancels this and reuses the session. */
@@ -381,13 +378,15 @@ function speakLooksDead(result: unknown): boolean {
 }
 
 export async function connectSaraStream(): Promise<boolean> {
+  streamWanted = true
+  cancelRelease()
   bindSessionLifecycle()
   if (sessionCapped) {
     logStream('D-ID session cap — not retrying; still + ara')
     listeners.onStatus?.('session_capped')
     return false
   }
-  // Reuse a pre-warmed manager even before the <video> has a srcObject.
+  // Reuse a live manager even before the <video> has a srcObject.
   // streamWarmup is off; frames arrive on speak(). Dropping here re-pays connect (~2s).
   if (hasLiveManager()) return true
   if (connectPromise) return connectPromise
@@ -470,7 +469,7 @@ export async function connectSaraStream(): Promise<boolean> {
       if (srcObject) attachSrcObject(srcObject)
       // Keep the session without frames. Warmup is off; speak() attaches the talking track.
       if (!elementHoldsStream()) {
-        logStream('pre-warm connected — no video frames yet; session kept for speak()')
+        logStream('connected — no video frames yet; session kept for speak()')
       } else {
         listeners.onStatus?.('live')
       }
@@ -520,7 +519,7 @@ export async function speakSaraStream(text: string): Promise<void> {
   const gen = ++speakGen
 
   const attempt = async () => {
-    // Join the mount pre-warm. Do not wait for ara, video START, or decoded frames.
+    // Join the Send/Play connect. Do not wait for ara, video START, or decoded frames.
     const ok = await connectSaraStream()
     if (!ok || gen !== speakGen || !manager || deadMode || sessionCapped) return
     unlockSaraStream()

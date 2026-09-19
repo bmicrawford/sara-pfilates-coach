@@ -7,6 +7,7 @@ import { readChat, writeChat } from '../lib/mockServer'
 import {
   bindSaraStreamVideo,
   connectSaraStream,
+  preloadSaraStream,
   releaseSaraStream,
   SARA_STREAM_CAPPED_NOTE,
   setSaraStreamCallbacks,
@@ -14,7 +15,6 @@ import {
   speakSaraStream,
   stopSaraStream,
   unlockSaraStream,
-  warmSaraStream,
 } from '../lib/saraStream'
 import {
   isSaraMuted,
@@ -63,7 +63,7 @@ export function AskSara() {
         if (status === 'live') setStreamCapped(false)
       },
     })
-    warmSaraStream()
+    preloadSaraStream()
     return () => {
       setSaraStreamCallbacks({})
       releaseSaraStream()
