@@ -40,7 +40,7 @@ export default defineConfig(({ command }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.svg', 'avatar/*.png', 'icons/*.png'],
+        includeAssets: ['favicon.svg', 'avatar/*.png', 'icons/*.png', 'brand/pfilates-logo.png'],
         manifest: {
           name: 'Sara — PfilAtes Coach',
           short_name: 'Sara',
@@ -73,12 +73,13 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
-          cacheId: 'sara-pwa-20260920-home-sara-portrait',
+          cacheId: 'sara-pwa-20260920-pdf-export',
           skipWaiting: true,
           clientsClaim: true,
           cleanupOutdatedCaches: true,
           globPatterns: ['**/*.{js,css,svg,png,woff2}'],
           navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/assets\//, /\/brand\//, /\.[a-zA-Z0-9]+$/],
           runtimeCaching: [
             {
               urlPattern: ({ request }) => request.mode === 'navigate',

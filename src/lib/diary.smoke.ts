@@ -35,7 +35,9 @@ import {
   bladderDiaryPdfPlainText,
   bladderDiaryReportSubtitle,
   buildBladderDiaryPdf,
+  buildPlainBladderDiaryPdf,
   canExportBladderDiaryPdf,
+  canSharePdfFile,
   incompleteDayLabel,
 } from './diaryPdf.ts'
 import {
@@ -391,19 +393,23 @@ assert(canExportBladderDiaryPdf(emptyStart), 'PDF path is not blocked when zero 
 assert(new TextDecoder('latin1').decode(emptyBuilt.bytes.slice(0, 5)) === '%PDF-', 'zero-event in-progress diary still builds a PDF')
 
 const pdfSrc = readFileSync(new URL('./diaryPdf.ts', import.meta.url), 'utf8')
-assert(/pdf\.addImage\(embed, 'PNG'/.test(pdfSrc), 'logo embed still uses addImage PNG')
+assert(/pdf\.addImage\(embed, logoImageFormat\(embed\)/.test(pdfSrc), 'logo embed uses addImage with PNG or JPEG')
 assert(
-  /try \{[\s\S]*pdf\.addImage\(embed, 'PNG'[\s\S]*\} catch \{[\s\S]*drewLogo = false/.test(pdfSrc),
+  /try \{[\s\S]*pdf\.addImage\(embed[\s\S]*\} catch \{[\s\S]*drewLogo = false/.test(pdfSrc),
   'logo addImage is wrapped in try/catch so embed failure cannot abort export',
 )
-assert(/downscaleLogoForPdf/.test(pdfSrc), 'logo is downscaled on canvas before embed when the browser allows it')
+assert(/toDataURL\('image\/jpeg'/.test(pdfSrc), 'browser logo embed downscales to JPEG instead of the original PNG')
+assert(/return null/.test(pdfSrc) && /never retry the original PNG/.test(pdfSrc), 'failed logo downscale does not retry the huge PNG')
+assert(/loadJsPdf/.test(pdfSrc) && /buildPlainBladderDiaryPdf/.test(pdfSrc), 'jsPDF import failure falls back to a plain PDF')
+assert(/engine === 'plain'/.test(pdfSrc), 'plain engine can be forced for the no-chunk path')
+assert(/canSharePdfFile/.test(pdfSrc), 'canShare({ files }) is wrapped so a throw cannot abort export')
 assert(/downloadAttributeIsNoop/.test(pdfSrc) && /openPdfInNewTab/.test(pdfSrc), 'iOS/PWA share fallback can open the blob URL')
-assert(
-  /if \(isShareAbort\(error\)\) return[\s\S]*if \(downloadAttributeIsNoop\(\)\)[\s\S]*openPdfInNewTab\(blob\)/.test(
-    pdfSrc,
-  ),
-  'non-abort share failure on iOS/PWA opens the PDF in a new tab instead of a.download',
-)
+assert(/readBlobAsDataUrl/.test(pdfSrc), 'last-resort delivery can open a data URL if blob download is a no-op')
+assert(/deliverBladderDiaryPdf/.test(pdfSrc), 'export uses the multi-step phone delivery helper')
+
+const viteSrc = readFileSync(new URL('../../vite.config.ts', import.meta.url), 'utf8')
+assert(/navigateFallbackDenylist/.test(viteSrc), 'PWA does not serve index.html for JS/asset chunk requests')
+assert(/sara-pwa-20260920-pdf-export/.test(viteSrc), 'PWA cache id is bumped so phones drop the stale jsPDF chunk map')
 
 const brokenLogo = await buildBladderDiaryPdf(bladder, {
   logoDataUrl: 'data:image/png;base64,not-a-real-png',
@@ -419,6 +425,26 @@ const brokenRaw = new TextDecoder('latin1').decode(brokenLogo.bytes)
 assert(brokenRaw.includes(PFILATES_BRAND), 'logo addImage failure falls back to the PfilAtes text brand')
 assert(brokenRaw.includes('Bladder diary report'), 'logo addImage failure still embeds the report title')
 assert(brokenRaw.includes('Incomplete'), 'logo addImage failure keeps incomplete-day export')
+
+const plain = await buildBladderDiaryPdf(bladder, { engine: 'plain', logoDataUrl: 'data:image/png;base64,not-a-real-png' })
+assert(canExportBladderDiaryPdf(bladder), 'plain fallback is not gated on a completed diary')
+assert(new TextDecoder('latin1').decode(plain.bytes.slice(0, 5)) === '%PDF-', 'plain engine still produces a PDF when jsPDF cannot load')
+const plainRaw = new TextDecoder('latin1').decode(plain.bytes)
+assert(plainRaw.includes('In progress'), 'plain in-progress PDF is not rewritten as finished')
+assert(plainRaw.includes('Incomplete'), 'plain PDF still labels incomplete Day 2/3')
+assert(plainRaw.includes('Day 1') && plainRaw.includes('Day 2') && plainRaw.includes('Day 3'), 'plain PDF still has Day 1–3')
+assert(plainRaw.includes('Alex Rivera'), 'plain PDF still includes the patient name')
+const plainDirect = buildPlainBladderDiaryPdf(bladderDiaryPdfDoc(bladder), 'fallback.pdf')
+assert(plainDirect.filename === 'fallback.pdf', 'plain builder keeps the requested filename')
+assert(new TextDecoder('latin1').decode(plainDirect.bytes.slice(0, 5)) === '%PDF-', 'plain builder emits a PDF header')
+
+const throwingShare = {
+  canShare() {
+    throw new Error('canShare rejected the File payload')
+  },
+} as unknown as Navigator
+assert(canSharePdfFile(throwingShare, new File([plain.blob], 'x.pdf', { type: 'application/pdf' })) === false, 'canShare throw is treated as not-shareable, not an export failure')
+assert(canSharePdfFile({ canShare: () => false } as unknown as Navigator, new File([plain.blob], 'x.pdf')) === false, 'canShare false does not block later delivery fallbacks')
 
 if (process.exitCode) {
   console.error('diary smoke failed')
