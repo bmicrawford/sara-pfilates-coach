@@ -1,5 +1,5 @@
-import { exerciseLogs, localDayKey, parseMinutes, PATIENT_DOB_MISSING, PATIENT_NAME_MISSING } from './diary.ts'
-import { isSameLocalDay, nowIso, readJson, writeJson } from './storage.ts'
+import { exerciseLogs, localDayKey, parseMinutes, PATIENT_DOB_MISSING, PATIENT_NAME_MISSING, summarizeLog } from './diary.ts'
+import { formatTime, isSameLocalDay, nowIso, readJson, writeJson } from './storage.ts'
 import type { ExerciseLog, LogEntry, PatientProfile } from './types.ts'
 
 export const EXERCISE_SPAN_DAYS = 28
@@ -19,6 +19,11 @@ export const EXERCISE_REPORT_EMPTY =
 export const EXERCISE_CUE_DISMISS_LABEL = 'Got it'
 export const EXERCISE_DURATION_LABEL = 'Duration'
 export const EXERCISE_FREQUENCY_LABEL = 'Frequency'
+export const EXERCISE_ATTESTED_ACTIVITY = 'Pelvic floor'
+export const EXERCISE_ATTESTED_TIME_LABEL = 'Attested'
+export const EXERCISE_ATTESTED_ITEM_LABEL = 'Pelvic floor · 5 min · per patient confirmation'
+export const EXERCISE_ATTESTED_NOTE =
+  'Blank days are recorded as 5 minutes of pelvic floor exercise per patient confirmation. Days with a logged session keep their actual minutes.'
 
 export const EXERCISE_GATE_STORAGE_KEY = 'exerciseGate'
 export const EXERCISE_CUE_STORAGE_KEY = 'exerciseCue'
@@ -35,10 +40,21 @@ export type ExerciseCueState = {
   dismissedOn?: string
 }
 
+export type ExerciseDaySource = 'logged' | 'attested'
+
+export type ExerciseDayLine = {
+  time: string
+  text: string
+  felt?: string
+  source: ExerciseDaySource
+}
+
 export type ExerciseDayReport = {
   day: string
+  dayAt: string
   sessions: number
   minutes: number
+  source: ExerciseDaySource
   items: ExerciseLog[]
 }
 
@@ -51,6 +67,8 @@ export type FourWeekExerciseReport = {
   daysExercised: number
   averageMinutesPerSession: number
   daysWithAtLeast5Minutes: number
+  attestedBlankDays: number
+  imputed: boolean
   patientName: string
   dateOfBirth: string
   entries: ExerciseLog[]
@@ -81,9 +99,19 @@ export function loggedExerciseOnLocalDay(logs: LogEntry[], day = new Date()): bo
   return exerciseLogs(logs).some((log) => isSameLocalDay(log.at, day))
 }
 
+export function localDayKeyFromDate(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/** Yes on the generate gate fills blank days at report/PDF time. No and unanswered leave blanks empty. */
+export function shouldImputeAttestedExerciseDays(gate: ExerciseGateState | null | undefined): boolean {
+  return gate?.answer === 'yes'
+}
+
 export function fourWeekExerciseReport(
   logs: LogEntry[],
-  options?: { now?: string; patient?: PatientProfile | null },
+  options?: { now?: string; patient?: PatientProfile | null; gate?: ExerciseGateState | null },
 ): FourWeekExerciseReport {
   const now = options?.now ? new Date(options.now) : new Date()
   const { start, end } = exercisePeriodBounds(now)
@@ -99,17 +127,38 @@ export function fourWeekExerciseReport(
     byDay.set(day, items)
   }
 
-  const days: ExerciseDayReport[] = [...byDay.entries()]
-    .sort(([a], [b]) => (a < b ? 1 : a > b ? -1 : 0))
-    .map(([day, items]) => ({
-      day,
-      sessions: items.length,
-      minutes: items.reduce((sum, log) => sum + parseMinutes(log.minutes), 0),
-      items,
-    }))
+  const impute = shouldImputeAttestedExerciseDays(options?.gate)
+  const days: ExerciseDayReport[] = []
 
-  const minutes = entries.reduce((sum, log) => sum + parseMinutes(log.minutes), 0)
-  const sessions = entries.length
+  if (impute) {
+    for (let offset = 0; offset < EXERCISE_SPAN_DAYS; offset += 1) {
+      const date = addLocalDays(end, -offset)
+      const day = localDayKeyFromDate(date)
+      const items = byDay.get(day) ?? []
+      if (items.length > 0) {
+        days.push(loggedExerciseDay(day, date, items))
+      } else {
+        days.push({
+          day,
+          dayAt: date.toISOString(),
+          sessions: 1,
+          minutes: EXERCISE_DAILY_MINUTES,
+          source: 'attested',
+          items: [],
+        })
+      }
+    }
+  } else {
+    days.push(
+      ...[...byDay.entries()]
+        .sort(([a], [b]) => (a < b ? 1 : a > b ? -1 : 0))
+        .map(([day, items]) => loggedExerciseDay(day, new Date(items[0]?.at ?? day), items)),
+    )
+  }
+
+  const attestedBlankDays = days.filter((day) => day.source === 'attested').length
+  const minutes = days.reduce((sum, day) => sum + day.minutes, 0)
+  const sessions = days.reduce((sum, day) => sum + day.sessions, 0)
   const daysExercised = days.length
   const daysWithAtLeast5Minutes = days.filter((day) => day.minutes >= EXERCISE_DAILY_MINUTES).length
 
@@ -122,11 +171,42 @@ export function fourWeekExerciseReport(
     daysExercised,
     averageMinutesPerSession: sessions > 0 ? Math.round(minutes / sessions) : 0,
     daysWithAtLeast5Minutes,
+    attestedBlankDays,
+    imputed: attestedBlankDays > 0,
     patientName: options?.patient?.name?.trim() || PATIENT_NAME_MISSING,
     dateOfBirth: options?.patient?.dateOfBirth || PATIENT_DOB_MISSING,
     entries,
     days,
   }
+}
+
+function loggedExerciseDay(day: string, date: Date, items: ExerciseLog[]): ExerciseDayReport {
+  return {
+    day,
+    dayAt: date.toISOString(),
+    sessions: items.length,
+    minutes: items.reduce((sum, log) => sum + parseMinutes(log.minutes), 0),
+    source: 'logged',
+    items,
+  }
+}
+
+export function exerciseDayLines(day: ExerciseDayReport): ExerciseDayLine[] {
+  if (day.source === 'attested') {
+    return [
+      {
+        time: EXERCISE_ATTESTED_TIME_LABEL,
+        text: EXERCISE_ATTESTED_ITEM_LABEL,
+        source: 'attested',
+      },
+    ]
+  }
+  return day.items.map((entry) => ({
+    time: formatTime(entry.at),
+    text: summarizeLog(entry),
+    felt: entry.felt,
+    source: 'logged' as const,
+  }))
 }
 
 export function exerciseDurationLabel(report: FourWeekExerciseReport): string {
