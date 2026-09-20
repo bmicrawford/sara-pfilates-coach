@@ -190,7 +190,16 @@ async function pfilatesLogoDataUrl(): Promise<string | null> {
     if (typeof window === 'undefined' || typeof fetch !== 'function') return null
     const res = await fetch(PFILATES_LOGO_SRC)
     if (!res.ok) return null
-    const buffer = await res.arrayBuffer()
+    const blob = await res.blob()
+    if (typeof FileReader === 'function') {
+      return await new Promise<string | null>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null)
+        reader.onerror = () => resolve(null)
+        reader.readAsDataURL(blob)
+      })
+    }
+    const buffer = await blob.arrayBuffer()
     const bytes = new Uint8Array(buffer)
     let binary = ''
     for (const byte of bytes) binary += String.fromCharCode(byte)
@@ -217,25 +226,26 @@ function loadLogoImage(src: string): Promise<{ width: number; height: number; dr
   })
 }
 
-/** Shrink the 1000px PNG so jsPDF embed stays small on phones. No-ops in Node / if canvas fails. */
-async function downscaleLogoForPdf(dataUrl: string, maxWidthPx = 420): Promise<string> {
+/** Shrink the 1000px PNG so jsPDF embed stays small on phones. Returns null on canvas/decode failure so we never retry the huge original. */
+async function downscaleLogoForPdf(dataUrl: string, maxWidthPx = 280): Promise<string | null> {
   try {
     if (typeof document === 'undefined' || typeof Image === 'undefined') return dataUrl
     const image = await loadLogoImage(dataUrl)
-    if (!image.width || !image.height) return dataUrl
+    if (!image.width || !image.height) return null
     const scale = Math.min(1, maxWidthPx / image.width)
     const width = Math.max(1, Math.round(image.width * scale))
     const height = Math.max(1, Math.round(image.height * scale))
-    if (scale >= 1) return dataUrl
     const canvas = document.createElement('canvas')
     canvas.width = width
     canvas.height = height
     const ctx = canvas.getContext('2d')
-    if (!ctx) return dataUrl
+    if (!ctx) return null
+    ctx.fillStyle = '#F6F3EE'
+    ctx.fillRect(0, 0, width, height)
     image.draw(ctx, width, height)
-    return canvas.toDataURL('image/png')
+    return canvas.toDataURL('image/jpeg', 0.82)
   } catch {
-    return dataUrl
+    return null
   }
 }
 
@@ -283,10 +293,12 @@ export async function buildBladderDiaryPdf(
   if (logo) {
     try {
       const embed = await downscaleLogoForPdf(logo)
+      if (!embed) throw new Error('logo unavailable')
       const logoWidth = 168
       const logoHeight = logoWidth * (281 / 1000)
       ensureSpace(logoHeight + 8)
-      pdf.addImage(embed, 'PNG', margin, y, logoWidth, logoHeight)
+      const format = embed.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG'
+      pdf.addImage(embed, format, margin, y, logoWidth, logoHeight)
       y += logoHeight + 10
       drewLogo = true
     } catch {

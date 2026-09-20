@@ -391,11 +391,12 @@ assert(canExportBladderDiaryPdf(emptyStart), 'PDF path is not blocked when zero 
 assert(new TextDecoder('latin1').decode(emptyBuilt.bytes.slice(0, 5)) === '%PDF-', 'zero-event in-progress diary still builds a PDF')
 
 const pdfSrc = readFileSync(new URL('./diaryPdf.ts', import.meta.url), 'utf8')
-assert(/pdf\.addImage\(embed, 'PNG'/.test(pdfSrc), 'logo embed still uses addImage PNG')
+assert(/pdf\.addImage\(embed, format/.test(pdfSrc), 'logo embed still uses addImage')
 assert(
-  /try \{[\s\S]*pdf\.addImage\(embed, 'PNG'[\s\S]*\} catch \{[\s\S]*drewLogo = false/.test(pdfSrc),
+  /try \{[\s\S]*pdf\.addImage\(embed, format[\s\S]*\} catch \{[\s\S]*drewLogo = false/.test(pdfSrc),
   'logo addImage is wrapped in try/catch so embed failure cannot abort export',
 )
+assert(/return null/.test(pdfSrc.match(/async function downscaleLogoForPdf[\s\S]*?^}/m)?.[0] ?? ''), 'canvas/decode failure does not retry the original huge PNG')
 assert(/downscaleLogoForPdf/.test(pdfSrc), 'logo is downscaled on canvas before embed when the browser allows it')
 assert(/downloadAttributeIsNoop/.test(pdfSrc) && /openPdfInNewTab/.test(pdfSrc), 'iOS/PWA share fallback can open the blob URL')
 assert(
