@@ -314,8 +314,12 @@ assert(
     const block = cssSrc.match(new RegExp(`\\.${name}\\s*\\{([\\s\\S]*?)\\n\\}`))?.[1] ?? ''
     assert(Boolean(block), `${name} overlay rule is defined in CSS`)
     assert(
-      !/text-shadow:/.test(block) || /text-shadow:\s*none/.test(block),
-      `${name} has no cream/white text-shadow halo`,
+      /text-shadow:\s*none/.test(block),
+      `${name} sets text-shadow: none so cream/white glyph halos stay off`,
+    )
+    assert(
+      !/text-shadow:[\s\S]*rgba\(\s*255/.test(block),
+      `${name} does not use a cream/white text-shadow`,
     )
     assert(
       /font-weight:\s*(600|700)/.test(block),
