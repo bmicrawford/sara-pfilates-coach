@@ -14,6 +14,7 @@
     "smoke:ask-copy": "node --experimental-strip-types src/lib/askSara.smoke.ts",
     "smoke:speech": "node --experimental-strip-types src/lib/pfilatesSpeech.smoke.ts",
     "smoke:speak": "node server/speakSara.smoke.mjs",
+    "smoke:diary": "node --experimental-strip-types src/lib/diary.smoke.ts",
     "smoke:verify-api": "node scripts/verify-sara-api.mjs --self-test",
     "verify:ask-api": "node scripts/verify-sara-api.mjs"
   },

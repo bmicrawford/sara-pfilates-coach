@@ -1,5 +1,6 @@
+import { activeDiary, finishDiary, startDiary } from './diary'
 import { readJson, uid, writeJson, nowIso } from './storage'
-import type { ChatMessage, DeviceBinding, LogEntry, Session } from './types'
+import type { ChatMessage, DeviceBinding, Diary, LogEntry, Session } from './types'
 
 export const DEMO_TOKEN = 'DEMO-SARA-001'
 
@@ -115,6 +116,34 @@ export function addLog(entry: LogEntry): LogEntry {
   const logs = [entry, ...readLogs()].slice(0, 200)
   writeJson('logs', logs)
   return entry
+}
+
+export function readDiaries(): Diary[] {
+  return readJson<Diary[]>('diaries', [])
+}
+
+export function writeDiaries(diaries: Diary[]): void {
+  writeJson('diaries', diaries)
+}
+
+export function startNewDiary(): Diary {
+  const { diaries, diary } = startDiary(readDiaries(), nowIso(), uid())
+  writeDiaries(diaries)
+  return diary
+}
+
+export function finishActiveDiary(): Diary | null {
+  const current = activeDiary(readDiaries())
+  if (!current) return null
+  const next = finishDiary(readDiaries(), current.id, nowIso())
+  writeDiaries(next)
+  return next.find((diary) => diary.id === current.id) ?? null
+}
+
+export function addDiaryLog(entry: LogEntry): LogEntry {
+  const active = activeDiary(readDiaries())
+  const tagged: LogEntry = active && !entry.diaryId ? { ...entry, diaryId: active.id } : entry
+  return addLog(tagged)
 }
 
 export function readChat(): ChatMessage[] {
