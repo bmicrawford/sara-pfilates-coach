@@ -343,8 +343,9 @@ assert(finishedPdf.stats.find((stat) => stat.label === 'Drinks')?.value === 1, '
 assert(finishedPdf.days.some((day) => day.incomplete), 'early-finished diary still marks unelapsed days incomplete')
 
 const exercisePage = readFileSync(new URL('../pages/ExerciseLog.tsx', import.meta.url), 'utf8')
-assert(/in progress/.test(exercisePage), 'exercise log copy allows in-progress viewing')
-assert(/exerciseLogReport/.test(exercisePage), 'exercise page uses the shared report helper')
+assert(/fourWeekExerciseReport/.test(exercisePage), 'exercise page uses the 4-week report helper')
+assert(/Duration/.test(exercisePage) && /Frequency/.test(exercisePage), 'exercise log shows duration and frequency')
+assert(/GenerateExerciseLogButton/.test(exercisePage), 'exercise page offers the gated generate/download flow')
 
 const askSrc = readFileSync(new URL('../pages/AskSara.tsx', import.meta.url), 'utf8')
 assert(/ask-sara-stage/.test(askSrc) && /ask-sara-panel/.test(askSrc), 'Ask Sara fullscreen glass overlay is intact')

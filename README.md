@@ -132,7 +132,8 @@ npx surge ./dist https://sara-pfilates.surge.sh
 - Stub move-to-new-phone at `/move`
 - First-open name + date of birth, saved on-device so the doctor report is labeled (asked once)
 - Home with Sara’s portrait, Start New Diary, then the existing event logs: drink, void/leak, pad change (time + reason only), exercise, Ask Sara
-- 3-day bladder diary report (`/diary`) and PDF — Day 1–3 totals from the first logged event, incomplete days marked; exercise log (`/exercise`) stays readable in progress
+- 3-day bladder diary report (`/diary`) and PDF — Day 1–3 totals from the first logged event, incomplete days marked
+- 4-week exercise log (`/exercise`) — duration and frequency of logged sessions; daily Home cue when today’s session is missing; completion PDF only after Yes to the 5-minutes-daily / 4-week question
 - Bottom sheets for those forms
 - Ask Sara via Grok (`POST /ask` + short chat history). Heard voice is D-ID Agents stream audio when speak is ready; xAI neural TTS (`POST /speak`, voice `ara`) is the fallback. Realtime head motion is D-ID Agents Streams (WebRTC), not an offline mp4. Mute / Stop / Play stay in the UI. The still and stream fill the Ask Sara screen; the thread is a see-through overlay.
 

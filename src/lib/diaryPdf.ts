@@ -118,7 +118,7 @@ export function bladderDiaryPdfPlainText(doc: BladderDiaryPdfDoc): string {
   return lines.join('\n')
 }
 
-function pdfSafe(text: string): string {
+export function pdfSafe(text: string): string {
   return text
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
@@ -185,7 +185,7 @@ function triggerDownload(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 2_000)
 }
 
-async function pfilatesLogoDataUrl(): Promise<string | null> {
+export async function pfilatesLogoDataUrl(): Promise<string | null> {
   try {
     if (typeof window === 'undefined' || typeof fetch !== 'function') return null
     const res = await fetch(PFILATES_LOGO_SRC)
@@ -218,7 +218,7 @@ function loadLogoImage(src: string): Promise<{ width: number; height: number; dr
 }
 
 /** Shrink the 1000px PNG so jsPDF embed stays small on phones. No-ops in Node / if canvas fails. */
-async function downscaleLogoForPdf(dataUrl: string, maxWidthPx = 420): Promise<string> {
+export async function downscaleLogoForPdf(dataUrl: string, maxWidthPx = 420): Promise<string> {
   try {
     if (typeof document === 'undefined' || typeof Image === 'undefined') return dataUrl
     const image = await loadLogoImage(dataUrl)
@@ -364,8 +364,8 @@ export async function buildBladderDiaryPdf(
   return { filename, blob, bytes }
 }
 
-export async function exportBladderDiaryPdf(report: BladderDiaryReport): Promise<void> {
-  const { filename, blob } = await buildBladderDiaryPdf(report)
+/** Phone share sheet first; iOS/PWA then open-in-tab; otherwise a.download. */
+export async function deliverPdfBlob(blob: Blob, filename: string): Promise<void> {
   const file = new File([blob], filename, { type: 'application/pdf' })
   const nav = navigator as Navigator & {
     canShare?: (data: ShareData) => boolean
@@ -386,4 +386,9 @@ export async function exportBladderDiaryPdf(report: BladderDiaryReport): Promise
   }
 
   triggerDownload(blob, filename)
+}
+
+export async function exportBladderDiaryPdf(report: BladderDiaryReport): Promise<void> {
+  const { filename, blob } = await buildBladderDiaryPdf(report)
+  await deliverPdfBlob(blob, filename)
 }
