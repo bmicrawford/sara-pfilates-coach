@@ -126,13 +126,28 @@ function pdfSafe(text: string): string {
     .replace(/\u00A0/g, ' ')
 }
 
+function isStandalonePwa(): boolean {
+  if (typeof window === 'undefined') return false
+  return (
+    window.matchMedia?.('(display-mode: standalone)')?.matches === true ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+  )
+}
+
 function preferShareSheet(): boolean {
   if (typeof window === 'undefined') return false
   const coarse = window.matchMedia?.('(pointer: coarse)')?.matches
-  const standalone =
-    window.matchMedia?.('(display-mode: standalone)')?.matches ||
-    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
-  return Boolean(coarse || standalone)
+  return Boolean(coarse || isStandalonePwa())
+}
+
+/** iOS Safari / installed PWA treat `a.download` on blob URLs as a no-op. */
+function downloadAttributeIsNoop(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  const iOS =
+    /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  return iOS || isStandalonePwa()
 }
 
 function isShareAbort(error: unknown): boolean {
@@ -144,7 +159,21 @@ function isShareAbort(error: unknown): boolean {
   )
 }
 
+function openPdfInNewTab(blob: Blob) {
+  const url = URL.createObjectURL(blob)
+  const opened = window.open(url, '_blank', 'noopener,noreferrer')
+  if (!opened) {
+    window.location.assign(url)
+    return
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
 function triggerDownload(blob: Blob, filename: string) {
+  if (downloadAttributeIsNoop()) {
+    openPdfInNewTab(blob)
+    return
+  }
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
@@ -168,6 +197,45 @@ async function pfilatesLogoDataUrl(): Promise<string | null> {
     return `data:image/png;base64,${btoa(binary)}`
   } catch {
     return null
+  }
+}
+
+function loadLogoImage(src: string): Promise<{ width: number; height: number; draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void }> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => {
+      resolve({
+        width: image.width,
+        height: image.height,
+        draw: (ctx, w, h) => {
+          ctx.drawImage(image, 0, 0, w, h)
+        },
+      })
+    }
+    image.onerror = () => reject(new Error('logo decode failed'))
+    image.src = src
+  })
+}
+
+/** Shrink the 1000px PNG so jsPDF embed stays small on phones. No-ops in Node / if canvas fails. */
+async function downscaleLogoForPdf(dataUrl: string, maxWidthPx = 420): Promise<string> {
+  try {
+    if (typeof document === 'undefined' || typeof Image === 'undefined') return dataUrl
+    const image = await loadLogoImage(dataUrl)
+    if (!image.width || !image.height) return dataUrl
+    const scale = Math.min(1, maxWidthPx / image.width)
+    const width = Math.max(1, Math.round(image.width * scale))
+    const height = Math.max(1, Math.round(image.height * scale))
+    if (scale >= 1) return dataUrl
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return dataUrl
+    image.draw(ctx, width, height)
+    return canvas.toDataURL('image/png')
+  } catch {
+    return dataUrl
   }
 }
 
@@ -211,13 +279,21 @@ export async function buildBladderDiaryPdf(
   })
 
   const logo = options && 'logoDataUrl' in options ? options.logoDataUrl ?? null : await pfilatesLogoDataUrl()
+  let drewLogo = false
   if (logo) {
-    const logoWidth = 168
-    const logoHeight = logoWidth * (281 / 1000)
-    ensureSpace(logoHeight + 8)
-    pdf.addImage(logo, 'PNG', margin, y, logoWidth, logoHeight)
-    y += logoHeight + 10
-  } else {
+    try {
+      const embed = await downscaleLogoForPdf(logo)
+      const logoWidth = 168
+      const logoHeight = logoWidth * (281 / 1000)
+      ensureSpace(logoHeight + 8)
+      pdf.addImage(embed, 'PNG', margin, y, logoWidth, logoHeight)
+      y += logoHeight + 10
+      drewLogo = true
+    } catch {
+      drewLogo = false
+    }
+  }
+  if (!drewLogo) {
     pdf.setTextColor(94, 107, 84)
     writeWrapped(model.brand, 22, 'bold', 2)
   }
@@ -302,6 +378,10 @@ export async function exportBladderDiaryPdf(report: BladderDiaryReport): Promise
       return
     } catch (error) {
       if (isShareAbort(error)) return
+      if (downloadAttributeIsNoop()) {
+        openPdfInNewTab(blob)
+        return
+      }
     }
   }
 
