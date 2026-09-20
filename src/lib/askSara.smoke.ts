@@ -11,7 +11,8 @@ import {
   ensureDidStreamSessionBody,
 } from './saraStream.ts'
 import { SARA_VOICE_OFFLINE } from './speakSara.ts'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { SARA_PORTRAIT_STILL } from './saraPortrait.ts'
 
 function assert(cond: unknown, msg: string) {
   if (!cond) {
@@ -250,7 +251,27 @@ assert(!/talking\s*&&\s*videoUrl/.test(portraitSrc), 'portrait is not gated on T
 assert(/streaming/.test(portraitSrc), 'portrait shows the live Agents stream')
 assert(/playsInline/.test(portraitSrc), 'stream video is playsInline')
 assert(/sara-stream-video/.test(portraitSrc), 'stream video stays painted under the still')
+assert(SARA_PORTRAIT_STILL === '/avatar/sara-default.png', 'shared Sara portrait is the D-ID idle still')
+assert(
+  existsSync(new URL('../../public/avatar/sara-default.png', import.meta.url)),
+  'idle still file exists on disk',
+)
+assert(/SARA_PORTRAIT_STILL/.test(portraitSrc), 'TalkingPortrait idle uses the shared Sara portrait')
 assert(/poster=\{STILL\}/.test(portraitSrc), 'video poster is the idle still so an empty track is not a hole')
+assert(
+  !/sara-neutral|sara-listening|sara-celebrate/.test(portraitSrc),
+  'Ask Sara idle is not a mood gallery',
+)
+
+const homePortraitSrc = readFileSync(new URL('../components/SaraPortrait.tsx', import.meta.url), 'utf8')
+assert(/SARA_PORTRAIT_STILL/.test(homePortraitSrc), 'Home portrait uses the shared Sara still')
+assert(!/sara-neutral/.test(homePortraitSrc), 'Home does not swap in sara-neutral')
+assert(!/sara-listening/.test(homePortraitSrc), 'Home does not swap in sara-listening')
+assert(!/sara-celebrate/.test(homePortraitSrc), 'Home does not swap in sara-celebrate')
+assert(!/AVATARS/.test(homePortraitSrc), 'Home does not stack a mood gallery of faces')
+
+const homePageSrc = readFileSync(new URL('../pages/Home.tsx', import.meta.url), 'utf8')
+assert(/SaraPortrait/.test(homePageSrc), 'Home renders SaraPortrait')
 assert(/overflow-hidden/.test(portraitSrc), 'crops the fullscreen portrait with overflow-hidden')
 assert(/sara-portrait-cover/.test(portraitSrc), 'portrait uses cover layout so still + stream fill the viewport')
 assert(/object-cover/.test(portraitSrc), 'still and stream video cover the portrait box')
@@ -396,7 +417,7 @@ const mainSrc = readFileSync(new URL('../main.tsx', import.meta.url), 'utf8')
 assert(/registration\.update\(/.test(mainSrc), 'service worker checks for a new bundle')
 
 const viteSrc = readFileSync(new URL('../../vite.config.ts', import.meta.url), 'utf8')
-assert(/sara-pwa-20260920-ask-sara-bold-ink/.test(viteSrc), 'PWA cacheId busts a phone still serving white-halo overlay copy')
+assert(/sara-pwa-20260920-home-sara-portrait/.test(viteSrc), 'PWA cacheId busts a phone still serving mood-gallery Home faces')
 assert(/NetworkFirst/.test(viteSrc), 'navigations are NetworkFirst so iOS PWA gets new index.html')
 assert(!/\*\.\{js,css,html/.test(viteSrc), 'does not precache index.html (stale PWA)')
 

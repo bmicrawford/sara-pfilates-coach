@@ -68,7 +68,7 @@ The durable public origin is the **Cloudflare Worker**, not an ephemeral tryclou
 
 ### Talking-head / lip-sync
 
-Ask Sara is a fullscreen talking surface: the idle still and the live stream **cover the viewport** (edge to edge). Questions and answers sit in a **transparent overlay** so Sara’s face stays visible behind the text. Idle is the locked still (`public/avatar/sara-default.png`) — no SVG mouth overlay.
+Ask Sara is a fullscreen talking surface: the idle still and the live stream **cover the viewport** (edge to edge). Questions and answers sit in a **transparent overlay** so Sara’s face stays visible behind the text. Idle is the locked still (`public/avatar/sara-default.png`, `SARA_PORTRAIT_STILL`) — no SVG mouth overlay. Home and the other circular portraits use that same still; they do not cycle mood faces.
 
 **Heard voice** is D-ID Agents stream audio when `speak()` has started **and** the WebRTC `<video>` has visible playing frames. Keep the element muted until that moment so late `play()` can decode, then unmute / enable audio tracks together so audio cannot lead the mouth — do **not** also play xAI `ara` (no double voice). Do not start ara while waiting for D-ID. If connect/speak fails, hits the Lite session cap, `srcObject` never attaches, or a short budget elapses with **no playable AV**, fall back to `POST /speak` ara + still (or muted video if frames exist without audio). Never wait on a D-ID mp4. Never skip ara after a frozen / empty video.
 
@@ -137,7 +137,7 @@ npx surge ./dist https://sara-pfilates.surge.sh
 ## TODO (later)
 
 - Install hint: `beforeinstallprompt` plus iOS Add to Home Screen tip
-- Portrait moods: idle = default smile, listening while logging/typing or waiting on Grok, celebrate on a successful save (especially exercise), quiet/neutral after idle
+- Portrait captions still follow mood; the face is always the Ask Sara idle still
 - Stub push (default channel) and SMS fallback after 3 days with no open
 
 Kajabi API is a placeholder comment only. Push and SMS are hooks, not live sends.
