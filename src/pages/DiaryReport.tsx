@@ -10,6 +10,12 @@ import {
   latestDiary,
   summarizeLog,
 } from '../lib/diary'
+import {
+  DOWNLOAD_PDF_LABEL,
+  DIARY_REPORT_EMPTY,
+  bladderDiaryReportSubtitle,
+  exportBladderDiaryPdf,
+} from '../lib/diaryPdf'
 import { finishActiveDiary, readDiaries, readLogs, startNewDiary } from '../lib/mockServer'
 import { formatDay, formatTime } from '../lib/storage'
 
@@ -18,6 +24,8 @@ export function DiaryReport() {
   const [diaries, setDiaries] = useState(() => readDiaries())
   const [logs] = useState(() => readLogs())
   const [selectedId, setSelectedId] = useState(() => latestDiary(readDiaries())?.id ?? null)
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const [pdfError, setPdfError] = useState<string | null>(null)
   const selected = diaries.find((diary) => diary.id === selectedId) ?? latestDiary(diaries)
 
   const report = useMemo(
@@ -56,13 +64,33 @@ export function DiaryReport() {
     <ReportShell
       title="Bladder diary report"
       status={report.status}
-      subtitle={
-        report.status === 'in_progress'
-          ? `Started ${formatDay(report.startedAt)}. This report is readable while the diary is still open.`
-          : `Started ${formatDay(report.startedAt)}${report.completedAt ? ` · finished ${formatDay(report.completedAt)}` : ''}.`
-      }
+      subtitle={bladderDiaryReportSubtitle(report)}
     >
       <DiaryPicker diaries={picker} selectedId={selected.id} onSelect={setSelectedId} />
+
+      <button
+        type="button"
+        className="mb-5 w-full rounded-2xl bg-sage py-4 font-semibold text-white shadow-card disabled:opacity-60"
+        disabled={pdfBusy}
+        onClick={() => {
+          setPdfError(null)
+          setPdfBusy(true)
+          void exportBladderDiaryPdf(report)
+            .catch(() => {
+              setPdfError('Could not prepare the PDF. Try again.')
+            })
+            .finally(() => {
+              setPdfBusy(false)
+            })
+        }}
+      >
+        {pdfBusy ? 'Preparing PDF…' : DOWNLOAD_PDF_LABEL}
+      </button>
+      {pdfError ? (
+        <p role="alert" className="mb-5 text-center text-sm text-ink">
+          {pdfError}
+        </p>
+      ) : null}
 
       <section className="grid grid-cols-2 gap-3">
         <Stat label="Drinks" value={report.drinks} />
@@ -74,8 +102,7 @@ export function DiaryReport() {
 
       {report.entries.length === 0 ? (
         <p className="mt-5 rounded-2xl bg-cream-card px-4 py-4 text-sm text-ink shadow-card">
-          Nothing recorded yet. Keep logging from Home — this report stays available while the diary
-          is in progress.
+          {DIARY_REPORT_EMPTY}
         </p>
       ) : (
         <section className="mt-6 space-y-5">

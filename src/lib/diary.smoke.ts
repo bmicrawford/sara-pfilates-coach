@@ -13,10 +13,19 @@ import {
   finishDiary,
   isDiaryOpen,
   latestDiary,
+  localDayKey,
   logsForDiary,
   startDiary,
   summarizeLog,
 } from './diary.ts'
+import {
+  DOWNLOAD_PDF_LABEL,
+  bladderDiaryPdfDoc,
+  bladderDiaryPdfFilename,
+  bladderDiaryPdfPlainText,
+  bladderDiaryReportSubtitle,
+  buildBladderDiaryPdf,
+} from './diaryPdf.ts'
 import type { Diary, LogEntry } from './types.ts'
 
 function assert(cond: unknown, msg: string) {
@@ -151,9 +160,46 @@ assert(/NeedSession/.test(appSrc) && /path="\/diary"[\s\S]*NeedSession/.test(app
 assert(/path="\/exercise"[\s\S]*NeedSession/.test(appSrc), 'exercise log stays behind the redeem session')
 
 const diaryPage = readFileSync(new URL('../pages/DiaryReport.tsx', import.meta.url), 'utf8')
-assert(/In progress/.test(diaryPage), 'diary report names the in-progress state')
-assert(/while the diary is still open/.test(diaryPage), 'diary report stays readable before finish')
+assert(/DOWNLOAD_PDF_LABEL/.test(diaryPage), 'diary report offers Download PDF')
+assert(/exportBladderDiaryPdf/.test(diaryPage), 'diary report exports the shown report as a PDF')
+assert(
+  /\{pdfBusy \? 'Preparing PDF…' : DOWNLOAD_PDF_LABEL\}/.test(diaryPage),
+  'Download PDF is rendered on the in-progress and completed report',
+)
+assert(
+  !/No diary yet[\s\S]{0,500}DOWNLOAD_PDF_LABEL/.test(diaryPage),
+  'empty no-diary state does not offer a PDF',
+)
+assert(/bladderDiaryReportSubtitle/.test(diaryPage), 'diary report names the in-progress state via shared copy')
+assert(/while the diary is still open/.test(bladderDiaryReportSubtitle(bladder)), 'diary report stays readable before finish')
 assert(/bladderDiaryReport/.test(diaryPage), 'diary page uses the shared report helper')
+
+assert(DOWNLOAD_PDF_LABEL === 'Download PDF', 'Download PDF label is exact')
+assert(
+  bladderDiaryPdfFilename(open.startedAt) === `pfilates-bladder-diary-${localDayKey(open.startedAt)}.pdf`,
+  'PDF filename uses pfilates-bladder-diary-YYYY-MM-DD',
+)
+assert(
+  /^pfilates-bladder-diary-\d{4}-\d{2}-\d{2}\.pdf$/.test(bladderDiaryPdfFilename(open.startedAt)),
+  'PDF filename is date-stamped',
+)
+
+const pdfDoc = bladderDiaryPdfDoc(bladder)
+const pdfText = bladderDiaryPdfPlainText(pdfDoc)
+assert(pdfDoc.title === 'Bladder diary report', 'PDF title matches the report screen')
+assert(pdfDoc.status === 'In progress', 'in-progress PDF keeps the on-screen status')
+assert(
+  pdfDoc.stats.map((stat) => `${stat.label}:${stat.value}`).join('|') ===
+    'Drinks:1|Voids:0|Leaks:1|Urges:0|Pad changes:1',
+  'PDF stats match the on-screen totals',
+)
+assert(pdfText.includes('Water · Glass'), 'PDF includes the same drink line as the report')
+assert(pdfText.includes('Leak · Light'), 'PDF includes the same leak line as the report')
+assert(!/cure|treat|diagnos|clinician promise/i.test(pdfText), 'PDF makes no new medical claim')
+
+const finishedPdf = bladderDiaryPdfDoc(bladderDiaryReport(done, logs))
+assert(finishedPdf.status === 'Finished', 'completed diary PDF is still available')
+assert(finishedPdf.stats.find((stat) => stat.label === 'Drinks')?.value === 1, 'finished PDF uses that diary’s events')
 
 const exercisePage = readFileSync(new URL('../pages/ExerciseLog.tsx', import.meta.url), 'utf8')
 assert(/in progress/.test(exercisePage), 'exercise log copy allows in-progress viewing')
@@ -163,6 +209,15 @@ const askSrc = readFileSync(new URL('../pages/AskSara.tsx', import.meta.url), 'u
 assert(/ask-sara-stage/.test(askSrc) && /ask-sara-panel/.test(askSrc), 'Ask Sara fullscreen glass overlay is intact')
 assert(/font-bold/.test(askSrc) && /font-semibold/.test(askSrc), 'Ask Sara overlay copy stays bold')
 assert(/speakSaraStream/.test(askSrc) && /rewritePfilatesForSpeech/.test(readFileSync(new URL('./saraStream.ts', import.meta.url), 'utf8')), 'Streams + PfilAtes speak rewrite stay in place')
+
+const built = await buildBladderDiaryPdf(bladder)
+assert(built.filename === bladderDiaryPdfFilename(open.startedAt), 'built PDF keeps the dated filename')
+assert(built.blob.type === 'application/pdf', 'built PDF is an application/pdf blob')
+const pdfHeader = new TextDecoder('latin1').decode(built.bytes.slice(0, 5))
+assert(pdfHeader === '%PDF-', 'built file starts with a PDF header')
+const pdfRaw = new TextDecoder('latin1').decode(built.bytes)
+assert(pdfRaw.includes('Bladder diary report'), 'generated PDF embeds the report title')
+assert(pdfRaw.includes('Drinks'), 'generated PDF embeds the drinks stat label')
 
 if (process.exitCode) {
   console.error('diary smoke failed')
