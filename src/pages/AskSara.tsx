@@ -195,13 +195,13 @@ export function AskSara() {
       <div className="ask-sara-overlay relative z-10 flex h-full min-h-0 flex-col">
         <div className="ask-sara-chrome shrink-0 pb-6">
           <header className="flex items-center justify-between px-5 pb-2 safe-top">
-            <Link to="/" className="text-sm font-medium text-cream">
+            <Link to="/" className="ask-sara-chip text-sm font-medium">
               ← Home
             </Link>
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-cream/80">Ask Sara</p>
+            <p className="ask-sara-chip text-xs font-medium uppercase tracking-[0.18em]">Ask Sara</p>
             <button
               type="button"
-              className="text-xs font-medium text-cream"
+              className="ask-sara-chip text-xs font-medium"
               onClick={() => {
                 if (live && !muted) {
                   haltPlayback()
@@ -216,8 +216,8 @@ export function AskSara() {
               {muted ? 'Unmute' : live ? 'Stop' : 'Mute'}
             </button>
           </header>
-          <p className="ask-sara-greeting px-5 text-center font-serif text-xl text-cream">{greeting}</p>
-          <p className="px-5 pt-0.5 text-center text-sm text-cream/90">
+          <p className="ask-sara-greeting px-5 text-center font-serif text-xl">{greeting}</p>
+          <p className="ask-sara-greeting px-5 pt-0.5 text-center text-sm">
             {live ? 'Sara is talking.' : 'I’m listening — ask the real question.'}
           </p>
         </div>
