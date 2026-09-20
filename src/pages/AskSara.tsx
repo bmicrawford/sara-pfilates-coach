@@ -231,7 +231,7 @@ export function AskSara() {
 
           <div className="ask-sara-panel min-h-0 space-y-3 overflow-y-auto overscroll-contain">
             {messages.length === 0 ? (
-              <p className="text-sm leading-relaxed text-ink">
+              <p className="text-sm leading-relaxed">
                 Try “how much water?”, “why did I leak when I sneezed?”, or “what are symptoms of a
                 UTI?”
               </p>
@@ -240,7 +240,7 @@ export function AskSara() {
               <div
                 key={m.id}
                 className={`max-w-[90%] text-sm leading-relaxed ${
-                  m.from === 'you' ? 'ml-auto text-right font-medium text-sage-deep' : 'text-ink'
+                  m.from === 'you' ? 'ml-auto text-right font-medium' : ''
                 }`}
               >
                 {m.text}
@@ -250,7 +250,7 @@ export function AskSara() {
                 !isSaraUnreachable(m.text) ? (
                   <button
                     type="button"
-                    className="mt-2 block text-xs font-medium text-sage-deep"
+                    className="mt-2 block text-xs font-medium"
                     onClick={() => {
                       if (live) {
                         haltPlayback()
@@ -267,7 +267,7 @@ export function AskSara() {
                 ) : null}
               </div>
             ))}
-            {busy ? <div className="text-sm text-ink-mute">Listening…</div> : null}
+            {busy ? <div className="text-sm">Listening…</div> : null}
             <div ref={bottom} />
           </div>
         </div>
@@ -279,7 +279,7 @@ export function AskSara() {
           <label className="block">
             <span className="sr-only">Your note</span>
             <textarea
-              className="ask-sara-input min-h-[4.5rem] w-full resize-none rounded-2xl px-3.5 py-3 text-ink outline-none placeholder:text-ink-faint disabled:opacity-70"
+              className="ask-sara-input min-h-[4.5rem] w-full resize-none rounded-2xl px-3.5 py-3 outline-none placeholder:text-ink-faint disabled:opacity-70"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="What’s going on?"

@@ -73,7 +73,7 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
-          cacheId: 'sara-pwa-20260920-pfilates-speech',
+          cacheId: 'sara-pwa-20260920-ask-sara-black-ink',
           skipWaiting: true,
           clientsClaim: true,
           cleanupOutdatedCaches: true,
