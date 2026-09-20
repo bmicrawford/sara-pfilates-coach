@@ -20,6 +20,7 @@ export type DrinkLog = {
   id: string
   kind: 'drink'
   at: string
+  diaryId?: string
   beverage: string
   amount: string
   note?: string
@@ -29,6 +30,7 @@ export type VoidLeakLog = {
   id: string
   kind: 'voidLeak'
   at: string
+  diaryId?: string
   what: 'void' | 'leak' | 'urge'
   intensity: string
   note?: string
@@ -38,6 +40,7 @@ export type PadLog = {
   id: string
   kind: 'pad'
   at: string
+  diaryId?: string
   reason: string
 }
 
@@ -45,12 +48,21 @@ export type ExerciseLog = {
   id: string
   kind: 'exercise'
   at: string
+  diaryId?: string
   activity: string
   minutes: string
   felt: string
 }
 
 export type LogEntry = DrinkLog | VoidLeakLog | PadLog | ExerciseLog
+
+export type Diary = {
+  id: string
+  startedAt: string
+  completedAt?: string
+}
+
+export type DiaryViewStatus = 'in_progress' | 'completed'
 
 export type ChatMessage = {
   id: string

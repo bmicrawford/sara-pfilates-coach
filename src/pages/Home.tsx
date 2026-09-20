@@ -4,7 +4,14 @@ import { BottomSheet } from '../components/BottomSheet'
 import { Chip, Field, inputClass } from '../components/Chip'
 import { InstallHint } from '../components/InstallHint'
 import { SaraPortrait } from '../components/SaraPortrait'
-import { addLog, readLogs } from '../lib/mockServer'
+import {
+  DIARY_ACTIVE_CUE,
+  DIARY_STARTED_TOAST,
+  START_NEW_DIARY_LABEL,
+  activeDiary,
+  summarizeLog,
+} from '../lib/diary'
+import { addDiaryLog, finishActiveDiary, readDiaries, readLogs, startNewDiary } from '../lib/mockServer'
 import { markCompanionOpened } from '../lib/notifications'
 import {
   formatTime,
@@ -13,7 +20,7 @@ import {
   toDatetimeLocal,
   uid,
 } from '../lib/storage'
-import type { LogEntry, Mood, Session, SheetId } from '../lib/types'
+import type { Diary, LogEntry, Mood, Session, SheetId } from '../lib/types'
 
 const IDLE_MS = 11_000
 const CELEBRATE_MS = 3800
@@ -26,7 +33,10 @@ export function Home({ session }: Props) {
   const [mood, setMood] = useState<Mood>('default')
   const [sheet, setSheet] = useState<SheetId>(null)
   const [logs, setLogs] = useState<LogEntry[]>(() => readLogs())
+  const [diaries, setDiaries] = useState<Diary[]>(() => readDiaries())
   const [smsNote, setSmsNote] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const active = useMemo(() => activeDiary(diaries), [diaries])
 
   useEffect(() => {
     const evaled = markCompanionOpened()
@@ -65,8 +75,24 @@ export function Home({ session }: Props) {
   }
 
   const saveLog = (entry: LogEntry) => {
-    addLog(entry)
+    addDiaryLog(entry)
     setLogs(readLogs())
+    setSheet(null)
+    setMood('celebrate')
+    window.setTimeout(() => setMood('default'), CELEBRATE_MS)
+  }
+
+  const beginDiary = () => {
+    startNewDiary()
+    setDiaries(readDiaries())
+    setToast(DIARY_STARTED_TOAST)
+    setMood('listening')
+    window.setTimeout(() => setToast(null), 4800)
+  }
+
+  const finishDiary = () => {
+    finishActiveDiary()
+    setDiaries(readDiaries())
     setSheet(null)
     setMood('celebrate')
     window.setTimeout(() => setMood('default'), CELEBRATE_MS)
@@ -98,20 +124,62 @@ export function Home({ session }: Props) {
         <p className="mb-4 rounded-2xl bg-sage-mist px-4 py-3 text-xs text-ink-mute">{smsNote}</p>
       ) : null}
 
+      {active ? (
+        <p
+          role="status"
+          className="mb-4 rounded-2xl bg-sage-mist px-4 py-3 text-sm text-ink"
+        >
+          {DIARY_ACTIVE_CUE}
+        </p>
+      ) : null}
+
       <section className="rounded-2xl bg-cream-card px-4 py-3 shadow-card">
         <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Today</p>
         <p className="mt-1 text-sm text-ink">
-          {today.length === 0
-            ? 'Nothing logged yet — whenever you’re ready.'
-            : `${counts.drink} drink${counts.drink === 1 ? '' : 's'} · ${counts.voidLeak} void/leak · ${counts.pad} pad · ${counts.exercise} exercise`}
+          {!active
+            ? 'Start a diary to log drinks, voids, leaks, pads, and exercise.'
+            : today.length === 0
+              ? 'Nothing logged yet — whenever you’re ready.'
+              : `${counts.drink} drink${counts.drink === 1 ? '' : 's'} · ${counts.voidLeak} void/leak · ${counts.pad} pad · ${counts.exercise} exercise`}
         </p>
       </section>
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <Action label="Log a drink" hint="Sip, glass, tea" onClick={() => openSheet('drink')} />
-        <Action label="Void or leak" hint="No judgment" onClick={() => openSheet('voidLeak')} />
-        <Action label="Pad change" hint="Time + reason" onClick={() => openSheet('pad')} />
-        <Action label="Exercise" hint="A set that happened" onClick={() => openSheet('exercise')} />
+      {active ? (
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Action label="Log a drink" hint="Sip, glass, tea" onClick={() => openSheet('drink')} />
+          <Action label="Void or leak" hint="No judgment" onClick={() => openSheet('voidLeak')} />
+          <Action label="Pad change" hint="Time + reason" onClick={() => openSheet('pad')} />
+          <Action label="Exercise" hint="A set that happened" onClick={() => openSheet('exercise')} />
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="mt-5 w-full rounded-2xl bg-sage py-4 text-center font-semibold text-white shadow-card"
+          onClick={beginDiary}
+        >
+          {START_NEW_DIARY_LABEL}
+        </button>
+      )}
+
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <Link
+          to="/diary"
+          className="rounded-2xl bg-cream-card px-4 py-4 text-left shadow-card transition hover:ring-2 hover:ring-sage/30"
+        >
+          <span className="block font-semibold text-ink">Bladder diary report</span>
+          <span className="mt-1 block text-xs text-ink-mute">
+            {active ? 'Open while in progress' : 'Readable before it is finished'}
+          </span>
+        </Link>
+        <Link
+          to="/exercise"
+          className="rounded-2xl bg-cream-card px-4 py-4 text-left shadow-card transition hover:ring-2 hover:ring-sage/30"
+        >
+          <span className="block font-semibold text-ink">Exercise log</span>
+          <span className="mt-1 block text-xs text-ink-mute">
+            {active ? 'Open while in progress' : 'Sessions as you log them'}
+          </span>
+        </Link>
       </div>
 
       <Link
@@ -120,6 +188,25 @@ export function Home({ session }: Props) {
       >
         Ask Sara
       </Link>
+
+      {active ? (
+        <button
+          type="button"
+          className="mt-3 w-full rounded-2xl border border-sage/30 py-3 text-sm font-medium text-sage-deep"
+          onClick={finishDiary}
+        >
+          Finish this diary
+        </button>
+      ) : null}
+
+      {toast ? (
+        <div
+          role="status"
+          className="fixed inset-x-0 bottom-6 z-30 mx-auto w-[min(100%-2rem,398px)] rounded-2xl bg-ink px-4 py-3 text-sm text-cream shadow-card"
+        >
+          {toast}
+        </div>
+      ) : null}
 
       {today.length > 0 ? (
         <section className="mt-8">
@@ -130,7 +217,7 @@ export function Home({ session }: Props) {
                 key={entry.id}
                 className="flex items-center justify-between rounded-2xl bg-cream-card px-4 py-3 text-sm shadow-card"
               >
-                <span className="text-ink">{summarize(entry)}</span>
+                <span className="text-ink">{summarizeLog(entry)}</span>
                 <span className="text-ink-faint">{formatTime(entry.at)}</span>
               </li>
             ))}
@@ -190,19 +277,6 @@ function firstName(email: string): string {
   const local = email.split('@')[0] ?? 'friend'
   const piece = local.split(/[._-]/)[0] ?? local
   return piece ? piece.charAt(0).toUpperCase() + piece.slice(1) : 'friend'
-}
-
-function summarize(entry: LogEntry): string {
-  if (entry.kind === 'drink') return `${entry.beverage} · ${entry.amount}`
-  if (entry.kind === 'voidLeak') return `${labelWhat(entry.what)} · ${entry.intensity}`
-  if (entry.kind === 'pad') return `Pad · ${entry.reason}`
-  return `${entry.activity} · ${entry.minutes} min`
-}
-
-function labelWhat(what: 'void' | 'leak' | 'urge'): string {
-  if (what === 'void') return 'Void'
-  if (what === 'leak') return 'Leak'
-  return 'Urge'
 }
 
 function DrinkSheet({

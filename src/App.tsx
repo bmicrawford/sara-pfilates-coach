@@ -3,6 +3,8 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { readSession } from './lib/mockServer'
 import type { Session } from './lib/types'
 import { AskSara } from './pages/AskSara'
+import { DiaryReport } from './pages/DiaryReport'
+import { ExerciseLog } from './pages/ExerciseLog'
 import { Home } from './pages/Home'
 import { Move } from './pages/Move'
 import { Redeem } from './pages/Redeem'
@@ -39,6 +41,22 @@ export default function App() {
             element={
               <NeedSession session={session}>
                 <AskSara />
+              </NeedSession>
+            }
+          />
+          <Route
+            path="/diary"
+            element={
+              <NeedSession session={session}>
+                <DiaryReport />
+              </NeedSession>
+            }
+          />
+          <Route
+            path="/exercise"
+            element={
+              <NeedSession session={session}>
+                <ExerciseLog />
               </NeedSession>
             }
           />
