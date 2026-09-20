@@ -265,6 +265,7 @@ assert(!/mask-image/.test(cssSrc), 'does not CSS-mask the portrait (iOS can comp
 assert(!/translateZ\(0\)/.test(cssSrc), 'does not promote the portrait onto a 3D layer that hides the still')
 assert(/sara-portrait-cover/.test(cssSrc), 'cover layout pins the still and stream to the viewport')
 assert(/ask-sara-panel/.test(cssSrc), 'overlay text box is defined in CSS')
+assert(/ask-sara-chip/.test(cssSrc), 'header chips keep Home/Mute readable on the still')
 assert(/backdrop-filter/.test(cssSrc), 'overlay stays see-through so the face remains visible')
 assert(
   /\.ask-sara-stage[\s\S]*inset:\s*0/.test(cssSrc),
