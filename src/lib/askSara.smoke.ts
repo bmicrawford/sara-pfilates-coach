@@ -268,6 +268,22 @@ assert(/ask-sara-panel/.test(cssSrc), 'overlay text box is defined in CSS')
 assert(/ask-sara-chip/.test(cssSrc), 'header chips keep Home/Mute readable on the still')
 assert(/backdrop-filter/.test(cssSrc), 'overlay stays see-through so the face remains visible')
 assert(
+  /\.ask-sara-panel[\s\S]*?background:\s*rgba\(246,\s*243,\s*238,\s*0\.(1[5-9]|2[0-5])\)/.test(cssSrc),
+  'Q&A glass fill stays in the 0.15–0.25 see-through range',
+)
+assert(
+  /\.ask-sara-note[\s\S]*?background:\s*rgba\(246,\s*243,\s*238,\s*0\.(1[5-9]|2[0-5])\)/.test(cssSrc),
+  'note glass fill stays in the 0.15–0.25 see-through range',
+)
+assert(
+  /\.ask-sara-panel[\s\S]*?backdrop-filter:\s*blur\([1-6]px\)/.test(cssSrc),
+  'Q&A glass uses a light blur so the face is not frosted over',
+)
+assert(
+  /\.ask-sara-panel[\s\S]*?text-shadow:/.test(cssSrc),
+  'Q&A text keeps a light halo so ink stays readable on the still',
+)
+assert(
   /\.ask-sara-stage[\s\S]*inset:\s*0/.test(cssSrc),
   'Ask Sara stage is edge-to-edge behind the overlay',
 )
