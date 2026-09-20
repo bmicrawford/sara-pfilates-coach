@@ -1,36 +1,41 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { PfilatesBrandHeader } from '../components/PfilatesLogo'
 import { DiaryPicker, ReportShell } from '../components/ReportShell'
 import {
+  BLADDER_TOTAL_FIELDS,
   START_NEW_DIARY_LABEL,
   bladderDiaryReport,
   canViewDiaryReport,
-  groupLogsByDay,
   isDiaryOpen,
   latestDiary,
   summarizeLog,
+  type DiaryDayReport,
 } from '../lib/diary'
 import {
   DOWNLOAD_PDF_LABEL,
   DIARY_REPORT_EMPTY,
   bladderDiaryReportSubtitle,
   exportBladderDiaryPdf,
+  incompleteDayLabel,
 } from '../lib/diaryPdf'
-import { finishActiveDiary, readDiaries, readLogs, startNewDiary } from '../lib/mockServer'
+import { finishActiveDiary, readDiaries, readLogs, startNewDiary, syncDiaryWindows } from '../lib/mockServer'
+import { formatDateOfBirth, readPatient } from '../lib/patient'
 import { formatDay, formatTime } from '../lib/storage'
 
 export function DiaryReport() {
   const navigate = useNavigate()
-  const [diaries, setDiaries] = useState(() => readDiaries())
+  const [diaries, setDiaries] = useState(() => syncDiaryWindows())
   const [logs] = useState(() => readLogs())
   const [selectedId, setSelectedId] = useState(() => latestDiary(readDiaries())?.id ?? null)
   const [pdfBusy, setPdfBusy] = useState(false)
   const [pdfError, setPdfError] = useState<string | null>(null)
   const selected = diaries.find((diary) => diary.id === selectedId) ?? latestDiary(diaries)
+  const patient = readPatient()
 
   const report = useMemo(
-    () => (selected ? bladderDiaryReport(selected, logs) : null),
-    [selected, logs],
+    () => (selected ? bladderDiaryReport(selected, logs, { patient }) : null),
+    [selected, logs, patient],
   )
 
   const picker = diaries.map((diary) => ({
@@ -58,14 +63,25 @@ export function DiaryReport() {
     )
   }
 
-  const grouped = groupLogsByDay(report.entries)
-
   return (
     <ReportShell
       title="Bladder diary report"
       status={report.status}
       subtitle={bladderDiaryReportSubtitle(report)}
     >
+      <PfilatesBrandHeader />
+
+      <section className="mb-5 rounded-2xl bg-cream-card px-4 py-4 shadow-card">
+        <p className="text-xs uppercase tracking-wide text-ink-faint">Patient</p>
+        <p className="mt-1 font-serif text-xl text-ink">{report.patientName}</p>
+        <p className="mt-1 text-sm text-ink">
+          Date of birth{' '}
+          {report.dateOfBirth.includes('-') && report.dateOfBirth.length === 10
+            ? formatDateOfBirth(report.dateOfBirth)
+            : report.dateOfBirth}
+        </p>
+      </section>
+
       <DiaryPicker diaries={picker} selectedId={selected.id} onSelect={setSelectedId} />
 
       <button
@@ -92,12 +108,10 @@ export function DiaryReport() {
         </p>
       ) : null}
 
-      <section className="grid grid-cols-2 gap-3">
-        <Stat label="Drinks" value={report.drinks} />
-        <Stat label="Voids" value={report.voids} />
-        <Stat label="Leaks" value={report.leaks} />
-        <Stat label="Urges" value={report.urges} />
-        <Stat label="Pad changes" value={report.pads} />
+      <section className="space-y-4">
+        {report.days.map((day) => (
+          <DayCard key={day.day} day={day} />
+        ))}
       </section>
 
       {report.entries.length === 0 ? (
@@ -105,23 +119,19 @@ export function DiaryReport() {
           {DIARY_REPORT_EMPTY}
         </p>
       ) : (
-        <section className="mt-6 space-y-5">
-          {grouped.map((group) => (
-            <div key={group.day}>
-              <h2 className="font-serif text-lg text-ink">{formatDay(group.items[0]?.at ?? group.day)}</h2>
-              <ul className="mt-2 space-y-2">
-                {group.items.map((entry) => (
-                  <li
-                    key={entry.id}
-                    className="flex items-center justify-between rounded-2xl bg-cream-card px-4 py-3 text-sm shadow-card"
-                  >
-                    <span className="text-ink">{summarizeLog(entry)}</span>
-                    <span className="text-ink-faint">{formatTime(entry.at)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+        <section className="mt-6 space-y-3">
+          <h2 className="font-serif text-lg text-ink">Logged events</h2>
+          <ul className="space-y-2">
+            {report.entries.map((entry) => (
+              <li
+                key={entry.id}
+                className="flex items-center justify-between rounded-2xl bg-cream-card px-4 py-3 text-sm shadow-card"
+              >
+                <span className="text-ink">{summarizeLog(entry)}</span>
+                <span className="text-ink-faint">{formatTime(entry.at)}</span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -149,11 +159,33 @@ export function DiaryReport() {
   )
 }
 
+function DayCard({ day }: { day: DiaryDayReport }) {
+  const badge = incompleteDayLabel(day)
+  return (
+    <section className="rounded-2xl bg-cream-card px-4 py-4 shadow-card">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-serif text-xl text-ink">{day.label}</h2>
+        {badge ? (
+          <span className="rounded-full bg-sage-mist px-3 py-1 text-xs font-medium text-sage-deep">
+            {badge}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        {BLADDER_TOTAL_FIELDS.map((field) => (
+          <Stat key={field.key} label={field.label} value={day[field.key]} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl bg-cream-card px-4 py-3 shadow-card">
+    <div className="rounded-2xl bg-cream px-4 py-3">
       <p className="text-xs uppercase tracking-wide text-ink-faint">{label}</p>
       <p className="mt-1 font-serif text-2xl text-ink">{value}</p>
     </div>
   )
 }
+

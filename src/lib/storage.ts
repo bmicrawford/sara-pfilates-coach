@@ -51,6 +51,10 @@ export function formatDay(iso: string): string {
   })
 }
 
+export function formatDateTime(iso: string): string {
+  return `${formatDay(iso)} · ${formatTime(iso)}`
+}
+
 export function isSameLocalDay(iso: string, vs = new Date()): boolean {
   const d = new Date(iso)
   return (

@@ -11,7 +11,8 @@ import {
   activeDiary,
   summarizeLog,
 } from '../lib/diary'
-import { addDiaryLog, finishActiveDiary, readDiaries, readLogs, startNewDiary } from '../lib/mockServer'
+import { addDiaryLog, finishActiveDiary, readDiaries, readLogs, startNewDiary, syncDiaryWindows } from '../lib/mockServer'
+import { patientFirstName, readPatient } from '../lib/patient'
 import { markCompanionOpened } from '../lib/notifications'
 import {
   formatTime,
@@ -33,7 +34,8 @@ export function Home({ session }: Props) {
   const [mood, setMood] = useState<Mood>('default')
   const [sheet, setSheet] = useState<SheetId>(null)
   const [logs, setLogs] = useState<LogEntry[]>(() => readLogs())
-  const [diaries, setDiaries] = useState<Diary[]>(() => readDiaries())
+  const [diaries, setDiaries] = useState<Diary[]>(() => syncDiaryWindows())
+  const patient = readPatient()
   const [smsNote, setSmsNote] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const active = useMemo(() => activeDiary(diaries), [diaries])
@@ -112,7 +114,7 @@ export function Home({ session }: Props) {
       <div className="mt-6">
         <SaraPortrait mood={mood} />
         <p className="mt-1 text-center text-sm text-ink-mute">
-          {greeting()}, {firstName(session.email)}.
+          {greeting()}, {patientFirstName(patient) ?? firstName(session.email)}.
         </p>
       </div>
 

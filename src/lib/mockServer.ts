@@ -1,4 +1,4 @@
-import { activeDiary, finishDiary, startDiary } from './diary'
+import { activeDiary, completeElapsedDiaries, finishDiary, startDiary } from './diary'
 import { readJson, uid, writeJson, nowIso } from './storage'
 import type { ChatMessage, DeviceBinding, Diary, LogEntry, Session } from './types'
 
@@ -126,13 +126,22 @@ export function writeDiaries(diaries: Diary[]): void {
   writeJson('diaries', diaries)
 }
 
+/** Close any open diary whose first logged event was 72 hours ago. */
+export function syncDiaryWindows(now = nowIso()): Diary[] {
+  const next = completeElapsedDiaries(readDiaries(), readLogs(), now)
+  writeDiaries(next)
+  return next
+}
+
 export function startNewDiary(): Diary {
+  syncDiaryWindows()
   const { diaries, diary } = startDiary(readDiaries(), nowIso(), uid())
   writeDiaries(diaries)
   return diary
 }
 
 export function finishActiveDiary(): Diary | null {
+  syncDiaryWindows()
   const current = activeDiary(readDiaries())
   if (!current) return null
   const next = finishDiary(readDiaries(), current.id, nowIso())
@@ -141,6 +150,7 @@ export function finishActiveDiary(): Diary | null {
 }
 
 export function addDiaryLog(entry: LogEntry): LogEntry {
+  syncDiaryWindows()
   const active = activeDiary(readDiaries())
   const tagged: LogEntry = active && !entry.diaryId ? { ...entry, diaryId: active.id } : entry
   return addLog(tagged)
