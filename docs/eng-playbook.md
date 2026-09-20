@@ -41,7 +41,7 @@ Do not babysit long builds. Prefer a short, fail-loud check:
 |---|---|---|
 | App build | `npm run build` | Typecheck + Vite succeed. **Fails** if `VITE_SARA_API_URL` is `*.trycloudflare.com`. |
 | Ask Sara connector | `npm run verify:ask-api -- <worker-url>` | `GET /health` is reachable and `tts` is `ara` (or equivalent). **Fails** on trycloudflare. |
-| Local smokes | `npm run smoke:replies && npm run smoke:ask && npm run smoke:ask-copy && npm run smoke:speak && npm run smoke:verify-api` | No network secrets required. |
+| Local smokes | `npm run smoke:replies && npm run smoke:ask && npm run smoke:ask-copy && npm run smoke:speech && npm run smoke:speak && npm run smoke:verify-api` | No network secrets required. |
 | Deploy | Human only | Worker secret + `wrangler deploy` + Surge rebuild with the Worker URL. |
 
 Default connector timeout: **~12s**. If `/health` cannot DNS or connect, the phone demo is still on a dead origin — do not “fix” it by baking another tunnel.

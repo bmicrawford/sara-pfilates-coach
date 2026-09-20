@@ -34,6 +34,12 @@ assert(XAI_TTS_URL.includes('/v1/tts'), 'xAI TTS path')
 assert(clipSpeakText('  hello   there  ') === 'hello there', 'clips/collapses speak text')
 assert(clipSpeakText('x'.repeat(5000)).length === 4000, 'caps speak length')
 assert(
+  clipSpeakText('Try this PfilAtes squeeze.') === 'Try this fill-ah-tees squeeze.',
+  'ara /speak rewrites PfilAtes before TTS',
+)
+assert(clipSpeakText('pfilates') === 'fill-ah-tees', 'rewrite is case-insensitive')
+assert(clipSpeakText('Pilates class') === 'Pilates class', 'does not rewrite Pilates')
+assert(
   SARA_STILL_URL === 'https://sara-pfilates.surge.sh/avatar/sara-default.png',
   'default still is the live Surge avatar',
 )
