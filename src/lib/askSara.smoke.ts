@@ -265,7 +265,24 @@ assert(!/mask-image/.test(cssSrc), 'does not CSS-mask the portrait (iOS can comp
 assert(!/translateZ\(0\)/.test(cssSrc), 'does not promote the portrait onto a 3D layer that hides the still')
 assert(/sara-portrait-cover/.test(cssSrc), 'cover layout pins the still and stream to the viewport')
 assert(/ask-sara-panel/.test(cssSrc), 'overlay text box is defined in CSS')
+assert(/ask-sara-chip/.test(cssSrc), 'header chips keep Home/Mute readable on the still')
 assert(/backdrop-filter/.test(cssSrc), 'overlay stays see-through so the face remains visible')
+assert(
+  /\.ask-sara-panel[\s\S]*?background:\s*rgba\(246,\s*243,\s*238,\s*0\.(1[5-9]|2[0-5])\)/.test(cssSrc),
+  'Q&A glass fill stays in the 0.15–0.25 see-through range',
+)
+assert(
+  /\.ask-sara-note[\s\S]*?background:\s*rgba\(246,\s*243,\s*238,\s*0\.(1[5-9]|2[0-5])\)/.test(cssSrc),
+  'note glass fill stays in the 0.15–0.25 see-through range',
+)
+assert(
+  /\.ask-sara-panel[\s\S]*?backdrop-filter:\s*blur\([1-6]px\)/.test(cssSrc),
+  'Q&A glass uses a light blur so the face is not frosted over',
+)
+assert(
+  /\.ask-sara-panel[\s\S]*?text-shadow:/.test(cssSrc),
+  'Q&A text keeps a light halo so ink stays readable on the still',
+)
 assert(
   /\.ask-sara-stage[\s\S]*inset:\s*0/.test(cssSrc),
   'Ask Sara stage is edge-to-edge behind the overlay',
@@ -319,6 +336,7 @@ assert(/ask-sara-stage/.test(askSrc), 'Ask Sara keeps a dedicated fullscreen sta
 assert(/ask-sara-panel/.test(askSrc), 'questions and answers sit in a transparent overlay panel')
 assert(/ask-sara-input/.test(askSrc), 'compose uses a high-contrast field over the video')
 assert(/ask-sara-overlay/.test(askSrc), 'chrome and thread overlay the avatar instead of pushing it up')
+assert(/ask-sara-chip/.test(askSrc), 'header controls use contrast chips over the video')
 assert(!/bg-cream-card/.test(askSrc), 'Ask Sara does not use opaque cream cards over the face')
 assert(!/agentManager\.chat\(|\.chat\(/.test(askSrc), 'Ask Sara does not call agentManager.chat()')
 assert(!/requestSaraTalk/.test(askSrc), 'Ask Sara does not poll Talks mp4')
