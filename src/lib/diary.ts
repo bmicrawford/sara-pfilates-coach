@@ -15,10 +15,10 @@ export const EXERCISE_LOG_KIND: LogKind = 'exercise'
 export const START_NEW_DIARY_LABEL = 'Start New Diary'
 
 export const DIARY_ACTIVE_CUE =
-  'Your diary is open. Record each drink, void, leak, pad change, and exercise in this diary while it is in progress.'
+  'Your diary is open. Record each drink, void, leak, pad change, and exercise in this diary while it is in progress. You can download the PDF before the diary is finished.'
 
 export const DIARY_STARTED_TOAST =
-  'Diary started. Record events here as they happen. You can open the report while it is still in progress.'
+  'Diary started. Record events here as they happen. You can download the PDF while it is still in progress.'
 
 /** Clock and report days are 24-hour windows from the first logged event, not the Start New Diary tap. */
 export const DIARY_DAY_MS = 24 * 60 * 60 * 1000

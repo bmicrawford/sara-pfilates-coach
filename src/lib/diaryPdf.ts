@@ -11,10 +11,19 @@ import { formatDateOfBirth } from './patient.ts'
 import { formatDateTime, formatDay, formatTime } from './storage.ts'
 
 export const DOWNLOAD_PDF_LABEL = 'Download PDF'
+export const DOWNLOAD_PDF_ANYTIME_HINT =
+  'You can download this PDF before the diary is finished. Incomplete days are included as they are.'
 export const DIARY_REPORT_TITLE = 'Bladder diary report'
 export const DIARY_REPORT_EMPTY =
   'Nothing recorded yet. Keep logging from Home — this report stays available while the diary is in progress.'
 export const PFILATES_LOGO_SRC = '/brand/pfilates-logo.png'
+
+/** Any started diary can be exported — in progress or finished, 0–3 days complete. Never gated on finish / 72h / all days done. */
+export function canExportBladderDiaryPdf(
+  report: BladderDiaryReport | null | undefined,
+): report is BladderDiaryReport {
+  return report != null
+}
 
 export function bladderDiaryPdfFilename(startedAt: string): string {
   return `pfilates-bladder-diary-${localDayKey(startedAt)}.pdf`

@@ -4,11 +4,13 @@ import { BottomSheet } from '../components/BottomSheet'
 import { Chip, Field, inputClass } from '../components/Chip'
 import { InstallHint } from '../components/InstallHint'
 import { SaraPortrait } from '../components/SaraPortrait'
+import { DownloadDiaryPdfButton } from '../components/DownloadDiaryPdfButton'
 import {
   DIARY_ACTIVE_CUE,
   DIARY_STARTED_TOAST,
   START_NEW_DIARY_LABEL,
   activeDiary,
+  bladderDiaryReport,
   summarizeLog,
 } from '../lib/diary'
 import { addDiaryLog, finishActiveDiary, readDiaries, readLogs, startNewDiary, syncDiaryWindows } from '../lib/mockServer'
@@ -39,6 +41,10 @@ export function Home({ session }: Props) {
   const [smsNote, setSmsNote] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const active = useMemo(() => activeDiary(diaries), [diaries])
+  const activeReport = useMemo(
+    () => (active ? bladderDiaryReport(active, logs, { patient }) : null),
+    [active, logs, patient],
+  )
 
   useEffect(() => {
     const evaled = markCompanionOpened()
@@ -147,12 +153,15 @@ export function Home({ session }: Props) {
       </section>
 
       {active ? (
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <Action label="Log a drink" hint="Sip, glass, tea" onClick={() => openSheet('drink')} />
-          <Action label="Void or leak" hint="No judgment" onClick={() => openSheet('voidLeak')} />
-          <Action label="Pad change" hint="Time + reason" onClick={() => openSheet('pad')} />
-          <Action label="Exercise" hint="A set that happened" onClick={() => openSheet('exercise')} />
-        </div>
+        <>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <Action label="Log a drink" hint="Sip, glass, tea" onClick={() => openSheet('drink')} />
+            <Action label="Void or leak" hint="No judgment" onClick={() => openSheet('voidLeak')} />
+            <Action label="Pad change" hint="Time + reason" onClick={() => openSheet('pad')} />
+            <Action label="Exercise" hint="A set that happened" onClick={() => openSheet('exercise')} />
+          </div>
+          {activeReport ? <DownloadDiaryPdfButton report={activeReport} className="mt-3" /> : null}
+        </>
       ) : (
         <button
           type="button"
@@ -170,7 +179,7 @@ export function Home({ session }: Props) {
         >
           <span className="block font-semibold text-ink">Bladder diary report</span>
           <span className="mt-1 block text-xs text-ink-mute">
-            {active ? 'Open while in progress' : 'Readable before it is finished'}
+            {active ? 'Download PDF anytime — even if incomplete' : 'Readable before it is finished'}
           </span>
         </Link>
         <Link
