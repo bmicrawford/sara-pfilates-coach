@@ -319,6 +319,7 @@ assert(/ask-sara-stage/.test(askSrc), 'Ask Sara keeps a dedicated fullscreen sta
 assert(/ask-sara-panel/.test(askSrc), 'questions and answers sit in a transparent overlay panel')
 assert(/ask-sara-input/.test(askSrc), 'compose uses a high-contrast field over the video')
 assert(/ask-sara-overlay/.test(askSrc), 'chrome and thread overlay the avatar instead of pushing it up')
+assert(/ask-sara-chip/.test(askSrc), 'header controls use contrast chips over the video')
 assert(!/bg-cream-card/.test(askSrc), 'Ask Sara does not use opaque cream cards over the face')
 assert(!/agentManager\.chat\(|\.chat\(/.test(askSrc), 'Ask Sara does not call agentManager.chat()')
 assert(!/requestSaraTalk/.test(askSrc), 'Ask Sara does not poll Talks mp4')
