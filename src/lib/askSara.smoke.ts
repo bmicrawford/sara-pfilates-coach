@@ -289,6 +289,26 @@ assert(
   /\.ask-sara-stage[\s\S]*inset:\s*0/.test(cssSrc),
   'Ask Sara stage is edge-to-edge behind the overlay',
 )
+{
+  const overlayCopy = [
+    'ask-sara-chip',
+    'ask-sara-greeting',
+    'ask-sara-panel',
+    'ask-sara-note',
+    'ask-sara-input',
+  ]
+  for (const name of overlayCopy) {
+    const block = cssSrc.match(new RegExp(`\\.${name}\\s*\\{([\\s\\S]*?)\\n\\}`))?.[1] ?? ''
+    assert(
+      /color:\s*(#000|#000000|rgb\(\s*0\s*,\s*0\s*,\s*0\s*\))/.test(block),
+      `${name} copy is pure black so it reads on glass`,
+    )
+    assert(
+      !/#3d3a36|#2f2c28|#3D3A36|#2F2C28/.test(block),
+      `${name} does not use warm ink grey`,
+    )
+  }
+}
 
 const askSrc = readFileSync(new URL('../pages/AskSara.tsx', import.meta.url), 'utf8')
 assert(/unlockSaraSpeech/.test(askSrc), 'Send still unlocks ara audio for iOS fallback')
@@ -339,6 +359,14 @@ assert(/ask-sara-panel/.test(askSrc), 'questions and answers sit in a transparen
 assert(/ask-sara-input/.test(askSrc), 'compose uses a high-contrast field over the video')
 assert(/ask-sara-overlay/.test(askSrc), 'chrome and thread overlay the avatar instead of pushing it up')
 assert(/ask-sara-chip/.test(askSrc), 'header controls use contrast chips over the video')
+assert(/placeholder:text-ink-faint/.test(askSrc), 'compose placeholder may stay slightly softer than typed text')
+assert(/bg-sage/.test(askSrc) && /text-white/.test(askSrc), 'Send stays a sage/white control')
+{
+  const copySrc = askSrc.replace(/placeholder:text-ink-faint/g, '')
+  assert(!/\btext-ink\b/.test(copySrc), 'Ask Sara readable copy does not use warm text-ink')
+  assert(!/text-ink-mute/.test(copySrc), 'Ask Sara readable copy does not use muted ink grey')
+  assert(!/text-sage-deep/.test(copySrc), 'Ask Sara answers and questions are not sage-deep')
+}
 assert(!/bg-cream-card/.test(askSrc), 'Ask Sara does not use opaque cream cards over the face')
 assert(!/agentManager\.chat\(|\.chat\(/.test(askSrc), 'Ask Sara does not call agentManager.chat()')
 assert(!/requestSaraTalk/.test(askSrc), 'Ask Sara does not poll Talks mp4')
@@ -348,7 +376,7 @@ const mainSrc = readFileSync(new URL('../main.tsx', import.meta.url), 'utf8')
 assert(/registration\.update\(/.test(mainSrc), 'service worker checks for a new bundle')
 
 const viteSrc = readFileSync(new URL('../../vite.config.ts', import.meta.url), 'utf8')
-assert(/sara-pwa-20260920-pfilates-speech/.test(viteSrc), 'PWA cacheId busts a phone still serving the pre-pronunciation bundle')
+assert(/sara-pwa-20260920-ask-sara-black-ink/.test(viteSrc), 'PWA cacheId busts a phone still serving warm-ink overlay copy')
 assert(/NetworkFirst/.test(viteSrc), 'navigations are NetworkFirst so iOS PWA gets new index.html')
 assert(!/\*\.\{js,css,html/.test(viteSrc), 'does not precache index.html (stale PWA)')
 
