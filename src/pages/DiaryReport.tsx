@@ -64,12 +64,14 @@ export function DiaryReport() {
     >
       <DiaryPicker diaries={picker} selectedId={selected.id} onSelect={setSelectedId} />
 
-      <section className="grid grid-cols-2 gap-3">
-        <Stat label="Drinks" value={report.drinks} />
-        <Stat label="Voids" value={report.voids} />
-        <Stat label="Leaks" value={report.leaks} />
-        <Stat label="Urges" value={report.urges} />
-        <Stat label="Pad changes" value={report.pads} />
+      <section className="rounded-2xl bg-cream-card px-4 py-3 shadow-card">
+        <p className="text-xs uppercase tracking-wide text-ink-faint">So far</p>
+        <p className="mt-1 text-sm text-ink">
+          {report.drinks} drink{report.drinks === 1 ? '' : 's'} · {report.voids} void
+          {report.voids === 1 ? '' : 's'} · {report.leaks} leak{report.leaks === 1 ? '' : 's'} ·{' '}
+          {report.urges} urge{report.urges === 1 ? '' : 's'} · {report.pads} pad
+          {report.pads === 1 ? '' : 's'}
+        </p>
       </section>
 
       {report.entries.length === 0 ? (
@@ -122,11 +124,3 @@ export function DiaryReport() {
   )
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-2xl bg-cream-card px-4 py-3 shadow-card">
-      <p className="text-xs uppercase tracking-wide text-ink-faint">{label}</p>
-      <p className="mt-1 font-serif text-2xl text-ink">{value}</p>
-    </div>
-  )
-}

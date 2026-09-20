@@ -86,7 +86,8 @@ export function Home({ session }: Props) {
     startNewDiary()
     setDiaries(readDiaries())
     setToast(DIARY_STARTED_TOAST)
-    setMood('listening')
+    setMood('celebrate')
+    window.setTimeout(() => setMood('default'), CELEBRATE_MS)
     window.setTimeout(() => setToast(null), 4800)
   }
 
