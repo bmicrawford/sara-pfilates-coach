@@ -110,8 +110,11 @@ select {
 }
 
 .ask-sara-greeting {
-  color: #3d3a36;
-  text-shadow: 0 1px 0 rgba(255, 252, 248, 0.85), 0 2px 12px rgba(255, 252, 248, 0.7);
+  color: #2f2c28;
+  text-shadow:
+    0 1px 0 rgba(255, 252, 248, 0.95),
+    0 0 16px rgba(255, 252, 248, 0.9),
+    0 2px 10px rgba(255, 252, 248, 0.75);
 }
 
 .ask-sara-panel {
