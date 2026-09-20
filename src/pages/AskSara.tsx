@@ -195,13 +195,13 @@ export function AskSara() {
       <div className="ask-sara-overlay relative z-10 flex h-full min-h-0 flex-col">
         <div className="ask-sara-chrome shrink-0 pb-6">
           <header className="flex items-center justify-between px-5 pb-2 safe-top">
-            <Link to="/" className="ask-sara-chip text-sm font-medium">
+            <Link to="/" className="ask-sara-chip text-sm font-semibold">
               ← Home
             </Link>
-            <p className="ask-sara-chip text-xs font-medium uppercase tracking-[0.18em]">Ask Sara</p>
+            <p className="ask-sara-chip text-xs font-semibold uppercase tracking-[0.18em]">Ask Sara</p>
             <button
               type="button"
-              className="ask-sara-chip text-xs font-medium"
+              className="ask-sara-chip text-xs font-semibold"
               onClick={() => {
                 if (live && !muted) {
                   haltPlayback()
@@ -216,22 +216,24 @@ export function AskSara() {
               {muted ? 'Unmute' : live ? 'Stop' : 'Mute'}
             </button>
           </header>
-          <p className="ask-sara-greeting px-5 text-center font-serif text-xl">{greeting}</p>
-          <p className="ask-sara-greeting px-5 pt-0.5 text-center text-sm">
+          <p className="ask-sara-greeting ask-sara-greeting-lead px-5 text-center font-serif text-xl font-bold">
+            {greeting}
+          </p>
+          <p className="ask-sara-greeting px-5 pt-0.5 text-center text-sm font-semibold">
             {live ? 'Sara is talking.' : 'I’m listening — ask the real question.'}
           </p>
         </div>
 
         <div className="ask-sara-mid flex min-h-0 flex-1 flex-col justify-end px-5 pb-2 pt-3">
           {voiceNote ? (
-            <p className="ask-sara-note mb-2 text-center text-xs leading-snug">{voiceNote}</p>
+            <p className="ask-sara-note mb-2 text-center text-xs font-semibold leading-snug">{voiceNote}</p>
           ) : live && streamCapped ? (
-            <p className="ask-sara-note mb-2 text-center text-xs leading-snug">{SARA_STREAM_CAPPED_NOTE}</p>
+            <p className="ask-sara-note mb-2 text-center text-xs font-semibold leading-snug">{SARA_STREAM_CAPPED_NOTE}</p>
           ) : null}
 
           <div className="ask-sara-panel min-h-0 space-y-3 overflow-y-auto overscroll-contain">
             {messages.length === 0 ? (
-              <p className="text-sm leading-relaxed">
+              <p className="text-sm font-semibold leading-relaxed">
                 Try “how much water?”, “why did I leak when I sneezed?”, or “what are symptoms of a
                 UTI?”
               </p>
@@ -239,8 +241,8 @@ export function AskSara() {
             {messages.map((m) => (
               <div
                 key={m.id}
-                className={`max-w-[90%] text-sm leading-relaxed ${
-                  m.from === 'you' ? 'ml-auto text-right font-medium' : ''
+                className={`max-w-[90%] text-sm font-semibold leading-relaxed ${
+                  m.from === 'you' ? 'ml-auto text-right' : ''
                 }`}
               >
                 {m.text}
@@ -250,7 +252,7 @@ export function AskSara() {
                 !isSaraUnreachable(m.text) ? (
                   <button
                     type="button"
-                    className="mt-2 block text-xs font-medium"
+                    className="mt-2 block text-xs font-semibold"
                     onClick={() => {
                       if (live) {
                         haltPlayback()
@@ -267,7 +269,7 @@ export function AskSara() {
                 ) : null}
               </div>
             ))}
-            {busy ? <div className="text-sm">Listening…</div> : null}
+            {busy ? <div className="text-sm font-semibold">Listening…</div> : null}
             <div ref={bottom} />
           </div>
         </div>
