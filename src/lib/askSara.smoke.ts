@@ -281,10 +281,27 @@ assert(
   /\.ask-sara-panel[\s\S]*?backdrop-filter:\s*blur\([1-6]px\)/.test(cssSrc),
   'Q&A glass uses a light blur so the face is not frosted over',
 )
-assert(
-  /\.ask-sara-panel[\s\S]*?text-shadow:/.test(cssSrc),
-  'Q&A text keeps a light halo so ink stays readable on the still',
-)
+{
+  const noHaloCopy = [
+    'ask-sara-chip',
+    'ask-sara-greeting',
+    'ask-sara-greeting-lead',
+    'ask-sara-panel',
+    'ask-sara-note',
+  ]
+  for (const name of noHaloCopy) {
+    const block = cssSrc.match(new RegExp(`\\.${name}\\s*\\{([\\s\\S]*?)\\n\\}`))?.[1] ?? ''
+    assert(Boolean(block), `${name} overlay rule is defined in CSS`)
+    assert(
+      !/text-shadow:/.test(block) || /text-shadow:\s*none/.test(block),
+      `${name} has no cream/white text-shadow halo`,
+    )
+    assert(
+      /font-weight:\s*(600|700)/.test(block),
+      `${name} copy is semibold or bold`,
+    )
+  }
+}
 assert(
   /\.ask-sara-stage[\s\S]*inset:\s*0/.test(cssSrc),
   'Ask Sara stage is edge-to-edge behind the overlay',
@@ -359,6 +376,9 @@ assert(/ask-sara-panel/.test(askSrc), 'questions and answers sit in a transparen
 assert(/ask-sara-input/.test(askSrc), 'compose uses a high-contrast field over the video')
 assert(/ask-sara-overlay/.test(askSrc), 'chrome and thread overlay the avatar instead of pushing it up')
 assert(/ask-sara-chip/.test(askSrc), 'header controls use contrast chips over the video')
+assert(/ask-sara-greeting-lead/.test(askSrc), 'greeting title uses the bold lead class')
+assert(/font-semibold/.test(askSrc), 'Ask Sara readable copy uses semibold Tailwind weights')
+assert(/font-bold/.test(askSrc), 'greeting title is bold')
 assert(/placeholder:text-ink-faint/.test(askSrc), 'compose placeholder may stay slightly softer than typed text')
 assert(/bg-sage/.test(askSrc) && /text-white/.test(askSrc), 'Send stays a sage/white control')
 {
@@ -376,7 +396,7 @@ const mainSrc = readFileSync(new URL('../main.tsx', import.meta.url), 'utf8')
 assert(/registration\.update\(/.test(mainSrc), 'service worker checks for a new bundle')
 
 const viteSrc = readFileSync(new URL('../../vite.config.ts', import.meta.url), 'utf8')
-assert(/sara-pwa-20260920-ask-sara-black-ink/.test(viteSrc), 'PWA cacheId busts a phone still serving warm-ink overlay copy')
+assert(/sara-pwa-20260920-ask-sara-bold-ink/.test(viteSrc), 'PWA cacheId busts a phone still serving white-halo overlay copy')
 assert(/NetworkFirst/.test(viteSrc), 'navigations are NetworkFirst so iOS PWA gets new index.html')
 assert(!/\*\.\{js,css,html/.test(viteSrc), 'does not precache index.html (stale PWA)')
 
