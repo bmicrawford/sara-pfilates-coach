@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { DownloadDiaryPdfButton } from '../components/DownloadDiaryPdfButton'
 import { PfilatesBrandHeader } from '../components/PfilatesLogo'
 import { DiaryPicker, ReportShell } from '../components/ReportShell'
 import {
@@ -12,13 +13,7 @@ import {
   summarizeLog,
   type DiaryDayReport,
 } from '../lib/diary'
-import {
-  DOWNLOAD_PDF_LABEL,
-  DIARY_REPORT_EMPTY,
-  bladderDiaryReportSubtitle,
-  exportBladderDiaryPdf,
-  incompleteDayLabel,
-} from '../lib/diaryPdf'
+import { DIARY_REPORT_EMPTY, bladderDiaryReportSubtitle, incompleteDayLabel } from '../lib/diaryPdf'
 import { finishActiveDiary, readDiaries, readLogs, startNewDiary, syncDiaryWindows } from '../lib/mockServer'
 import { formatDateOfBirth, readPatient } from '../lib/patient'
 import { formatDay, formatTime } from '../lib/storage'
@@ -28,8 +23,6 @@ export function DiaryReport() {
   const [diaries, setDiaries] = useState(() => syncDiaryWindows())
   const [logs] = useState(() => readLogs())
   const [selectedId, setSelectedId] = useState(() => latestDiary(readDiaries())?.id ?? null)
-  const [pdfBusy, setPdfBusy] = useState(false)
-  const [pdfError, setPdfError] = useState<string | null>(null)
   const selected = diaries.find((diary) => diary.id === selectedId) ?? latestDiary(diaries)
   const patient = readPatient()
 
@@ -84,29 +77,7 @@ export function DiaryReport() {
 
       <DiaryPicker diaries={picker} selectedId={selected.id} onSelect={setSelectedId} />
 
-      <button
-        type="button"
-        className="mb-5 w-full rounded-2xl bg-sage py-4 font-semibold text-white shadow-card disabled:opacity-60"
-        disabled={pdfBusy}
-        onClick={() => {
-          setPdfError(null)
-          setPdfBusy(true)
-          void exportBladderDiaryPdf(report)
-            .catch(() => {
-              setPdfError('Could not prepare the PDF. Try again.')
-            })
-            .finally(() => {
-              setPdfBusy(false)
-            })
-        }}
-      >
-        {pdfBusy ? 'Preparing PDF…' : DOWNLOAD_PDF_LABEL}
-      </button>
-      {pdfError ? (
-        <p role="alert" className="mb-5 text-center text-sm text-ink">
-          {pdfError}
-        </p>
-      ) : null}
+      <DownloadDiaryPdfButton report={report} className="mb-5" />
 
       <section className="space-y-4">
         {report.days.map((day) => (

@@ -28,12 +28,14 @@ import {
   summarizeLog,
 } from './diary.ts'
 import {
+  DOWNLOAD_PDF_ANYTIME_HINT,
   DOWNLOAD_PDF_LABEL,
   bladderDiaryPdfDoc,
   bladderDiaryPdfFilename,
   bladderDiaryPdfPlainText,
   bladderDiaryReportSubtitle,
   buildBladderDiaryPdf,
+  canExportBladderDiaryPdf,
   incompleteDayLabel,
 } from './diaryPdf.ts'
 import {
@@ -109,6 +111,8 @@ assert(/record each drink, void, leak, pad change, and exercise/i.test(DIARY_ACT
 assert(/in progress/i.test(DIARY_ACTIVE_CUE), 'active cue names in-progress')
 assert(!/cure|treat|diagnos|clinician promise/i.test(DIARY_ACTIVE_CUE), 'active cue makes no new medical claim')
 assert(/in progress/i.test(DIARY_STARTED_TOAST), 'start toast mentions in-progress review')
+assert(/download the PDF/i.test(DIARY_STARTED_TOAST), 'start toast says PDF download works while in progress')
+assert(/download the PDF before the diary is finished/i.test(DIARY_ACTIVE_CUE), 'active cue says PDF export works before finish')
 
 assert(isDiaryOpen(open), 'diary without completedAt is open')
 assert(!isDiaryOpen(done), 'completed diary is not open')
@@ -242,6 +246,13 @@ assert(/Void or leak/.test(homeSrc) && /Pad change/.test(homeSrc) && /Exercise/.
 assert(/DIARY_ACTIVE_CUE/.test(homeSrc), 'Home shows the active-diary cue')
 assert(/DIARY_STARTED_TOAST/.test(homeSrc), 'Home toasts after Start New Diary')
 assert(/to="\/diary"/.test(homeSrc) && /to="\/exercise"/.test(homeSrc), 'Home links to both in-progress views')
+assert(/DownloadDiaryPdfButton/.test(homeSrc), 'Home offers Download PDF on the logging screen')
+assert(/bladderDiaryReport/.test(homeSrc), 'Home uses the same branded report helper for PDF export')
+assert(
+  /activeReport \? <DownloadDiaryPdfButton report=\{activeReport\}/.test(homeSrc),
+  'Home Download PDF is shown while the diary is active',
+)
+assert(/Download PDF anytime/.test(homeSrc), 'Home report card names Download PDF while the diary is active')
 assert(/SaraPortrait/.test(homeSrc), 'Home still uses the circular Sara portrait')
 assert(!/TalkingPortrait|ask-sara-stage/.test(homeSrc), 'Home does not become fullscreen Ask Sara')
 
@@ -254,14 +265,21 @@ assert(/PatientOnboarding/.test(appSrc) && /NeedProfile/.test(appSrc), 'first-op
 assert(/path="\/r\/:token"/.test(appSrc) && !/NeedProfile[\s\S]*Redeem/.test(appSrc), 'redeem gate is unchanged')
 
 const diaryPage = readFileSync(new URL('../pages/DiaryReport.tsx', import.meta.url), 'utf8')
-assert(/DOWNLOAD_PDF_LABEL/.test(diaryPage), 'diary report offers Download PDF')
-assert(/exportBladderDiaryPdf/.test(diaryPage), 'diary report exports the shown report as a PDF')
+const pdfButton = readFileSync(new URL('../components/DownloadDiaryPdfButton.tsx', import.meta.url), 'utf8')
+assert(/DownloadDiaryPdfButton/.test(diaryPage), 'diary report offers Download PDF')
+assert(/exportBladderDiaryPdf/.test(pdfButton), 'Download PDF uses the shared branded export helper')
 assert(
-  /\{pdfBusy \? 'Preparing PDF…' : DOWNLOAD_PDF_LABEL\}/.test(diaryPage),
+  /\{pdfBusy \? 'Preparing PDF…' : DOWNLOAD_PDF_LABEL\}/.test(pdfButton),
   'Download PDF is rendered on the in-progress and completed report',
 )
+assert(/disabled=\{pdfBusy\}/.test(pdfButton), 'Download PDF is only disabled while preparing — not by completeness')
 assert(
-  !/No diary yet[\s\S]{0,500}DOWNLOAD_PDF_LABEL/.test(diaryPage),
+  !/isThreeDayWindowComplete|completedAt|days\.every|72h|all days complete/.test(pdfButton),
+  'Download PDF button is not gated on finish, 72h, or all days complete',
+)
+assert(/DOWNLOAD_PDF_ANYTIME_HINT/.test(pdfButton), 'Download PDF says export works before the diary is finished')
+assert(
+  !/No diary yet[\s\S]{0,500}DownloadDiaryPdfButton/.test(diaryPage),
   'empty no-diary state does not offer a PDF',
 )
 assert(/bladderDiaryReportSubtitle/.test(diaryPage), 'diary report names the in-progress state via shared copy')
@@ -273,6 +291,23 @@ assert(/incompleteDayLabel/.test(diaryPage), 'on-screen report marks incomplete 
 assert(/Date of birth/.test(diaryPage) && /patientName/.test(diaryPage), 'on-screen report shows name and date of birth')
 
 assert(DOWNLOAD_PDF_LABEL === 'Download PDF', 'Download PDF label is exact')
+assert(
+  /before the diary is finished/i.test(DOWNLOAD_PDF_ANYTIME_HINT),
+  'PDF hint says export works before the diary is finished',
+)
+assert(/incomplete days/i.test(DOWNLOAD_PDF_ANYTIME_HINT), 'PDF hint says incomplete days are included')
+assert(canExportBladderDiaryPdf(bladder), 'in-progress Day-1-only report is exportable')
+assert(canExportBladderDiaryPdf(emptyStart), 'zero-event in-progress report is still exportable')
+assert(canExportBladderDiaryPdf(duringDay1), 'Day-1-only span report is exportable while Days 2/3 are incomplete')
+assert(!canExportBladderDiaryPdf(null), 'PDF export stays unavailable when there is no diary')
+assert(
+  !/status === 'completed'|isThreeDayWindowComplete|all days/.test(
+    readFileSync(new URL('./diaryPdf.ts', import.meta.url), 'utf8').match(
+      /export function canExportBladderDiaryPdf[\s\S]*?^}/m,
+    )?.[0] ?? '',
+  ),
+  'canExportBladderDiaryPdf is not gated on finished / 72h / all days complete',
+)
 assert(
   bladderDiaryPdfFilename(open.startedAt) === `pfilates-bladder-diary-${localDayKey(open.startedAt)}.pdf`,
   'PDF filename uses pfilates-bladder-diary-YYYY-MM-DD',
@@ -328,15 +363,20 @@ assert(patientProfileComplete(patient), 'saved name + DOB is a complete profile'
 assert(missingPatientFields(null).name && missingPatientFields(null).dateOfBirth, 'missing profile asks for both fields')
 assert(!patientProfileComplete({ name: '', dateOfBirth: '1978-03-15', savedAt: t0 }), 'name is required so the PDF is never nameless')
 
+assert(bladder.status === 'in_progress', 'Day-1-only fixture is still in_progress')
+assert(bladder.days[0]?.drinks === 1 && bladder.days[1]?.empty && bladder.days[2]?.empty, 'Day-1-only fixture has no Day 2/3 events')
+assert(bladder.days[1]?.incomplete && bladder.days[2]?.incomplete, 'Day-1-only fixture keeps Day 2/3 incomplete')
+
 const logoDataUrl = `data:image/png;base64,${readFileSync(new URL('../../public/brand/pfilates-logo.png', import.meta.url)).toString('base64')}`
 const built = await buildBladderDiaryPdf(bladder, { logoDataUrl })
+assert(canExportBladderDiaryPdf(bladder), 'PDF path is not blocked for an in-progress Day-1-only diary')
 assert(
   built.filename === bladderDiaryPdfFilename(bladder.firstEventAt ?? open.startedAt),
   'built PDF keeps the dated filename',
 )
 assert(built.blob.type === 'application/pdf', 'built PDF is an application/pdf blob')
 const pdfHeader = new TextDecoder('latin1').decode(built.bytes.slice(0, 5))
-assert(pdfHeader === '%PDF-', 'built file starts with a PDF header')
+assert(pdfHeader === '%PDF-', 'in-progress Day-1-only export still produces a PDF file')
 const pdfRaw = new TextDecoder('latin1').decode(built.bytes)
 assert(pdfRaw.includes('Bladder diary report'), 'generated PDF embeds the report title')
 assert(pdfRaw.includes('Drinks'), 'generated PDF embeds the drinks stat label')
@@ -344,6 +384,11 @@ assert(pdfRaw.includes(PFILATES_SITE), 'generated PDF embeds www.pfilates.com')
 assert(pdfRaw.includes('Alex Rivera'), 'generated PDF embeds the patient name')
 assert(pdfRaw.includes('Incomplete'), 'generated PDF embeds incomplete day markers')
 assert(pdfRaw.includes('Day 1') && pdfRaw.includes('Day 2') && pdfRaw.includes('Day 3'), 'generated PDF embeds Day 1–3 headings')
+assert(pdfRaw.includes('In progress'), 'generated in-progress PDF is not rewritten as finished')
+
+const emptyBuilt = await buildBladderDiaryPdf(emptyStart, { logoDataUrl })
+assert(canExportBladderDiaryPdf(emptyStart), 'PDF path is not blocked when zero days have events')
+assert(new TextDecoder('latin1').decode(emptyBuilt.bytes.slice(0, 5)) === '%PDF-', 'zero-event in-progress diary still builds a PDF')
 
 if (process.exitCode) {
   console.error('diary smoke failed')
