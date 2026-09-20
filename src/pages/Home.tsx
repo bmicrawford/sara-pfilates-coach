@@ -13,6 +13,13 @@ import {
   bladderDiaryReport,
   summarizeLog,
 } from '../lib/diary'
+import {
+  EXERCISE_CUE_DISMISS_LABEL,
+  EXERCISE_MISSING_CUE,
+  dismissExerciseCue,
+  markExerciseCueShown,
+  shouldShowExerciseCue,
+} from '../lib/exercise'
 import { addDiaryLog, finishActiveDiary, readDiaries, readLogs, startNewDiary, syncDiaryWindows } from '../lib/mockServer'
 import { patientFirstName, readPatient } from '../lib/patient'
 import { markCompanionOpened } from '../lib/notifications'
@@ -40,6 +47,7 @@ export function Home({ session }: Props) {
   const patient = readPatient()
   const [smsNote, setSmsNote] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [exerciseCue, setExerciseCue] = useState(() => shouldShowExerciseCue(readLogs()))
   const active = useMemo(() => activeDiary(diaries), [diaries])
   const activeReport = useMemo(
     () => (active ? bladderDiaryReport(active, logs, { patient }) : null),
@@ -54,6 +62,11 @@ export function Home({ session }: Props) {
       )
     }
   }, [])
+
+  useEffect(() => {
+    if (!exerciseCue) return
+    markExerciseCueShown()
+  }, [exerciseCue])
 
   useEffect(() => {
     if (sheet || mood === 'celebrate' || mood === 'listening') return
@@ -84,7 +97,9 @@ export function Home({ session }: Props) {
 
   const saveLog = (entry: LogEntry) => {
     addDiaryLog(entry)
-    setLogs(readLogs())
+    const nextLogs = readLogs()
+    setLogs(nextLogs)
+    setExerciseCue(shouldShowExerciseCue(nextLogs))
     setSheet(null)
     setMood('celebrate')
     window.setTimeout(() => setMood('default'), CELEBRATE_MS)
@@ -141,11 +156,39 @@ export function Home({ session }: Props) {
         </p>
       ) : null}
 
+      {exerciseCue ? (
+        <div
+          role="status"
+          className="mb-4 rounded-2xl bg-sage-mist px-4 py-3 text-sm text-ink"
+        >
+          <p>{EXERCISE_MISSING_CUE}</p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              className="rounded-full bg-sage px-3.5 py-1.5 text-xs font-semibold text-white"
+              onClick={() => openSheet('exercise')}
+            >
+              Log exercise
+            </button>
+            <button
+              type="button"
+              className="rounded-full px-3.5 py-1.5 text-xs font-medium text-sage-deep"
+              onClick={() => {
+                dismissExerciseCue()
+                setExerciseCue(false)
+              }}
+            >
+              {EXERCISE_CUE_DISMISS_LABEL}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <section className="rounded-2xl bg-cream-card px-4 py-3 shadow-card">
         <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Today</p>
         <p className="mt-1 text-sm text-ink">
           {!active
-            ? 'Start a diary to log drinks, voids, leaks, pads, and exercise.'
+            ? 'Start a diary to log drinks, voids, leaks, and pads. Exercise can be logged anytime.'
             : today.length === 0
               ? 'Nothing logged yet — whenever you’re ready.'
               : `${counts.drink} drink${counts.drink === 1 ? '' : 's'} · ${counts.voidLeak} void/leak · ${counts.pad} pad · ${counts.exercise} exercise`}
@@ -163,13 +206,23 @@ export function Home({ session }: Props) {
           {activeReport ? <DownloadDiaryPdfButton report={activeReport} className="mt-3" /> : null}
         </>
       ) : (
-        <button
-          type="button"
-          className="mt-5 w-full rounded-2xl bg-sage py-4 text-center font-semibold text-white shadow-card"
-          onClick={beginDiary}
-        >
-          {START_NEW_DIARY_LABEL}
-        </button>
+        <>
+          <button
+            type="button"
+            className="mt-5 w-full rounded-2xl bg-sage py-4 text-center font-semibold text-white shadow-card"
+            onClick={beginDiary}
+          >
+            {START_NEW_DIARY_LABEL}
+          </button>
+          <button
+            type="button"
+            className="mt-3 w-full rounded-2xl bg-cream-card px-4 py-4 text-left shadow-card transition hover:ring-2 hover:ring-sage/30"
+            onClick={() => openSheet('exercise')}
+          >
+            <span className="block font-semibold text-ink">Exercise</span>
+            <span className="mt-1 block text-xs text-ink-mute">A set that happened — log it even without a diary</span>
+          </button>
+        </>
       )}
 
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -187,9 +240,7 @@ export function Home({ session }: Props) {
           className="rounded-2xl bg-cream-card px-4 py-4 text-left shadow-card transition hover:ring-2 hover:ring-sage/30"
         >
           <span className="block font-semibold text-ink">Exercise log</span>
-          <span className="mt-1 block text-xs text-ink-mute">
-            {active ? 'Open while in progress' : 'Sessions as you log them'}
-          </span>
+          <span className="mt-1 block text-xs text-ink-mute">Duration and frequency · 4 weeks</span>
         </Link>
       </div>
 

@@ -1,93 +1,73 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { DiaryPicker, ReportShell } from '../components/ReportShell'
+import { Link } from 'react-router-dom'
+import { GenerateExerciseLogButton } from '../components/GenerateExerciseLogButton'
+import { PfilatesBrandHeader } from '../components/PfilatesLogo'
+import { ReportShell } from '../components/ReportShell'
+import { summarizeLog } from '../lib/diary'
 import {
-  START_NEW_DIARY_LABEL,
-  canViewDiaryReport,
-  exerciseLogReport,
-  groupLogsByDay,
-  isDiaryOpen,
-  latestDiary,
-  summarizeLog,
-} from '../lib/diary'
-import { readDiaries, readLogs, startNewDiary } from '../lib/mockServer'
+  EXERCISE_DURATION_LABEL,
+  EXERCISE_FREQUENCY_LABEL,
+  EXERCISE_REPORT_EMPTY,
+  EXERCISE_REPORT_TITLE,
+  exerciseDurationLabel,
+  exerciseFrequencyLabel,
+  fourWeekExerciseReport,
+  readExerciseGate,
+} from '../lib/exercise'
+import { exerciseLogReportSubtitle } from '../lib/exercisePdf'
+import { readLogs } from '../lib/mockServer'
+import { formatDateOfBirth, readPatient } from '../lib/patient'
 import { formatDay, formatTime } from '../lib/storage'
 
 export function ExerciseLog() {
-  const navigate = useNavigate()
-  const [diaries] = useState(() => readDiaries())
   const [logs] = useState(() => readLogs())
-  const [selectedId, setSelectedId] = useState(() => latestDiary(readDiaries())?.id ?? null)
-  const selected = diaries.find((diary) => diary.id === selectedId) ?? latestDiary(diaries)
-
-  const report = useMemo(
-    () => (selected ? exerciseLogReport(selected, logs) : null),
-    [selected, logs],
-  )
-
-  const picker = diaries.map((diary) => ({
-    id: diary.id,
-    label: `${isDiaryOpen(diary) ? 'In progress' : 'Finished'} · ${formatDay(diary.startedAt)}`,
-  }))
-
-  if (!canViewDiaryReport(selected) || !report) {
-    return (
-      <ReportShell
-        title="Exercise log"
-        status="empty"
-        subtitle="Sessions show here as you log them — including while a diary is still in progress."
-      >
-        <p className="rounded-2xl bg-cream-card px-4 py-4 text-sm text-ink shadow-card">
-          No diary yet. Start one from Home, then log a session when it happens.
-        </p>
-        <button
-          type="button"
-          className="mt-4 w-full rounded-2xl bg-sage py-4 font-semibold text-white shadow-card"
-          onClick={() => {
-            startNewDiary()
-            navigate('/')
-          }}
-        >
-          {START_NEW_DIARY_LABEL}
-        </button>
-      </ReportShell>
-    )
-  }
-
-  const grouped = groupLogsByDay(report.entries)
+  const [gate, setGate] = useState(() => readExerciseGate())
+  const patient = readPatient()
+  const report = useMemo(() => fourWeekExerciseReport(logs, { patient }), [logs, patient])
 
   return (
-    <ReportShell
-      title="Exercise log"
-      status={report.status}
-      subtitle={
-        report.status === 'in_progress'
-          ? `Started ${formatDay(report.startedAt)}. This log is readable while the diary is still open.`
-          : `Started ${formatDay(report.startedAt)}${report.completedAt ? ` · finished ${formatDay(report.completedAt)}` : ''}.`
-      }
-    >
-      <DiaryPicker diaries={picker} selectedId={selected.id} onSelect={setSelectedId} />
+    <ReportShell title={EXERCISE_REPORT_TITLE} subtitle={exerciseLogReportSubtitle(report)}>
+      <PfilatesBrandHeader />
+
+      <section className="mb-5 rounded-2xl bg-cream-card px-4 py-4 shadow-card">
+        <p className="text-xs uppercase tracking-wide text-ink-faint">Patient</p>
+        <p className="mt-1 font-serif text-xl text-ink">{report.patientName}</p>
+        <p className="mt-1 text-sm text-ink">
+          Date of birth{' '}
+          {report.dateOfBirth.includes('-') && report.dateOfBirth.length === 10
+            ? formatDateOfBirth(report.dateOfBirth)
+            : report.dateOfBirth}
+        </p>
+      </section>
 
       <section className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-cream-card px-4 py-3 shadow-card">
-          <p className="text-xs uppercase tracking-wide text-ink-faint">Sessions</p>
-          <p className="mt-1 font-serif text-2xl text-ink">{report.sessions}</p>
+          <p className="text-xs uppercase tracking-wide text-ink-faint">{EXERCISE_DURATION_LABEL}</p>
+          <p className="mt-1 font-serif text-2xl text-ink">{exerciseDurationLabel(report)}</p>
         </div>
         <div className="rounded-2xl bg-cream-card px-4 py-3 shadow-card">
-          <p className="text-xs uppercase tracking-wide text-ink-faint">Minutes</p>
-          <p className="mt-1 font-serif text-2xl text-ink">{report.minutes}</p>
+          <p className="text-xs uppercase tracking-wide text-ink-faint">{EXERCISE_FREQUENCY_LABEL}</p>
+          <p className="mt-1 font-serif text-lg leading-snug text-ink">{exerciseFrequencyLabel(report)}</p>
         </div>
       </section>
 
+      <GenerateExerciseLogButton report={report} gate={gate} onGateChange={setGate} className="mt-5" />
+
       {report.entries.length === 0 ? (
         <p className="mt-5 rounded-2xl bg-cream-card px-4 py-4 text-sm text-ink shadow-card">
-          No sessions logged yet. You can open this log while the diary is still in progress.
+          {EXERCISE_REPORT_EMPTY}
         </p>
       ) : (
         <section className="mt-6 space-y-5">
-          {grouped.map((group) => (
+          {report.days.map((group) => (
             <div key={group.day}>
-              <h2 className="font-serif text-lg text-ink">{formatDay(group.items[0]?.at ?? group.day)}</h2>
+              <h2 className="font-serif text-lg text-ink">
+                {group.items[0] ? formatDay(group.items[0].at) : group.day}
+              </h2>
+              <p className="mt-1 text-xs text-ink-faint">
+                {EXERCISE_DURATION_LABEL} {group.minutes} min · {EXERCISE_FREQUENCY_LABEL} {group.sessions}{' '}
+                {group.sessions === 1 ? 'session' : 'sessions'}
+              </p>
               <ul className="mt-2 space-y-2">
                 {group.items.map((entry) => (
                   <li
