@@ -7,6 +7,13 @@ export type Session = {
   redeemedAt: string
 }
 
+/** Durable on-device patient label for the doctor report. Never invent these. */
+export type PatientProfile = {
+  name: string
+  dateOfBirth: string
+  savedAt: string
+}
+
 export type DeviceBinding = {
   token: string
   email: string

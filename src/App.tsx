@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { PATIENT_CHANGED_EVENT, patientProfileComplete, readPatient } from './lib/patient'
 import { readSession } from './lib/mockServer'
 import type { Session } from './lib/types'
 import { AskSara } from './pages/AskSara'
@@ -7,6 +8,7 @@ import { DiaryReport } from './pages/DiaryReport'
 import { ExerciseLog } from './pages/ExerciseLog'
 import { Home } from './pages/Home'
 import { Move } from './pages/Move'
+import { PatientOnboarding } from './pages/PatientOnboarding'
 import { Redeem } from './pages/Redeem'
 import { Welcome } from './pages/Welcome'
 
@@ -40,7 +42,9 @@ export default function App() {
             path="/ask"
             element={
               <NeedSession session={session}>
-                <AskSara />
+                <NeedProfile>
+                  <AskSara />
+                </NeedProfile>
               </NeedSession>
             }
           />
@@ -48,7 +52,9 @@ export default function App() {
             path="/diary"
             element={
               <NeedSession session={session}>
-                <DiaryReport />
+                <NeedProfile>
+                  <DiaryReport />
+                </NeedProfile>
               </NeedSession>
             }
           />
@@ -56,11 +62,24 @@ export default function App() {
             path="/exercise"
             element={
               <NeedSession session={session}>
-                <ExerciseLog />
+                <NeedProfile>
+                  <ExerciseLog />
+                </NeedProfile>
               </NeedSession>
             }
           />
-          <Route path="/" element={session ? <Home session={session} /> : <Welcome />} />
+          <Route
+            path="/"
+            element={
+              session ? (
+                <NeedProfile>
+                  <Home session={session} />
+                </NeedProfile>
+              ) : (
+                <Welcome />
+              )
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
@@ -76,5 +95,22 @@ function NeedSession({
   children: ReactNode
 }) {
   if (!session) return <Navigate to="/" replace />
+  return children
+}
+
+function NeedProfile({ children }: { children: ReactNode }) {
+  const [patient, setPatient] = useState(() => readPatient())
+
+  useEffect(() => {
+    const sync = () => setPatient(readPatient())
+    window.addEventListener(PATIENT_CHANGED_EVENT, sync)
+    window.addEventListener('storage', sync)
+    return () => {
+      window.removeEventListener(PATIENT_CHANGED_EVENT, sync)
+      window.removeEventListener('storage', sync)
+    }
+  }, [])
+
+  if (!patientProfileComplete(patient)) return <PatientOnboarding />
   return children
 }
