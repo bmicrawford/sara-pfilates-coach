@@ -78,7 +78,11 @@ export function GenerateExerciseLogButton({ report, gate, onGateChange, classNam
         </p>
       ) : null}
 
-      <p className="mt-2 text-center text-xs text-ink-mute">{EXERCISE_PDF_ANYTIME_HINT}</p>
+      <p className="mt-2 text-center text-xs text-ink-mute">
+        {unlocked
+          ? 'Completion PDF with the PfilAtes logo and www.pfilates.com. You can download it again anytime.'
+          : EXERCISE_PDF_ANYTIME_HINT}
+      </p>
       {pdfError ? (
         <p role="alert" className="mt-2 text-center text-sm text-ink">
           {pdfError}

@@ -238,6 +238,7 @@ assert(/answerGate\('yes'\)/.test(gateSrc) && /answerGate\('no'\)/.test(gateSrc)
 assert(/shouldAskExerciseGate/.test(gateSrc), 'generate re-asks until Yes')
 assert(/canExportExerciseLogPdf/.test(gateSrc), 'Download PDF is offered only after Yes')
 assert(/DOWNLOAD_PDF_LABEL/.test(gateSrc), 'Yes path offers Download PDF')
+assert(/unlocked \?/.test(gateSrc), 'Yes path swaps the generate hint for the download hint')
 assert(!/exportExerciseLogPdf\(report\)[\s\S]{0,80}answerGate\('no'\)/.test(gateSrc), 'No path does not export a PDF')
 
 const appSrc = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')
