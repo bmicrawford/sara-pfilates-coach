@@ -390,6 +390,36 @@ const emptyBuilt = await buildBladderDiaryPdf(emptyStart, { logoDataUrl })
 assert(canExportBladderDiaryPdf(emptyStart), 'PDF path is not blocked when zero days have events')
 assert(new TextDecoder('latin1').decode(emptyBuilt.bytes.slice(0, 5)) === '%PDF-', 'zero-event in-progress diary still builds a PDF')
 
+const pdfSrc = readFileSync(new URL('./diaryPdf.ts', import.meta.url), 'utf8')
+assert(/pdf\.addImage\(embed, 'PNG'/.test(pdfSrc), 'logo embed still uses addImage PNG')
+assert(
+  /try \{[\s\S]*pdf\.addImage\(embed, 'PNG'[\s\S]*\} catch \{[\s\S]*drewLogo = false/.test(pdfSrc),
+  'logo addImage is wrapped in try/catch so embed failure cannot abort export',
+)
+assert(/downscaleLogoForPdf/.test(pdfSrc), 'logo is downscaled on canvas before embed when the browser allows it')
+assert(/downloadAttributeIsNoop/.test(pdfSrc) && /openPdfInNewTab/.test(pdfSrc), 'iOS/PWA share fallback can open the blob URL')
+assert(
+  /if \(isShareAbort\(error\)\) return[\s\S]*if \(downloadAttributeIsNoop\(\)\)[\s\S]*openPdfInNewTab\(blob\)/.test(
+    pdfSrc,
+  ),
+  'non-abort share failure on iOS/PWA opens the PDF in a new tab instead of a.download',
+)
+
+const brokenLogo = await buildBladderDiaryPdf(bladder, {
+  logoDataUrl: 'data:image/png;base64,not-a-real-png',
+})
+assert(brokenLogo.blob instanceof Blob, 'logo addImage failure still returns a blob')
+assert(brokenLogo.blob.type === 'application/pdf', 'logo addImage failure still returns an application/pdf blob')
+assert(brokenLogo.blob.size > 0, 'logo addImage failure still returns a non-empty PDF blob')
+assert(
+  new TextDecoder('latin1').decode(brokenLogo.bytes.slice(0, 5)) === '%PDF-',
+  'logo addImage failure still produces a PDF file',
+)
+const brokenRaw = new TextDecoder('latin1').decode(brokenLogo.bytes)
+assert(brokenRaw.includes(PFILATES_BRAND), 'logo addImage failure falls back to the PfilAtes text brand')
+assert(brokenRaw.includes('Bladder diary report'), 'logo addImage failure still embeds the report title')
+assert(brokenRaw.includes('Incomplete'), 'logo addImage failure keeps incomplete-day export')
+
 if (process.exitCode) {
   console.error('diary smoke failed')
   process.exit(1)
