@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { SARA_PORTRAIT_STILL } from '../lib/saraPortrait'
 import { isSaraVideoLive, replaySaraStreamVideo } from '../lib/saraStream'
 
-const STILL = '/avatar/sara-default.png'
+const STILL = SARA_PORTRAIT_STILL
 
 type Props = {
   talking: boolean

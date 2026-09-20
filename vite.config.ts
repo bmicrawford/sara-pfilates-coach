@@ -73,7 +73,7 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
-          cacheId: 'sara-pwa-20260920-ask-sara-bold-ink',
+          cacheId: 'sara-pwa-20260920-home-sara-portrait',
           skipWaiting: true,
           clientsClaim: true,
           cleanupOutdatedCaches: true,
