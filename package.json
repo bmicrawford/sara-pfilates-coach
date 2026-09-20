@@ -12,6 +12,7 @@
     "smoke:replies": "node --experimental-strip-types src/lib/replies.smoke.ts",
     "smoke:ask": "node server/askGrok.smoke.mjs",
     "smoke:ask-copy": "node --experimental-strip-types src/lib/askSara.smoke.ts",
+    "smoke:speech": "node --experimental-strip-types src/lib/pfilatesSpeech.smoke.ts",
     "smoke:speak": "node server/speakSara.smoke.mjs",
     "smoke:verify-api": "node scripts/verify-sara-api.mjs --self-test",
     "verify:ask-api": "node scripts/verify-sara-api.mjs"

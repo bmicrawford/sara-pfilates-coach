@@ -1,3 +1,5 @@
+import { rewritePfilatesForSpeech } from './pfilatesSpeech.mjs'
+
 const MUTE_KEY = 'sara.voiceMuted'
 
 /** Tiny silent WAV so iOS Safari unlocks playback from the Send tap. */
@@ -152,7 +154,7 @@ function visemePulse(elapsed: number, duration: number): number {
 }
 
 export async function fetchSaraSpeech(text: string): Promise<Blob | null> {
-  const clean = text.replace(/\s+/g, ' ').trim()
+  const clean = rewritePfilatesForSpeech(text.replace(/\s+/g, ' ').trim())
   if (!clean) return null
   const ctrl = new AbortController()
   const timer = window.setTimeout(() => ctrl.abort(), 30_000)
@@ -187,7 +189,7 @@ export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<voi
     opts.onEnd?.()
     return
   }
-  const clean = text.replace(/\s+/g, ' ').trim()
+  const clean = rewritePfilatesForSpeech(text.replace(/\s+/g, ' ').trim())
   if (!clean) {
     opts.onEnd?.()
     return

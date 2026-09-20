@@ -20,6 +20,8 @@
  * the SDK retry; do not treat that flap as a dead session.
  */
 
+import { rewritePfilatesForSpeech } from './pfilatesSpeech.mjs'
+
 function apiBase(): string {
   return (import.meta.env.VITE_SARA_API_URL ?? '').replace(/\/$/, '')
 }
@@ -878,7 +880,7 @@ function markVoiceFallback(reason: string, detail?: unknown): SaraStreamSpeakRes
 }
 
 export async function speakSaraStream(text: string): Promise<SaraStreamSpeakResult> {
-  const clean = text.replace(/\s+/g, ' ').trim()
+  const clean = rewritePfilatesForSpeech(text.replace(/\s+/g, ' ').trim())
   if (!clean) return 'fallback'
   if (sessionCapped) {
     listeners.onStatus?.('session_capped')

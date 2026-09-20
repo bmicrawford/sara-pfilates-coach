@@ -33,11 +33,13 @@ assert(/Play/i.test(SARA_VOICE_OFFLINE), 'voice offline copy points at Play')
 assert(!/speechSynthesis|Web Speech/i.test(SARA_VOICE_OFFLINE), 'does not advertise OS speech as the path')
 
 const speakSrc = readFileSync(new URL('./speakSara.ts', import.meta.url), 'utf8')
+assert(/rewritePfilatesForSpeech/.test(speakSrc), 'ara path rewrites PfilAtes before /speak')
 assert(!/speechSynthesis/.test(speakSrc), 'speakSara.ts has no speechSynthesis fallback')
 assert(!/trycloudflare/.test(speakSrc), 'speakSara.ts does not send people to trycloudflare')
 assert(!/requestSaraTalk/.test(speakSrc), 'client no longer waits on D-ID Talks mp4')
 
 const streamSrc = readFileSync(new URL('./saraStream.ts', import.meta.url), 'utf8')
+assert(/rewritePfilatesForSpeech/.test(streamSrc), 'D-ID speak path rewrites PfilAtes before Jenny')
 assert(/createAgentManager/.test(streamSrc), 'uses D-ID Agents SDK manager')
 assert(/speak\(\{ type: 'text'/.test(streamSrc), 'drives the avatar with agentManager.speak()')
 assert(/DirectPlayback/.test(streamSrc), 'speak-only DirectPlayback so a no-LLM agent keeps streamingManager')
@@ -346,7 +348,7 @@ const mainSrc = readFileSync(new URL('../main.tsx', import.meta.url), 'utf8')
 assert(/registration\.update\(/.test(mainSrc), 'service worker checks for a new bundle')
 
 const viteSrc = readFileSync(new URL('../../vite.config.ts', import.meta.url), 'utf8')
-assert(/sara-pwa-20260919-fullscreen-avatar/.test(viteSrc), 'PWA cacheId busts a phone still serving the circular-portrait bundle')
+assert(/sara-pwa-20260920-pfilates-speech/.test(viteSrc), 'PWA cacheId busts a phone still serving the pre-pronunciation bundle')
 assert(/NetworkFirst/.test(viteSrc), 'navigations are NetworkFirst so iOS PWA gets new index.html')
 assert(!/\*\.\{js,css,html/.test(viteSrc), 'does not precache index.html (stale PWA)')
 

@@ -1,5 +1,7 @@
 /** Shared Ask Sara → xAI neural TTS. Never import this from the Vite app. */
 
+import { rewritePfilatesForSpeech } from '../src/lib/pfilatesSpeech.mjs'
+
 export const XAI_TTS_URL = 'https://api.x.ai/v1/tts'
 export const SARA_VOICE = 'ara'
 export const SARA_VOICE_OFFLINE =
@@ -8,7 +10,7 @@ export const SARA_VOICE_OFFLINE =
 const MAX_CHARS = 4000
 
 export function clipSpeakText(text, max = MAX_CHARS) {
-  return String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+  return rewritePfilatesForSpeech(String(text ?? '').replace(/\s+/g, ' ').trim()).slice(0, max)
 }
 
 export async function speakSaraTts({
