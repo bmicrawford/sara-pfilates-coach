@@ -344,6 +344,7 @@ assert(finishedPdf.days.some((day) => day.incomplete), 'early-finished diary sti
 
 const exercisePage = readFileSync(new URL('../pages/ExerciseLog.tsx', import.meta.url), 'utf8')
 assert(/fourWeekExerciseReport/.test(exercisePage), 'exercise page uses the 4-week report helper')
+assert(/gate/.test(exercisePage), 'exercise page passes the Yes/No gate into the 4-week report')
 assert(/Duration/.test(exercisePage) && /Frequency/.test(exercisePage), 'exercise log shows duration and frequency')
 assert(/GenerateExerciseLogButton/.test(exercisePage), 'exercise page offers the gated generate/download flow')
 

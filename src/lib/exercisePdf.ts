@@ -1,4 +1,4 @@
-import { PFILATES_BRAND, PFILATES_SITE, localDayKey, summarizeLog } from './diary.ts'
+import { PFILATES_BRAND, PFILATES_SITE, localDayKey } from './diary.ts'
 import {
   DOWNLOAD_PDF_LABEL,
   PFILATES_LOGO_SRC,
@@ -8,16 +8,18 @@ import {
   pfilatesLogoDataUrl,
 } from './diaryPdf.ts'
 import {
+  EXERCISE_ATTESTED_NOTE,
   EXERCISE_REPORT_EMPTY,
   EXERCISE_REPORT_TITLE,
   canExportExerciseLogPdf,
+  exerciseDayLines,
   exerciseDurationLabel,
   exerciseFrequencyLabel,
   type ExerciseGateState,
   type FourWeekExerciseReport,
 } from './exercise.ts'
 import { formatDateOfBirth } from './patient.ts'
-import { formatDay, formatTime } from './storage.ts'
+import { formatDay } from './storage.ts'
 
 export { DOWNLOAD_PDF_LABEL, PFILATES_LOGO_SRC }
 
@@ -37,6 +39,7 @@ export type ExercisePdfDoc = {
   brand: string
   site: string
   subtitle: string
+  attestedNote?: string
   patientName: string
   dateOfBirth: string
   stats: ExercisePdfStat[]
@@ -56,7 +59,11 @@ export function exerciseLogPdfFilename(periodEnd: string): string {
 }
 
 export function exerciseLogReportSubtitle(report: FourWeekExerciseReport): string {
-  return `Last ${report.spanDays} days · ${formatDay(report.periodStart)} – ${formatDay(report.periodEnd)}. Duration and frequency of sessions you logged.`
+  const range = `Last ${report.spanDays} days · ${formatDay(report.periodStart)} – ${formatDay(report.periodEnd)}.`
+  if (report.imputed) {
+    return `${range} Duration and frequency include logged sessions plus blank days attested as 5 min.`
+  }
+  return `${range} Duration and frequency of sessions you logged.`
 }
 
 function formatDob(value: string): string {
@@ -69,22 +76,23 @@ export function exerciseLogPdfDoc(report: FourWeekExerciseReport): ExercisePdfDo
     brand: PFILATES_BRAND,
     site: PFILATES_SITE,
     subtitle: exerciseLogReportSubtitle(report),
+    attestedNote: report.imputed ? EXERCISE_ATTESTED_NOTE : undefined,
     patientName: report.patientName,
     dateOfBirth: formatDob(report.dateOfBirth),
     stats: [
       { label: 'Duration', value: exerciseDurationLabel(report) },
       { label: 'Frequency', value: exerciseFrequencyLabel(report) },
     ],
-    emptyMessage: report.entries.length === 0 ? EXERCISE_REPORT_EMPTY : undefined,
+    emptyMessage: report.days.length === 0 ? EXERCISE_REPORT_EMPTY : undefined,
     days: report.days.map((day) => ({
-      heading: formatDay(day.items[0]?.at ?? day.day),
+      heading: formatDay(day.dayAt),
       stats: [
         { label: 'Duration', value: `${day.minutes} min` },
         { label: 'Frequency', value: `${day.sessions} ${day.sessions === 1 ? 'session' : 'sessions'}` },
       ],
-      items: day.items.map((entry) => ({
-        time: formatTime(entry.at),
-        text: summarizeLog(entry),
+      items: exerciseDayLines(day).map((line) => ({
+        time: line.time,
+        text: line.text,
       })),
     })),
   }
@@ -96,6 +104,7 @@ export function exerciseLogPdfPlainText(doc: ExercisePdfDoc): string {
     doc.site,
     doc.title,
     doc.subtitle,
+    ...(doc.attestedNote ? [doc.attestedNote] : []),
     `Name: ${doc.patientName}`,
     `Date of birth: ${doc.dateOfBirth}`,
     '',
@@ -176,6 +185,7 @@ export async function buildExerciseLogPdf(
   pdf.setTextColor(45, 42, 38)
   writeWrapped(model.title, 20, 'bold', 4)
   writeWrapped(model.subtitle, 11, 'normal', 8)
+  if (model.attestedNote) writeWrapped(model.attestedNote, 10, 'normal', 8)
   writeWrapped(`Name: ${model.patientName}`, 12, 'bold', 1)
   writeWrapped(`Date of birth: ${model.dateOfBirth}`, 12, 'normal', 12)
 
