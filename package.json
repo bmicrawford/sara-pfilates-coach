@@ -17,6 +17,7 @@
     "smoke:diary": "node --experimental-strip-types src/lib/diary.smoke.ts",
     "smoke:exercise": "node --experimental-strip-types src/lib/exercise.smoke.ts",
     "smoke:verify-api": "node scripts/verify-sara-api.mjs --self-test",
+    "smoke:redeem": "node server/redeem.smoke.mjs",
     "verify:ask-api": "node scripts/verify-sara-api.mjs"
   },
   "dependencies": {

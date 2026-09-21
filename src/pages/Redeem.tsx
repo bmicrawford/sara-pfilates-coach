@@ -11,26 +11,45 @@ export function Redeem() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [bound, setBound] = useState(false)
+  const [busy, setBusy] = useState(false)
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (busy) return
     setError(null)
     setBound(false)
     if (!email.includes('@')) {
       setError('Use the email from your Kajabi receipt.')
       return
     }
-    const result = redeemToken(displayToken || DEMO_TOKEN, email)
-    if (result.ok) {
-      navigate('/', { replace: true })
-      return
+    setBusy(true)
+    try {
+      const result = await redeemToken(displayToken || DEMO_TOKEN, email)
+      if (result.ok) {
+        navigate('/', { replace: true })
+        return
+      }
+      if (result.reason === 'unknown-token') {
+        setError('That pass isn’t recognized. Open the private link from your purchase email.')
+        return
+      }
+      if (result.reason === 'email-mismatch') {
+        setError('This pass is already tied to a different email. Use the email from your Kajabi receipt.')
+        return
+      }
+      if (result.reason === 'redeem-unavailable') {
+        setError('Sara couldn’t check this pass just now. Try again in a moment.')
+        return
+      }
+      if (result.reason === 'invalid') {
+        setError('Use the email from your Kajabi receipt.')
+        return
+      }
+      setBound(true)
+      setError('This pass is already living on another phone.')
+    } finally {
+      setBusy(false)
     }
-    if (result.reason === 'unknown-token') {
-      setError('That pass isn’t recognized. Try the demo token DEMO-SARA-001.')
-      return
-    }
-    setBound(true)
-    setError('This pass is already living on another phone.')
   }
 
   return (
@@ -68,9 +87,10 @@ export function Redeem() {
         ) : null}
         <button
           type="submit"
-          className="w-full rounded-full bg-sage py-3.5 font-semibold text-white shadow-card"
+          disabled={busy}
+          className="w-full rounded-full bg-sage py-3.5 font-semibold text-white shadow-card disabled:opacity-60"
         >
-          Continue
+          {busy ? 'Checking…' : 'Continue'}
         </button>
       </form>
     </main>

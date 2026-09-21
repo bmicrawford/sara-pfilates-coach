@@ -10,9 +10,22 @@ XAI_MODEL = "grok-4.6"
 XAI_TTS_VOICE = "ara"
 SARA_AVATAR_URL = "https://sara-pfilates.surge.sh/avatar/sara-default.png"
 
+# Public PWA origin used in minted https://…/r/{TOKEN} links.
+SARA_PUBLIC_ORIGIN = "https://sara-pfilates.surge.sh"
+
+# Redeem store. Ask Sara still deploys while this stays commented.
+# POST /redeem/mint returns 503 until a human creates the namespace and uncomments it:
+#   npx wrangler kv namespace create REDEEM_TOKENS
+# [[kv_namespaces]]
+# binding = "REDEEM_TOKENS"
+# id = "<paste id here>"
+
 # Secrets — do not put keys here.
 #   printf '%s' "$XAI_API_KEY" | npx wrangler secret put XAI_API_KEY
 # DID_API_KEY is already set on sara-pfilates-ask. Do not commit it.
 #   printf '%s' "$DID_API_KEY" | npx wrangler secret put DID_API_KEY
 # After creating the Sara photo Agent, put its id (agt_...) as a Worker var/secret:
 #   printf '%s' "$DID_AGENT_ID" | npx wrangler secret put DID_AGENT_ID
+# Mint auth for Kajabi/Zapier. Generate with: openssl rand -hex 32
+#   printf '%s' "$REDEEM_MINT_SECRET" | npx wrangler secret put REDEEM_MINT_SECRET
+# Never VITE_REDEEM_MINT_SECRET. Never commit the value.

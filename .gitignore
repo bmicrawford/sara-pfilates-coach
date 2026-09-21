@@ -7,5 +7,6 @@ dist
 .env.local
 .env.*.local
 worker/.dev.vars
+server/.redeem-store.json
 *.tsbuildinfo
 .netlify
