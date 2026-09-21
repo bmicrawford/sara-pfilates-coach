@@ -362,7 +362,13 @@ const vite = readFileSync(join(root, 'vite.config.ts'), 'utf8')
 assert(worker.includes("pathname === '/redeem/mint'") && worker.includes('dispatchRedeem'), 'Worker routes mint')
 assert(worker.includes("pathname === '/redeem'") && nodeApi.includes("pathname === '/redeem'"), 'Worker and Node both validate redeem')
 assert(/REDEEM_MINT_SECRET/.test(wrangler) && !/^REDEEM_MINT_SECRET\s*=/m.test(wrangler), 'mint secret is documented, not assigned, in wrangler.toml')
-assert(!/^binding\s*=\s*"REDEEM_TOKENS"/m.test(wrangler), 'KV id stays commented until a human pastes the namespace')
+assert(
+  /^\[\[kv_namespaces\]\]/m.test(wrangler) &&
+    /^binding\s*=\s*"REDEEM_TOKENS"/m.test(wrangler) &&
+    /^id\s*=\s*"6465ceb88c4b4fdfbc9cf0374588181d"/m.test(wrangler) &&
+    !wrangler.includes('<paste id here>'),
+  'REDEEM_TOKENS KV binding matches the live namespace',
+)
 assert(/DEMO_TOKEN = 'DEMO-SARA-001'/.test(mock) && /await confirmRemotePass/.test(mock), 'demo pass stays local and purchased passes call the Worker')
 assert(/await redeemToken/.test(redeemPage) && /email-mismatch/.test(redeemPage) && /redeem-unavailable/.test(redeemPage), 'redeem page surfaces Worker results')
 assert(vite.includes("'/redeem'"), 'Vite proxies /redeem to the local API')

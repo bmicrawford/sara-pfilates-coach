@@ -13,12 +13,9 @@ SARA_AVATAR_URL = "https://sara-pfilates.surge.sh/avatar/sara-default.png"
 # Public PWA origin used in minted https://…/r/{TOKEN} links.
 SARA_PUBLIC_ORIGIN = "https://sara-pfilates.surge.sh"
 
-# Redeem store. Ask Sara still deploys while this stays commented.
-# POST /redeem/mint returns 503 until a human creates the namespace and uncomments it:
-#   npx wrangler kv namespace create REDEEM_TOKENS
-# [[kv_namespaces]]
-# binding = "REDEEM_TOKENS"
-# id = "<paste id here>"
+[[kv_namespaces]]
+binding = "REDEEM_TOKENS"
+id = "6465ceb88c4b4fdfbc9cf0374588181d"
 
 # Secrets — do not put keys here.
 #   printf '%s' "$XAI_API_KEY" | npx wrangler secret put XAI_API_KEY

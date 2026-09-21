@@ -92,10 +92,7 @@ Agents must not run steps 1, 2, or 5 with real secrets. `DID_API_KEY` is already
 
 Ask Sara keeps working if these steps wait. `POST /redeem/mint` stays closed until both the secret and the KV namespace exist. `GET /health` reports `"redeem": true` when they do.
 
-1. Create the namespace and uncomment `[[kv_namespaces]]` in `worker/wrangler.toml` with the printed id:
-   ```bash
-   cd worker && npx wrangler kv namespace create REDEEM_TOKENS
-   ```
+1. The live namespace is already in `worker/wrangler.toml` (`REDEEM_TOKENS` id `6465ceb88c4b4fdfbc9cf0374588181d`). Do not create a second namespace.
 2. Generate a mint secret and store it on the Worker (do not paste it into chat, flags, or the repo):
    ```bash
    openssl rand -hex 32
