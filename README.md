@@ -144,8 +144,7 @@ Send `externalId` (the Kajabi transaction id) so a Zapier retry returns the same
 
 ```bash
 cd worker
-npx wrangler kv namespace create REDEEM_TOKENS
-# Uncomment [[kv_namespaces]] in wrangler.toml and paste the id.
+# REDEEM_TOKENS is already bound in wrangler.toml (id 6465ceb88c4b4fdfbc9cf0374588181d).
 openssl rand -hex 32   # this value is REDEEM_MINT_SECRET — do not commit it
 printf '%s' "$REDEEM_MINT_SECRET" | npx wrangler secret put REDEEM_MINT_SECRET
 npx wrangler deploy
