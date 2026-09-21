@@ -1,4 +1,5 @@
 import { askSaraGrok, corsHeaders, jsonResponse, GROK_MODEL } from '../../server/askGrok.mjs'
+import { dispatchRedeem, headerGetter, kvRedeemStore } from '../../server/redeem.mjs'
 import { speakSaraTts, SARA_VOICE } from '../../server/speakSara.mjs'
 import {
   talkSaraDid,
@@ -33,6 +34,7 @@ export default {
           tts: env.XAI_TTS_VOICE || SARA_VOICE,
           talk: Boolean(env.DID_API_KEY),
           stream: Boolean(env.DID_API_KEY && env.DID_AGENT_ID),
+          redeem: Boolean(env.REDEEM_MINT_SECRET && env.REDEEM_TOKENS),
         },
         origin,
       )
@@ -59,6 +61,49 @@ export default {
       } catch {
         const out = talkJson(200, streamStartResponse({ ok: false, reason: 'stream_failed' }), origin)
         return new Response(out.body, { status: out.status, headers: out.headers })
+      }
+    }
+
+    if (request.method === 'POST' && (url.pathname === '/redeem' || url.pathname === '/redeem/mint')) {
+      let redeemBody = {}
+      let jsonFailed = false
+      try {
+        const text = await request.text()
+        if (text.trim()) {
+          const parsed = JSON.parse(text)
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) redeemBody = parsed
+          else jsonFailed = true
+        }
+      } catch {
+        jsonFailed = true
+      }
+      if (jsonFailed) {
+        const out = jsonResponse(400, { ok: false, error: 'invalid_json' }, origin)
+        return new Response(out.body, {
+          status: out.status,
+          headers: { ...out.headers, 'Cache-Control': 'no-store' },
+        })
+      }
+      try {
+        const result = await dispatchRedeem(url.pathname, request.method, {
+          store: kvRedeemStore(env.REDEEM_TOKENS),
+          secret: String(env.REDEEM_MINT_SECRET || '').trim(),
+          getHeader: headerGetter(request.headers),
+          body: redeemBody,
+          publicOrigin: env.SARA_PUBLIC_ORIGIN,
+          now: new Date().toISOString(),
+        })
+        const out = jsonResponse(result.status, result.body, origin)
+        return new Response(out.body, {
+          status: out.status,
+          headers: { ...out.headers, 'Cache-Control': 'no-store' },
+        })
+      } catch {
+        const out = jsonResponse(503, { ok: false, error: 'redeem_failed' }, origin)
+        return new Response(out.body, {
+          status: out.status,
+          headers: { ...out.headers, 'Cache-Control': 'no-store' },
+        })
       }
     }
 

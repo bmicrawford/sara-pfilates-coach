@@ -10,6 +10,10 @@ import {
   talkPollResponse,
 } from './talkSara.mjs'
 import { mintSaraStreamKey, streamStartResponse } from './streamSara.mjs'
+import { dispatchRedeem, headerGetter } from './redeem.mjs'
+import { createFileRedeemStore } from './redeemFileStore.mjs'
+
+const redeemStore = createFileRedeemStore(new URL('./.redeem-store.json', import.meta.url))
 
 const PORT = Number(process.env.SARA_API_PORT || 8787)
 
@@ -62,8 +66,48 @@ const server = createServer(async (req, res) => {
         tts: process.env.XAI_TTS_VOICE || SARA_VOICE,
         talk: Boolean(process.env.DID_API_KEY),
         stream: Boolean(process.env.DID_API_KEY && process.env.DID_AGENT_ID),
+        redeem: Boolean(String(process.env.REDEEM_MINT_SECRET || '').trim()),
       }),
     )
+    return
+  }
+
+  if (req.method === 'POST' && (url.pathname === '/redeem' || url.pathname === '/redeem/mint')) {
+    let redeemBody = {}
+    let jsonFailed = false
+    try {
+      const raw = await readBody(req)
+      if (raw.trim()) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) redeemBody = parsed
+        else jsonFailed = true
+      }
+    } catch {
+      jsonFailed = true
+    }
+    if (jsonFailed) {
+      const out = jsonResponse(400, { ok: false, error: 'invalid_json' }, origin)
+      res.writeHead(out.status, { ...out.headers, 'Cache-Control': 'no-store' })
+      res.end(out.body)
+      return
+    }
+    try {
+      const result = await dispatchRedeem(url.pathname, 'POST', {
+        store: redeemStore,
+        secret: String(process.env.REDEEM_MINT_SECRET || '').trim(),
+        getHeader: headerGetter(req.headers),
+        body: redeemBody,
+        publicOrigin: process.env.SARA_PUBLIC_ORIGIN,
+        now: new Date().toISOString(),
+      })
+      const out = jsonResponse(result.status, result.body, origin)
+      res.writeHead(out.status, { ...out.headers, 'Cache-Control': 'no-store' })
+      res.end(out.body)
+    } catch {
+      const out = jsonResponse(503, { ok: false, error: 'redeem_failed' }, origin)
+      res.writeHead(out.status, { ...out.headers, 'Cache-Control': 'no-store' })
+      res.end(out.body)
+    }
     return
   }
 

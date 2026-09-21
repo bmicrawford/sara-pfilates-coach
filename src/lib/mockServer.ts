@@ -5,13 +5,13 @@ import type { ChatMessage, DeviceBinding, Diary, LogEntry, Session } from './typ
 export const DEMO_TOKEN = 'DEMO-SARA-001'
 
 /**
- * KAJABI API: placeholder only.
- * After purchase, Kajabi would POST a webhook. A real backend would mint a
- * one-time redeem token, email `/r/:token`, and never share Kajabi SSO here.
- * This prototype does not call Kajabi.
+ * QA pass stays in this browser. Purchased passes are minted on the Worker
+ * (`POST /redeem/mint`) and checked with `POST /redeem` before this phone binds.
+ * Kajabi keeps the course. The mint secret never lives in this file.
  */
 
 const VALID_TOKENS = new Set([DEMO_TOKEN])
+const REDEEM_TIMEOUT_MS = 12_000
 
 export function normalizeToken(token: string): string {
   return token.trim().toUpperCase()
@@ -44,12 +44,44 @@ export function findBinding(token: string): DeviceBinding | undefined {
 
 export type RedeemResult =
   | { ok: true; session: Session }
-  | { ok: false; reason: 'unknown-token' | 'bound-other-device'; binding?: DeviceBinding }
+  | {
+      ok: false
+      reason: 'unknown-token' | 'bound-other-device' | 'email-mismatch' | 'redeem-unavailable' | 'invalid'
+      binding?: DeviceBinding
+    }
 
-export function redeemToken(token: string, email: string): RedeemResult {
-  const key = normalizeToken(token)
-  if (!isKnownToken(key)) return { ok: false, reason: 'unknown-token' }
+function saraApiBase(): string {
+  return (import.meta.env.VITE_SARA_API_URL ?? '').replace(/\/$/, '')
+}
 
+type RemoteRedeem =
+  | { ok: true }
+  | { ok: false; reason: 'unknown-token' | 'email-mismatch' | 'redeem-unavailable' | 'invalid' }
+
+async function confirmRemotePass(token: string, email: string): Promise<RemoteRedeem> {
+  const ctrl = new AbortController()
+  const timer = window.setTimeout(() => ctrl.abort(), REDEEM_TIMEOUT_MS)
+  try {
+    const res = await fetch(`${saraApiBase()}/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: ctrl.signal,
+      body: JSON.stringify({ token, email }),
+    })
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; reason?: string }
+    if (res.ok && data.ok) return { ok: true }
+    if (data.reason === 'unknown-token' || res.status === 404) return { ok: false, reason: 'unknown-token' }
+    if (data.reason === 'email-mismatch' || res.status === 409) return { ok: false, reason: 'email-mismatch' }
+    if (data.reason === 'invalid' || res.status === 400) return { ok: false, reason: 'invalid' }
+    return { ok: false, reason: 'redeem-unavailable' }
+  } catch {
+    return { ok: false, reason: 'redeem-unavailable' }
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
+function bindRedeemedToken(key: string, email: string): RedeemResult {
   const deviceId = getOrCreateDeviceId()
   const existing = findBinding(key)
 
@@ -77,6 +109,16 @@ export function redeemToken(token: string, email: string): RedeemResult {
   writeJson('session', session)
   notifySession()
   return { ok: true, session }
+}
+
+export async function redeemToken(token: string, email: string): Promise<RedeemResult> {
+  const key = normalizeToken(token)
+  if (!key) return { ok: false, reason: 'unknown-token' }
+  if (!isKnownToken(key)) {
+    const remote = await confirmRemotePass(key, email)
+    if (!remote.ok) return remote
+  }
+  return bindRedeemedToken(key, email)
 }
 
 function notifySession(): void {
