@@ -4,9 +4,10 @@ import {
   PFILATES_BRAND,
   PFILATES_SITE,
   diaryDayNumber,
+  localDayKey,
+  summarizeReportLog,
   type BladderDiaryReport,
 } from './diary.ts'
-import { localDayKey, summarizeLog } from './diary.ts'
 import { formatDateOfBirth } from './patient.ts'
 import { formatDateTime, formatDay, formatTime } from './storage.ts'
 
@@ -100,7 +101,7 @@ export function bladderDiaryPdfDoc(report: BladderDiaryReport): BladderDiaryPdfD
         .filter((entry) => report.firstEventAt !== null && diaryDayNumber(entry.at, report.firstEventAt) === day.day)
         .map((entry) => ({
           time: formatTime(entry.at),
-          text: summarizeLog(entry),
+          text: summarizeReportLog(entry),
         })),
     })),
   }

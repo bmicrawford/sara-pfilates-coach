@@ -299,11 +299,54 @@ export function groupLogsByDay<T extends LogEntry>(logs: T[]): { day: string; it
   return [...map.entries()].map(([day, items]) => ({ day, items }))
 }
 
+/** Log-a-drink chips. Alcohol is Beer, Wine, or Liquor. Volume stays on the oz/ml slider. */
+export const DRINK_BEVERAGE_CHIPS = [
+  'Water',
+  'Black or Green Tea',
+  'Coffee',
+  'Beer',
+  'Wine',
+  'Liquor',
+  'Other',
+] as const
+
+/**
+ * Beverage names printed on the bladder diary report and PDF.
+ * Tea aliases include the current chip and the “Tee” typo. Herbal tea is the
+ * previous tea chip, so older logs still read as Tea.
+ */
+const REPORT_DRINK_TYPES: Readonly<Record<string, string>> = {
+  coffee: 'Coffee',
+  tea: 'Tea',
+  tee: 'Tea',
+  'black or green tea': 'Tea',
+  'black or green tee': 'Tea',
+  'herbal tea': 'Tea',
+  beer: 'Beer',
+  wine: 'Wine',
+  liquor: 'Liquor',
+}
+
+export function reportDrinkType(beverage: string): string | null {
+  const key = beverage.trim().toLowerCase().replace(/\s+/g, ' ')
+  return REPORT_DRINK_TYPES[key] ?? null
+}
+
 export function summarizeLog(entry: LogEntry): string {
   if (entry.kind === 'drink') return `${entry.beverage} · ${entry.amount}`
   if (entry.kind === 'voidLeak') return `${labelWhat(entry.what)} · ${entry.intensity}`
   if (entry.kind === 'pad') return `Pad · ${entry.reason}`
   return `${entry.activity} · ${entry.minutes} min`
+}
+
+/**
+ * Report and PDF lines. Coffee, Tea, Beer, Wine, and Liquor keep a type name.
+ * Water, Other, and anything else stay as time + volume only.
+ */
+export function summarizeReportLog(entry: LogEntry): string {
+  if (entry.kind !== 'drink') return summarizeLog(entry)
+  const type = reportDrinkType(entry.beverage)
+  return type ? `${type} · ${entry.amount}` : entry.amount
 }
 
 export function labelWhat(what: 'void' | 'leak' | 'urge'): string {

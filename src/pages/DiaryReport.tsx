@@ -10,7 +10,7 @@ import {
   canViewDiaryReport,
   isDiaryOpen,
   latestDiary,
-  summarizeLog,
+  summarizeReportLog,
   type DiaryDayReport,
 } from '../lib/diary'
 import { DIARY_REPORT_EMPTY, bladderDiaryReportSubtitle, incompleteDayLabel } from '../lib/diaryPdf'
@@ -98,7 +98,7 @@ export function DiaryReport() {
                 key={entry.id}
                 className="flex items-center justify-between rounded-2xl bg-cream-card px-4 py-3 text-sm shadow-card"
               >
-                <span className="text-ink">{summarizeLog(entry)}</span>
+                <span className="text-ink">{summarizeReportLog(entry)}</span>
                 <span className="text-ink-faint">{formatTime(entry.at)}</span>
               </li>
             ))}

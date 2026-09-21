@@ -18,14 +18,17 @@ import {
   diaryStatus,
   exerciseLogReport,
   finishDiary,
+  DRINK_BEVERAGE_CHIPS,
   firstLoggedEventAt,
   isDiaryDayComplete,
   isDiaryOpen,
   latestDiary,
   localDayKey,
   logsForDiary,
+  reportDrinkType,
   startDiary,
   summarizeLog,
+  summarizeReportLog,
 } from './diary.ts'
 import {
   DOWNLOAD_PDF_ANYTIME_HINT,
@@ -183,6 +186,7 @@ assert(
   'untagged logs still attach by diary time window',
 )
 assert(summarizeLog(drink) === 'Water · Glass', 'legacy drink chip amounts still summarize in the existing format')
+assert(summarizeReportLog(drink) === 'Glass', 'report omits Water and keeps the logged volume')
 const measuredDrink: LogEntry = {
   id: 'd-oz',
   kind: 'drink',
@@ -195,7 +199,39 @@ assert(
   measuredDrink.amount === '8 oz' && measuredDrink.volumeOz === 8 && measuredDrink.volumeUnit === 'oz',
   'ounce slider volume is stored on the drink event as amount, volumeOz, and volumeUnit',
 )
-assert(summarizeLog(measuredDrink) === 'Water · 8 oz', 'drink summary prints the saved ounce volume')
+assert(summarizeLog(measuredDrink) === 'Water · 8 oz', 'home summary still prints beverage and ounce volume')
+assert(summarizeReportLog(measuredDrink) === '8 oz', 'report prints ounce volume without the Water name')
+const otherDrink: LogEntry = {
+  id: 'd-other',
+  kind: 'drink',
+  at: drink.at,
+  beverage: 'Other',
+  amount: '237 ml',
+}
+assert(summarizeReportLog(otherDrink) === '237 ml', 'report omits Other and keeps the logged volume')
+const coffeeDrink: LogEntry = { ...measuredDrink, id: 'd-coffee', beverage: 'Coffee' }
+assert(summarizeReportLog(coffeeDrink) === 'Coffee · 8 oz', 'report names Coffee')
+const teaChip: LogEntry = { ...measuredDrink, id: 'd-tea', beverage: 'Black or Green Tea', amount: '6 oz' }
+assert(summarizeReportLog(teaChip) === 'Tea · 6 oz', 'Black or Green Tea is reported as Tea')
+const teeTypo: LogEntry = { ...measuredDrink, id: 'd-tee', beverage: 'Tee', amount: '5 oz' }
+assert(summarizeReportLog(teeTypo) === 'Tea · 5 oz', 'Tee typo is reported as Tea')
+assert(summarizeReportLog(legacy) === 'Tea · Glass', 'a stored Tea drink keeps the Tea name on the report')
+const herbalTea: LogEntry = { ...legacy, id: 'd-herbal', beverage: 'Herbal tea' }
+assert(summarizeReportLog(herbalTea) === 'Tea · Glass', 'the previous Herbal tea chip is reported as Tea')
+for (const [beverage, label, amount] of [
+  ['Beer', 'Beer', '12 oz'],
+  ['wine', 'Wine', '5 oz'],
+  ['Liquor', 'Liquor', '2 oz'],
+] as const) {
+  const alcohol: LogEntry = { ...measuredDrink, id: beverage, beverage, amount }
+  assert(summarizeReportLog(alcohol) === `${label} · ${amount}`, `report names ${label}`)
+  assert(reportDrinkType(beverage) === label, `${beverage} resolves to ${label}`)
+}
+assert(reportDrinkType('Water') === null && reportDrinkType('Other') === null, 'Water and Other have no report type')
+assert(
+  DRINK_BEVERAGE_CHIPS.join('|') === 'Water|Black or Green Tea|Coffee|Beer|Wine|Liquor|Other',
+  'drink chips keep water, tea, coffee, and other, and add beer, wine, and liquor',
+)
 const metricDrink = drinkEventVolume(500, 'ml')
 assert(
   metricDrink.amount === '500 ml' && metricDrink.volumeUnit === 'ml',
@@ -306,9 +342,12 @@ assert(/active \? \(/.test(homeSrc) && /Log a drink/.test(homeSrc), 'event butto
 assert(/Void \(pee\) or leak/.test(homeSrc) && /Pad change/.test(homeSrc) && /Exercise/.test(homeSrc), 'Home keeps existing event types')
 assert(/type="range"/.test(homeSrc) && /Convert to metric/.test(homeSrc), 'drink sheet uses a slider with a metric conversion button')
 assert(!/'Sip'/.test(homeSrc) && !/'Glass'/.test(homeSrc) && !/'Bottle'/.test(homeSrc), 'drink sheet no longer uses sip, glass, or bottle chips')
+assert(/DRINK_BEVERAGE_CHIPS/.test(homeSrc), 'drink sheet uses the shared beverage chips')
 assert(
-  /'Water', 'Black or Green Tea', 'Coffee', 'Other'/.test(homeSrc),
-  'drink chips offer Black or Green Tea',
+  /Water',[\s\n]*'Black or Green Tea',[\s\n]*'Coffee',[\s\n]*'Beer',[\s\n]*'Wine',[\s\n]*'Liquor',[\s\n]*'Other'/.test(
+    readFileSync(new URL('./diary.ts', import.meta.url), 'utf8'),
+  ),
+  'drink chips offer Black or Green Tea plus Beer, Wine, and Liquor',
 )
 assert(!/Herbal tea/.test(homeSrc), 'drink chips no longer offer Herbal tea')
 assert(/Void \(pee\)/.test(homeSrc), 'void on the logging surface is labeled Void (pee)')
@@ -354,6 +393,7 @@ assert(
   !/No diary yet[\s\S]{0,500}DownloadDiaryPdfButton/.test(diaryPage),
   'empty no-diary state does not offer a PDF',
 )
+assert(/summarizeReportLog/.test(diaryPage), 'on-screen diary report uses the drink-type filter')
 assert(/bladderDiaryReportSubtitle/.test(diaryPage), 'diary report names the in-progress state via shared copy')
 assert(/while the diary is still open/.test(bladderDiaryReportSubtitle(bladder)), 'diary report stays readable before finish')
 assert(/bladderDiaryReport/.test(diaryPage), 'diary page uses the shared report helper')
@@ -404,8 +444,37 @@ assert(
 )
 assert(pdfDoc.days[1]?.incomplete === INCOMPLETE_DAY_LABEL, 'PDF marks Day 2 incomplete during Day 1')
 assert(pdfDoc.days[2]?.incomplete === INCOMPLETE_DAY_LABEL, 'PDF marks Day 3 incomplete during Day 1')
-assert(pdfText.includes('Water · Glass'), 'PDF includes the same drink line as the report')
+assert(
+  pdfDoc.days[0]?.items.some((item) => item.text === 'Glass'),
+  'PDF lists the water drink as volume only',
+)
+assert(
+  !pdfDoc.days.some((day) => day.items.some((item) => /\bWater\b/.test(item.text))),
+  'PDF omits the Water beverage name',
+)
+assert(pdfText.includes('Glass'), 'PDF includes the drink volume from the report')
 assert(pdfText.includes('Leak · Light'), 'PDF includes the same leak line as the report')
+const typedDiary: Diary = { id: 'types', startedAt: '2026-09-20T12:00:00.000Z' }
+const typedLogs: LogEntry[] = [
+  coffeeDrink,
+  teaChip,
+  teeTypo,
+  { ...measuredDrink, id: 'beer', diaryId: 'types', beverage: 'Beer', amount: '12 oz', at: '2026-09-20T16:00:00.000Z' },
+  { ...measuredDrink, id: 'wine', diaryId: 'types', beverage: 'wine', amount: '5 oz', at: '2026-09-20T17:00:00.000Z' },
+  { ...measuredDrink, id: 'liquor', diaryId: 'types', beverage: 'Liquor', amount: '2 oz', at: '2026-09-20T18:00:00.000Z' },
+  { ...measuredDrink, id: 'water-typed', diaryId: 'types', at: '2026-09-20T19:00:00.000Z' },
+  { ...otherDrink, id: 'other-typed', diaryId: 'types', at: '2026-09-20T20:00:00.000Z' },
+].map((entry) => ({ ...entry, diaryId: 'types' }))
+const typedReport = bladderDiaryReport(typedDiary, typedLogs, { now: '2026-09-20T21:00:00.000Z', patient })
+assert(typedReport.drinks === typedLogs.length, 'hiding a drink name does not change the drink total')
+const typedLines = bladderDiaryPdfDoc(typedReport).days.flatMap((day) => day.items.map((item) => item.text))
+for (const line of ['Coffee · 8 oz', 'Tea · 6 oz', 'Tea · 5 oz', 'Beer · 12 oz', 'Wine · 5 oz', 'Liquor · 2 oz', '8 oz', '237 ml']) {
+  assert(typedLines.includes(line), `PDF lists ${line}`)
+}
+assert(
+  !typedLines.some((line) => /Water|Other|Black or Green|Tee|Herbal/.test(line)),
+  'PDF does not print Water, Other, or the raw tea chip',
+)
 assert(pdfText.includes(PFILATES_SITE) && pdfText.includes(PFILATES_BRAND), 'PDF text includes logo brand and site')
 assert(!/cure|treat|diagnos|clinician promise/i.test(pdfText), 'PDF makes no new medical claim')
 
@@ -459,12 +528,15 @@ assert(pdfRaw.includes('Alex Rivera'), 'generated PDF embeds the patient name')
 assert(pdfRaw.includes('Incomplete'), 'generated PDF embeds incomplete day markers')
 assert(pdfRaw.includes('Day 1') && pdfRaw.includes('Day 2') && pdfRaw.includes('Day 3'), 'generated PDF embeds Day 1–3 headings')
 assert(pdfRaw.includes('In progress'), 'generated in-progress PDF is not rewritten as finished')
+assert(pdfRaw.includes('Glass'), 'generated PDF lists the water drink volume')
+assert(!pdfRaw.includes('Water'), 'generated PDF does not embed the Water beverage name')
 
 const emptyBuilt = await buildBladderDiaryPdf(emptyStart, { logoDataUrl })
 assert(canExportBladderDiaryPdf(emptyStart), 'PDF path is not blocked when zero days have events')
 assert(new TextDecoder('latin1').decode(emptyBuilt.bytes.slice(0, 5)) === '%PDF-', 'zero-event in-progress diary still builds a PDF')
 
 const pdfSrc = readFileSync(new URL('./diaryPdf.ts', import.meta.url), 'utf8')
+assert(/summarizeReportLog/.test(pdfSrc), 'PDF drink lines use the same type filter as the on-screen report')
 assert(/pdf\.addImage\(embed, 'PNG'/.test(pdfSrc), 'logo embed still uses addImage PNG')
 assert(
   /try \{[\s\S]*pdf\.addImage\(embed, 'PNG'[\s\S]*\} catch \{[\s\S]*drewLogo = false/.test(pdfSrc),
