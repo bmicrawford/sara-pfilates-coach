@@ -304,6 +304,8 @@ assert(/openSheet\('exercise'\)/.test(homeSrc), 'cue can open the existing exerc
 assert(/A set that happened — log it even without a diary/.test(homeSrc), 'exercise can be logged when no diary is open')
 assert(/START_NEW_DIARY_LABEL/.test(homeSrc) && /DownloadDiaryPdfButton/.test(homeSrc), 'Home Start New Diary and diary PDF stay in place')
 assert(/to="\/ask"/.test(homeSrc), 'Home still links Ask Sara')
+assert(/'PfilAtes', "Kegel's"/.test(homeSrc), "exercise sheet offers PfilAtes and Kegel's")
+assert(!/Pelvic floor/.test(homeSrc) && !/'Walk'/.test(homeSrc) && !/'Stretch'/.test(homeSrc), 'exercise sheet drops Pelvic floor, walk, and stretch')
 
 const exercisePage = readFileSync(new URL('../pages/ExerciseLog.tsx', import.meta.url), 'utf8')
 assert(/GENERATE_EXERCISE_LOG_LABEL|GenerateExerciseLogButton/.test(exercisePage), 'exercise page starts from Generate exercise log')

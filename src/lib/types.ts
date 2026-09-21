@@ -23,13 +23,23 @@ export type DeviceBinding = {
 
 export type LogKind = 'drink' | 'voidLeak' | 'pad' | 'exercise'
 
+export type DrinkVolumeUnit = 'oz' | 'ml'
+
 export type DrinkLog = {
   id: string
   kind: 'drink'
   at: string
   diaryId?: string
   beverage: string
+  /**
+   * What the patient logged. Slider saves are a volume string such as "8 oz" or "237 ml".
+   * Older events may still say "Sip", "Glass", or "Bottle".
+   */
   amount: string
+  /** US fluid ounces for the saved slider value. Omitted on older chip logs. */
+  volumeOz?: number
+  /** Unit shown on the slider when this drink was saved. */
+  volumeUnit?: DrinkVolumeUnit
   note?: string
 }
 

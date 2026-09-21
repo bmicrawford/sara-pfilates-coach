@@ -39,6 +39,17 @@ import {
   incompleteDayLabel,
 } from './diaryPdf.ts'
 import {
+  DRINK_OZ_MAX,
+  DRINK_OZ_MIN,
+  drinkEventVolume,
+  ML_PER_OZ,
+  mlToOz,
+  ozToMl,
+  readDrinkUnit,
+  sliderBounds,
+  writeDrinkUnit,
+} from './drinkVolume.ts'
+import {
   isValidDateOfBirth,
   missingPatientFields,
   normalizePatientName,
@@ -171,7 +182,57 @@ assert(
   logsForDiary(windowed, [legacy, drink])[0]?.id === 'legacy-drink',
   'untagged logs still attach by diary time window',
 )
-assert(summarizeLog(drink) === 'Water · Glass', 'drink summary stays in the existing format')
+assert(summarizeLog(drink) === 'Water · Glass', 'legacy drink chip amounts still summarize in the existing format')
+const measuredDrink: LogEntry = {
+  id: 'd-oz',
+  kind: 'drink',
+  at: drink.at,
+  diaryId: 'open',
+  beverage: 'Water',
+  ...drinkEventVolume(8, 'oz'),
+}
+assert(
+  measuredDrink.amount === '8 oz' && measuredDrink.volumeOz === 8 && measuredDrink.volumeUnit === 'oz',
+  'ounce slider volume is stored on the drink event as amount, volumeOz, and volumeUnit',
+)
+assert(summarizeLog(measuredDrink) === 'Water · 8 oz', 'drink summary prints the saved ounce volume')
+const metricDrink = drinkEventVolume(500, 'ml')
+assert(
+  metricDrink.amount === '500 ml' && metricDrink.volumeUnit === 'ml',
+  'milliliter slider volume is stored as the chosen ml on amount',
+)
+assert(
+  Math.abs(metricDrink.volumeOz - 500 / ML_PER_OZ) < 0.001,
+  'ml drinks also keep a volumeOz equivalent',
+)
+assert(ozToMl(DRINK_OZ_MIN) === 30 && ozToMl(DRINK_OZ_MAX) === 1065, '1–36 oz maps to about 30–1065 ml')
+assert(sliderBounds('oz').min === 1 && sliderBounds('oz').max === 36, 'ounce slider stays 1–36')
+assert(
+  sliderBounds('ml').min === ozToMl(1) && sliderBounds('ml').max === ozToMl(36),
+  'metric slider uses the same 1–36 oz range in ml',
+)
+assert(mlToOz(ozToMl(1)) === 1 && mlToOz(ozToMl(36)) === 36, 'converting the slider ends back to ounces is exact')
+assert(mlToOz(500) === 17, 'a mid-range ml value converts to the nearest ounce')
+const drinkUnitMemory = new Map<string, string>()
+;(globalThis as { localStorage?: Storage }).localStorage = {
+  getItem: (key: string) => drinkUnitMemory.get(key) ?? null,
+  setItem: (key: string, value: string) => {
+    drinkUnitMemory.set(key, value)
+  },
+  removeItem: (key: string) => {
+    drinkUnitMemory.delete(key)
+  },
+  clear: () => drinkUnitMemory.clear(),
+  key: (index: number) => [...drinkUnitMemory.keys()][index] ?? null,
+  get length() {
+    return drinkUnitMemory.size
+  },
+} as Storage
+assert(readDrinkUnit() === 'oz', 'drink unit preference defaults to ounces')
+writeDrinkUnit('ml')
+assert(readDrinkUnit() === 'ml', 'metric drink unit preference persists locally')
+writeDrinkUnit('oz')
+assert(readDrinkUnit() === 'oz', 'ounce drink unit preference persists locally')
 
 const t0 = '2026-09-20T14:00:00.000Z'
 assert(firstLoggedEventAt([pad, drink, leak]) === t0, 'firstLoggedEventAt is the earliest timestamp')
@@ -242,7 +303,13 @@ assert(buckets[0]?.complete && buckets[1]?.incomplete && buckets[2]?.incomplete,
 const homeSrc = readFileSync(new URL('../pages/Home.tsx', import.meta.url), 'utf8')
 assert(/START_NEW_DIARY_LABEL/.test(homeSrc), 'Home has a Start New Diary button')
 assert(/active \? \(/.test(homeSrc) && /Log a drink/.test(homeSrc), 'event buttons wait until a diary is active')
-assert(/Void or leak/.test(homeSrc) && /Pad change/.test(homeSrc) && /Exercise/.test(homeSrc), 'Home keeps existing event types')
+assert(/Void \(pee\) or leak/.test(homeSrc) && /Pad change/.test(homeSrc) && /Exercise/.test(homeSrc), 'Home keeps existing event types')
+assert(/type="range"/.test(homeSrc) && /Convert to metric/.test(homeSrc), 'drink sheet uses a slider with a metric conversion button')
+assert(!/'Sip'/.test(homeSrc) && !/'Glass'/.test(homeSrc) && !/'Bottle'/.test(homeSrc), 'drink sheet no longer uses sip, glass, or bottle chips')
+assert(/Void \(pee\)/.test(homeSrc), 'void on the logging surface is labeled Void (pee)')
+assert(!/Everyday/.test(homeSrc), 'void or leak sheet no longer offers Everyday')
+assert(/Saturated/.test(homeSrc), 'pad change offers Saturated')
+assert(!/Overnight/.test(homeSrc) && !/Heading out/.test(homeSrc) && !/Routine/.test(homeSrc), 'pad change drops Overnight, Heading out, and Routine')
 assert(/DIARY_ACTIVE_CUE/.test(homeSrc), 'Home shows the active-diary cue')
 assert(/DIARY_STARTED_TOAST/.test(homeSrc), 'Home toasts after Start New Diary')
 assert(/to="\/diary"/.test(homeSrc) && /to="\/exercise"/.test(homeSrc), 'Home links to both in-progress views')

@@ -24,13 +24,22 @@ import { addDiaryLog, finishActiveDiary, readDiaries, readLogs, startNewDiary, s
 import { patientFirstName, readPatient } from '../lib/patient'
 import { markCompanionOpened } from '../lib/notifications'
 import {
+  DRINK_OZ_DEFAULT,
+  drinkEventVolume,
+  mlToOz,
+  ozToMl,
+  readDrinkUnit,
+  sliderBounds,
+  writeDrinkUnit,
+} from '../lib/drinkVolume'
+import {
   formatTime,
   fromDatetimeLocal,
   isSameLocalDay,
   toDatetimeLocal,
   uid,
 } from '../lib/storage'
-import type { Diary, LogEntry, Mood, Session, SheetId } from '../lib/types'
+import type { Diary, DrinkVolumeUnit, LogEntry, Mood, Session, SheetId } from '../lib/types'
 
 const IDLE_MS = 11_000
 const CELEBRATE_MS = 3800
@@ -198,8 +207,8 @@ export function Home({ session }: Props) {
       {active ? (
         <>
           <div className="mt-5 grid grid-cols-2 gap-3">
-            <Action label="Log a drink" hint="Sip, glass, tea" onClick={() => openSheet('drink')} />
-            <Action label="Void or leak" hint="No judgment" onClick={() => openSheet('voidLeak')} />
+            <Action label="Log a drink" hint="How much you had" onClick={() => openSheet('drink')} />
+            <Action label="Void (pee) or leak" hint="No judgment" onClick={() => openSheet('voidLeak')} />
             <Action label="Pad change" hint="Time + reason" onClick={() => openSheet('pad')} />
             <Action label="Exercise" hint="A set that happened" onClick={() => openSheet('exercise')} />
           </div>
@@ -351,13 +360,27 @@ function DrinkSheet({
   onSave: (entry: LogEntry) => void
 }) {
   const [beverage, setBeverage] = useState('Water')
-  const [amount, setAmount] = useState('Glass')
+  const [unit, setUnit] = useState<DrinkVolumeUnit>(() => readDrinkUnit())
+  const [ounces, setOunces] = useState(DRINK_OZ_DEFAULT)
+  const [milliliters, setMilliliters] = useState(() => ozToMl(DRINK_OZ_DEFAULT))
   const [at, setAt] = useState(toDatetimeLocal())
   const [note, setNote] = useState('')
 
   useEffect(() => {
     if (open) setAt(toDatetimeLocal())
   }, [open])
+
+  const bounds = sliderBounds(unit)
+  const sliderValue = unit === 'ml' ? milliliters : ounces
+  const volumeLabel = unit === 'ml' ? `${milliliters} ml` : `${ounces} oz`
+
+  const toggleUnit = () => {
+    const next: DrinkVolumeUnit = unit === 'oz' ? 'ml' : 'oz'
+    if (next === 'ml') setMilliliters(ozToMl(ounces))
+    else setOunces(mlToOz(milliliters))
+    setUnit(next)
+    writeDrinkUnit(next)
+  }
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -366,7 +389,7 @@ function DrinkSheet({
       kind: 'drink',
       at: fromDatetimeLocal(at),
       beverage,
-      amount,
+      ...drinkEventVolume(sliderValue, unit),
       note: note.trim() || undefined,
     })
   }
@@ -379,11 +402,44 @@ function DrinkSheet({
             <Chip key={b} label={b} selected={beverage === b} onClick={() => setBeverage(b)} />
           ))}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {['Sip', 'Glass', 'Bottle'].map((a) => (
-            <Chip key={a} label={a} selected={amount === a} onClick={() => setAmount(a)} />
-          ))}
-        </div>
+        <Field label="How much">
+          <div className="rounded-2xl border border-sage-mist bg-cream px-3.5 py-3">
+            <p className="text-center font-serif text-2xl text-ink">{volumeLabel}</p>
+            <input
+              className="mt-3 w-full accent-sage"
+              type="range"
+              min={bounds.min}
+              max={bounds.max}
+              step={bounds.step}
+              value={sliderValue}
+              aria-valuemin={bounds.min}
+              aria-valuemax={bounds.max}
+              aria-valuenow={sliderValue}
+              aria-valuetext={volumeLabel}
+              aria-label={unit === 'ml' ? 'Drink volume in milliliters' : 'Drink volume in ounces'}
+              onChange={(e) => {
+                const next = Number(e.target.value)
+                if (unit === 'ml') setMilliliters(next)
+                else setOunces(next)
+              }}
+            />
+            <div className="mt-1 flex justify-between text-xs text-ink-faint">
+              <span>
+                {bounds.min} {unit}
+              </span>
+              <span>
+                {bounds.max} {unit}
+              </span>
+            </div>
+          </div>
+        </Field>
+        <button
+          type="button"
+          onClick={toggleUnit}
+          className="w-full rounded-full border border-sage/30 py-2.5 text-sm font-medium text-sage-deep"
+        >
+          {unit === 'oz' ? 'Convert to metric' : 'Convert to ounces'}
+        </button>
         <Field label="When">
           <input className={inputClass} type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} />
         </Field>
@@ -408,7 +464,7 @@ function VoidLeakSheet({
   onSave: (entry: LogEntry) => void
 }) {
   const [what, setWhat] = useState<'void' | 'leak' | 'urge'>('void')
-  const [intensity, setIntensity] = useState('Everyday')
+  const [intensity, setIntensity] = useState('Light')
   const [at, setAt] = useState(toDatetimeLocal())
   const [note, setNote] = useState('')
 
@@ -431,7 +487,7 @@ function VoidLeakSheet({
   return (
     <BottomSheet
       open={open}
-      title="Void or leak"
+      title="Void (pee) or leak"
       subtitle="Just the facts. Nothing to fix in this moment."
       onClose={onClose}
     >
@@ -439,7 +495,7 @@ function VoidLeakSheet({
         <div className="flex flex-wrap gap-2">
           {(
             [
-              ['void', 'Void'],
+              ['void', 'Void (pee)'],
               ['leak', 'Leak'],
               ['urge', 'Urge only'],
             ] as const
@@ -448,7 +504,7 @@ function VoidLeakSheet({
           ))}
         </div>
         <div className="flex flex-wrap gap-2">
-          {['Light', 'Everyday', 'A lot'].map((i) => (
+          {['Light', 'A lot'].map((i) => (
             <Chip key={i} label={i} selected={intensity === i} onClick={() => setIntensity(i)} />
           ))}
         </div>
@@ -475,7 +531,7 @@ function PadSheet({
   onClose: () => void
   onSave: (entry: LogEntry) => void
 }) {
-  const [reason, setReason] = useState('Routine')
+  const [reason, setReason] = useState('Damp')
   const [at, setAt] = useState(toDatetimeLocal())
 
   useEffect(() => {
@@ -504,7 +560,7 @@ function PadSheet({
           <input className={inputClass} type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} />
         </Field>
         <div className="flex flex-wrap gap-2">
-          {['Routine', 'Damp', 'Overnight', 'Heading out', 'Other'].map((r) => (
+          {['Damp', 'Saturated', 'Other'].map((r) => (
             <Chip key={r} label={r} selected={reason === r} onClick={() => setReason(r)} />
           ))}
         </div>
@@ -555,7 +611,7 @@ function ExerciseSheet({
     >
       <form onSubmit={submit} className="space-y-4 pb-2">
         <div className="flex flex-wrap gap-2">
-          {['PfilAtes', 'Pelvic floor', 'Walk', 'Stretch', 'Other'].map((a) => (
+          {['PfilAtes', "Kegel's"].map((a) => (
             <Chip key={a} label={a} selected={activity === a} onClick={() => setActivity(a)} />
           ))}
         </div>
