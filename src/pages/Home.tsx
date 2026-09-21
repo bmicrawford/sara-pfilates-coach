@@ -11,6 +11,7 @@ import {
   START_NEW_DIARY_LABEL,
   activeDiary,
   bladderDiaryReport,
+  DRINK_BEVERAGE_CHIPS,
   summarizeLog,
 } from '../lib/diary'
 import {
@@ -398,7 +399,7 @@ function DrinkSheet({
     <BottomSheet open={open} title="Log a drink" subtitle="Whatever you actually had." onClose={onClose}>
       <form onSubmit={submit} className="space-y-4 pb-2">
         <div className="flex flex-wrap gap-2">
-          {['Water', 'Black or Green Tea', 'Coffee', 'Other'].map((b) => (
+          {DRINK_BEVERAGE_CHIPS.map((b) => (
             <Chip key={b} label={b} selected={beverage === b} onClick={() => setBeverage(b)} />
           ))}
         </div>
