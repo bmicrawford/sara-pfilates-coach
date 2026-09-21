@@ -306,6 +306,11 @@ assert(/active \? \(/.test(homeSrc) && /Log a drink/.test(homeSrc), 'event butto
 assert(/Void \(pee\) or leak/.test(homeSrc) && /Pad change/.test(homeSrc) && /Exercise/.test(homeSrc), 'Home keeps existing event types')
 assert(/type="range"/.test(homeSrc) && /Convert to metric/.test(homeSrc), 'drink sheet uses a slider with a metric conversion button')
 assert(!/'Sip'/.test(homeSrc) && !/'Glass'/.test(homeSrc) && !/'Bottle'/.test(homeSrc), 'drink sheet no longer uses sip, glass, or bottle chips')
+assert(
+  /'Water', 'Black or Green Tea', 'Coffee', 'Other'/.test(homeSrc),
+  'drink chips offer Black or Green Tea',
+)
+assert(!/Herbal tea/.test(homeSrc), 'drink chips no longer offer Herbal tea')
 assert(/Void \(pee\)/.test(homeSrc), 'void on the logging surface is labeled Void (pee)')
 assert(!/Everyday/.test(homeSrc), 'void or leak sheet no longer offers Everyday')
 assert(/Saturated/.test(homeSrc), 'pad change offers Saturated')

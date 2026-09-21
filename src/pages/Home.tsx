@@ -398,7 +398,7 @@ function DrinkSheet({
     <BottomSheet open={open} title="Log a drink" subtitle="Whatever you actually had." onClose={onClose}>
       <form onSubmit={submit} className="space-y-4 pb-2">
         <div className="flex flex-wrap gap-2">
-          {['Water', 'Herbal tea', 'Coffee', 'Other'].map((b) => (
+          {['Water', 'Black or Green Tea', 'Coffee', 'Other'].map((b) => (
             <Chip key={b} label={b} selected={beverage === b} onClick={() => setBeverage(b)} />
           ))}
         </div>
