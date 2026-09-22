@@ -1,6 +1,6 @@
-import { activeDiary, completeElapsedDiaries, finishDiary, startDiary } from './diary'
-import { readJson, uid, writeJson, nowIso } from './storage'
-import type { ChatMessage, DeviceBinding, Diary, LogEntry, Session } from './types'
+import { activeDiary, completeElapsedDiaries, finishDiary, startDiary } from './diary.ts'
+import { nowIso, readJson, removeKey, uid, writeJson } from './storage.ts'
+import type { ChatMessage, DeviceBinding, Diary, LogEntry, Session } from './types.ts'
 
 export const DEMO_TOKEN = 'DEMO-SARA-001'
 
@@ -108,6 +108,7 @@ function bindRedeemedToken(key: string, email: string): RedeemResult {
   }
   writeJson('session', session)
   notifySession()
+  requestPersistentStorage()
   return { ok: true, session }
 }
 
@@ -122,16 +123,58 @@ export async function redeemToken(token: string, email: string): Promise<RedeemR
 }
 
 function notifySession(): void {
+  if (typeof window === 'undefined') return
   window.dispatchEvent(new Event('sara-session'))
 }
 
+function isSession(value: unknown): value is Session {
+  if (!value || typeof value !== 'object') return false
+  const session = value as Partial<Session>
+  return (
+    typeof session.email === 'string' &&
+    session.email.includes('@') &&
+    typeof session.redeemToken === 'string' &&
+    session.redeemToken.length > 0 &&
+    typeof session.deviceId === 'string' &&
+    session.deviceId.length > 0 &&
+    typeof session.redeemedAt === 'string' &&
+    session.redeemedAt.length > 0
+  )
+}
+
+/**
+ * Session lives in localStorage (`sara.session`) after a successful redeem.
+ * A rotated device id means New phone already ran, so the old session stays logged out.
+ * If only the device id key was dropped, keep the session and put that id back.
+ */
 export function readSession(): Session | null {
-  return readJson<Session | null>('session', null)
+  const session = readJson<unknown>('session', null)
+  if (!isSession(session)) return null
+  const deviceId = readJson<string | null>('deviceId', null)
+  if (deviceId && deviceId !== session.deviceId) return null
+  if (!deviceId) {
+    try {
+      writeJson('deviceId', session.deviceId)
+    } catch {
+      // The session still stands for this page load.
+    }
+  }
+  return session
 }
 
 export function clearSession(): void {
-  writeJson('session', null)
+  removeKey('session')
   notifySession()
+}
+
+function requestPersistentStorage(): void {
+  try {
+    if (typeof navigator === 'undefined') return
+    const storage = navigator.storage
+    if (storage && typeof storage.persist === 'function') void storage.persist()
+  } catch {
+    // Best-effort. The redeem session is already in localStorage.
+  }
 }
 
 /** Prototype helper: keep the mock bind, forget this browser as the phone. */
@@ -145,8 +188,8 @@ export function releaseBinding(email: string): boolean {
   const next = readBindings().filter((b) => b.email !== want)
   if (next.length === readBindings().length) return false
   writeBindings(next)
-  const session = readSession()
-  if (session && session.email === want) clearSession()
+  const stored = readJson<{ email?: string } | null>('session', null)
+  if (stored && stored.email === want) clearSession()
   return true
 }
 

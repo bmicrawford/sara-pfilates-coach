@@ -205,9 +205,16 @@ export function Home({ session }: Props) {
         </p>
       </section>
 
+      <Link
+        to="/ask"
+        className="mt-5 block rounded-2xl bg-sage py-4 text-center font-semibold text-white shadow-card"
+      >
+        Ask Sara
+      </Link>
+
       {active ? (
         <>
-          <div className="mt-5 grid grid-cols-2 gap-3">
+          <div className="mt-3 grid grid-cols-2 gap-3">
             <Action label="Log a drink" hint="How much you had" onClick={() => openSheet('drink')} />
             <Action label="Void (pee) or leak" hint="No judgment" onClick={() => openSheet('voidLeak')} />
             <Action label="Pad change" hint="Time + reason" onClick={() => openSheet('pad')} />
@@ -219,7 +226,7 @@ export function Home({ session }: Props) {
         <>
           <button
             type="button"
-            className="mt-5 w-full rounded-2xl bg-sage py-4 text-center font-semibold text-white shadow-card"
+            className="mt-3 w-full rounded-2xl bg-sage py-4 text-center font-semibold text-white shadow-card"
             onClick={beginDiary}
           >
             {START_NEW_DIARY_LABEL}
@@ -253,13 +260,6 @@ export function Home({ session }: Props) {
           <span className="mt-1 block text-xs text-ink-mute">Duration and frequency · 4 weeks</span>
         </Link>
       </div>
-
-      <Link
-        to="/ask"
-        className="mt-3 block rounded-2xl bg-sage py-4 text-center font-semibold text-white shadow-card"
-      >
-        Ask Sara
-      </Link>
 
       {active ? (
         <button

@@ -49,6 +49,7 @@ export default defineConfig(({ command }) => {
           background_color: '#F6F3EE',
           display: 'standalone',
           orientation: 'portrait',
+          id: '/',
           start_url: '/',
           scope: '/',
           icons: [
