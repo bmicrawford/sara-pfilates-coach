@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { InstallHint } from '../components/InstallHint'
 import { SaraPortrait } from '../components/SaraPortrait'
 import { DEMO_TOKEN } from '../lib/mockServer'
 
@@ -16,10 +15,7 @@ export function Welcome() {
         Your course stays on Kajabi. This is the quiet pocket version — log a sip,
         a leak, a class. No password. Just your email, once.
       </p>
-      <div className="mt-8">
-        <InstallHint />
-      </div>
-      <div className="mt-auto space-y-3 pt-6">
+      <div className="mt-auto space-y-3 pt-8">
         <Link
           to={`/r/${DEMO_TOKEN}`}
           className="block rounded-full bg-sage py-3.5 text-center text-base font-semibold text-white shadow-card"

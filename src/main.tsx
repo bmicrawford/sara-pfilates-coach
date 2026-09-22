@@ -3,7 +3,11 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App'
+import { captureInstallPrompt, noteStandaloneInstall } from './lib/installCoach'
 import './index.css'
+
+captureInstallPrompt()
+noteStandaloneInstall()
 
 registerSW({
   immediate: true,

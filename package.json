@@ -18,6 +18,7 @@
     "smoke:exercise": "node --experimental-strip-types src/lib/exercise.smoke.ts",
     "smoke:verify-api": "node scripts/verify-sara-api.mjs --self-test",
     "smoke:redeem": "node server/redeem.smoke.mjs",
+    "smoke:install": "node --experimental-strip-types src/lib/installCoach.smoke.ts",
     "verify:ask-api": "node scripts/verify-sara-api.mjs"
   },
   "dependencies": {

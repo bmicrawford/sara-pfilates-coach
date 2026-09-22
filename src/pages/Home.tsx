@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BottomSheet } from '../components/BottomSheet'
 import { Chip, Field, inputClass } from '../components/Chip'
-import { InstallHint } from '../components/InstallHint'
+import { InstallCoach } from '../components/InstallCoach'
 import { SaraPortrait } from '../components/SaraPortrait'
 import { DownloadDiaryPdfButton } from '../components/DownloadDiaryPdfButton'
 import {
@@ -150,7 +150,7 @@ export function Home({ session }: Props) {
       </div>
 
       <div className="mt-6">
-        <InstallHint />
+        <InstallCoach />
       </div>
 
       {smsNote ? (
