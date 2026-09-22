@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { Field, inputClass } from '../components/Chip'
+import { InstallCoach } from '../components/InstallCoach'
 import { SaraPortrait } from '../components/SaraPortrait'
 import { readPatient, savePatient } from '../lib/patient'
 
@@ -31,7 +32,10 @@ export function PatientOnboarding() {
         We save your name and date of birth on this phone so the bladder diary report is labeled for
         your doctor. We only ask once.
       </p>
-      <form onSubmit={onSubmit} className="mt-8 space-y-4">
+      <div className="mt-6">
+        <InstallCoach />
+      </div>
+      <form onSubmit={onSubmit} className="mt-2 space-y-4">
         <Field label="Name">
           <input
             className={inputClass}

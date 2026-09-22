@@ -229,10 +229,10 @@ The Kajabi button uses the minted `url`. `DEMO-SARA-001` stays on the QA welcome
 - 4-week exercise log (`/exercise`) — duration and frequency of logged sessions; after Yes on the 4-week gate, blank days in that window are recorded as 5 min pelvic floor per patient confirmation (logged days keep their minutes); daily Home cue when today’s session is missing; completion PDF only after Yes
 - Bottom sheets for those forms
 - Ask Sara via Grok (`POST /ask` + short chat history). Heard voice is D-ID Agents stream audio when speak is ready; xAI neural TTS (`POST /speak`, voice `ara`) is the fallback. Realtime head motion is D-ID Agents Streams (WebRTC), not an offline mp4. Mute / Stop / Play stay in the UI. The still and stream fill the Ask Sara screen; the thread is a see-through overlay.
+- After a successful redeem, a Home Screen coach (on the name gate if that’s first, then Home): iPhone/iPad steps are Share → Add to Home Screen → Add. Android Chrome shows Install when `beforeinstallprompt` fires, and Chrome menu steps if it does not. Not now and a successful install stay in `localStorage`. An installed app (`display-mode: standalone` or iOS `navigator.standalone`) skips the coach. New phone clears that memory.
 
 ## TODO (later)
 
-- Install hint: `beforeinstallprompt` plus iOS Add to Home Screen tip
 - Portrait captions still follow mood; the face is always the Ask Sara idle still
 - Stub push (default channel) and SMS fallback after 3 days with no open
 

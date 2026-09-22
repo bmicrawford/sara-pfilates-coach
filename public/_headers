@@ -7,3 +7,9 @@
 
 /sw.js
   Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache
+
+/icons/*
+  Cache-Control: no-cache

@@ -1,4 +1,5 @@
 import { activeDiary, completeElapsedDiaries, finishDiary, startDiary } from './diary.ts'
+import { armInstallCoach, clearInstallCoach } from './installCoach.ts'
 import { nowIso, readJson, removeKey, uid, writeJson } from './storage.ts'
 import type { ChatMessage, DeviceBinding, Diary, LogEntry, Session } from './types.ts'
 
@@ -109,6 +110,7 @@ function bindRedeemedToken(key: string, email: string): RedeemResult {
   writeJson('session', session)
   notifySession()
   requestPersistentStorage()
+  armInstallCoach()
   return { ok: true, session }
 }
 
@@ -164,6 +166,7 @@ export function readSession(): Session | null {
 
 export function clearSession(): void {
   removeKey('session')
+  clearInstallCoach()
   notifySession()
 }
 
