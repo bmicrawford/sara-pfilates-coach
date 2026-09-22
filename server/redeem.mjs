@@ -90,8 +90,9 @@ export function sanitizeRecord(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const token = normalizeToken(value.token)
   if (token === DEMO_TOKEN || !TOKEN_RE.test(token)) return null
+  const multiUse = value.multiUse === true
   let email = null
-  if (value.email != null && String(value.email).trim() !== '') {
+  if (!multiUse && value.email != null && String(value.email).trim() !== '') {
     email = normalizeEmail(value.email)
     if (!email) return null
   }
@@ -107,13 +108,20 @@ export function sanitizeRecord(value) {
     externalId = normalizeExternalId(value.externalId)
     if (!externalId) return null
   }
-  return { token, email, createdAt, usedAt, externalId }
+  return { token, email, createdAt, usedAt, externalId, multiUse }
+}
+
+/** `true` opens the pass. Omitted or `false` stays single-email. Anything else is rejected. */
+function parseMultiUse(value) {
+  if (value == null || value === false) return false
+  if (value === true) return true
+  return null
 }
 
 export function memoryRedeemStore(tokens = new Map(), external = new Map()) {
   return {
     async get(token) {
-      const record = tokens.get(token)
+      const record = sanitizeRecord(tokens.get(token))
       return record ? { ...record } : null
     },
     async put(token, record) {
@@ -161,6 +169,7 @@ function mintPayload(record, publicOrigin, idempotent) {
     createdAt: record.createdAt,
     usedAt: record.usedAt,
     externalId: record.externalId,
+    multiUse: record.multiUse === true,
     idempotent,
     url: redeemUrl(record, publicOrigin),
   }
@@ -196,12 +205,19 @@ export async function handleMint({
     if (!externalId) return { status: 400, body: { ok: false, error: 'invalid_external_id' } }
   }
 
+  const multiUse = parseMultiUse(body?.multiUse)
+  if (multiUse == null) return { status: 400, body: { ok: false, error: 'invalid_multi_use' } }
+
   if (externalId) {
     const existingToken = await store.getExternal(externalId)
     if (existingToken) {
       const existing = await store.get(existingToken)
       if (existing) return { status: 200, body: mintPayload(existing, publicOrigin, true) }
     }
+  }
+
+  if (multiUse && !emailBlank) {
+    return { status: 400, body: { ok: false, error: 'multi_use_email' } }
   }
 
   let token = null
@@ -223,10 +239,11 @@ export async function handleMint({
 
   const record = sanitizeRecord({
     token,
-    email,
+    email: multiUse ? null : email,
     createdAt: now,
     usedAt: null,
     externalId,
+    multiUse,
   })
   if (!record) return { status: 503, body: { ok: false, error: 'mint_failed' } }
   await store.put(record.token, record)
@@ -247,6 +264,15 @@ export async function handleRedeem({ store, body, now = new Date().toISOString()
 
   const record = await store.get(token)
   if (!record) return { status: 404, body: { ok: false, reason: 'unknown-token' } }
+
+  if (record.multiUse) {
+    // Shared class pass. The student email stays on this phone after redeem succeeds.
+    return {
+      status: 200,
+      body: { ok: true, token: record.token, email, usedAt: null, multiUse: true },
+    }
+  }
+
   if (record.email && record.email !== email) {
     return { status: 409, body: { ok: false, reason: 'email-mismatch' } }
   }
@@ -255,13 +281,14 @@ export async function handleRedeem({ store, body, now = new Date().toISOString()
     ...record,
     email: record.email || email,
     usedAt: record.usedAt || now,
+    multiUse: false,
   }
   if (next.email !== record.email || next.usedAt !== record.usedAt) {
     await store.put(token, next)
   }
   return {
     status: 200,
-    body: { ok: true, token: next.token, email: next.email, usedAt: next.usedAt },
+    body: { ok: true, token: next.token, email: next.email, usedAt: next.usedAt, multiUse: false },
   }
 }
 
