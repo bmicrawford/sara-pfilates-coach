@@ -132,8 +132,8 @@ The course stays on Kajabi. A purchase mints a unique pass on this same Worker. 
 
 | | |
 |---|---|
-| `POST /redeem/mint` | Secret-protected. Stores `{ token, email?, createdAt, usedAt?, externalId? }` and returns `url`. |
-| `POST /redeem` | Phone sends `{ token, email }`. A known pass with the same email succeeds. A different email is rejected. The same email can redeem again after **New phone** (`/move`). |
+| `POST /redeem/mint` | Secret-protected. Stores `{ token, email?, createdAt, usedAt?, externalId?, multiUse? }` and returns `url`. |
+| `POST /redeem` | Phone sends `{ token, email }`. A purchased pass accepts the same email and rejects a different one. A class pass (`multiUse: true`) accepts many emails and does not store them. The same phone keeps its local session after redeem, including after **New phone** is cleared (`/move`). |
 | Auth | `Authorization: Bearer $REDEEM_MINT_SECRET` or header `X-Redeem-Mint-Secret`. Worker secret only. Never `VITE_*`. |
 | Store | Cloudflare KV binding `REDEEM_TOKENS`. |
 | Link origin | `SARA_PUBLIC_ORIGIN` (default `https://sara-pfilates.surge.sh`). |
@@ -160,6 +160,21 @@ curl -sS -X POST "https://sara-pfilates-ask.<account>.workers.dev/redeem/mint" \
 ```
 
 The JSON `url` is the link to email. Rebuild Surge with that Worker as `VITE_SARA_API_URL` so the phone can call `POST /redeem`. Local `npm run dev` proxies `/redeem` to the Node API.
+
+### Live class QR (one link, many students)
+
+A certification class uses one multi-use pass. Mint it once. Students scan the same `url`, enter their own email, and that phone keeps the session. The shared KV record is not tied to one email. Kajabi purchase passes stay single-email. `DEMO-SARA-001` stays the QA pass.
+
+```bash
+curl -sS -X POST "https://sara-pfilates-ask.<account>.workers.dev/redeem/mint" \
+  -H "Authorization: Bearer $REDEEM_MINT_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"multiUse":true,"externalId":"class-cert-sac-2026-10-08"}'
+```
+
+The response `url` looks like `https://sara-pfilates.surge.sh/r/SARA-XXXX-XXXX-XXXX-XXXX`. The same `externalId` returns that token again. Do not put the secret in the QR. To revoke, delete KV keys `redeem:{TOKEN}` and `ext:{externalId}`. Phones that already saved a session stay signed in until **New phone**.
+
+`node scripts/mint-class-token.mjs class-cert-sac-2026-10-08` does the same call when `REDEEM_MINT_SECRET` and `SARA_WORKER_URL` are set. It prints the token and url only.
 
 ### Zapier (Kajabi → New Purchase)
 
