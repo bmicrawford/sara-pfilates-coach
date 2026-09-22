@@ -107,15 +107,18 @@ select {
   backdrop-filter: blur(5px);
   color: #000;
   font-weight: 600;
+  text-shadow: none;
 }
 
 .ask-sara-greeting {
   color: #000;
   font-weight: 600;
+  text-shadow: none;
 }
 
 .ask-sara-greeting-lead {
   font-weight: 700;
+  text-shadow: none;
 }
 
 .ask-sara-panel {
@@ -131,6 +134,7 @@ select {
   box-shadow: 0 8px 22px rgba(61, 58, 54, 0.05);
   color: #000;
   font-weight: 600;
+  text-shadow: none;
 }
 
 .ask-sara-note {
@@ -141,6 +145,7 @@ select {
   backdrop-filter: blur(5px);
   color: #000;
   font-weight: 600;
+  text-shadow: none;
 }
 
 .ask-sara-compose {
