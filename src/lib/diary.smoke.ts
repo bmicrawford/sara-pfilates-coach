@@ -58,6 +58,7 @@ import {
   normalizePatientName,
   patientProfileComplete,
 } from './patient.ts'
+import { readSession, redeemToken, releaseBinding, simulateNewPhone } from './mockServer.ts'
 import type { Diary, LogEntry, PatientProfile } from './types.ts'
 
 function assert(cond: unknown, msg: string) {
@@ -366,6 +367,9 @@ assert(
 assert(/Download PDF anytime/.test(homeSrc), 'Home report card names Download PDF while the diary is active')
 assert(/SaraPortrait/.test(homeSrc), 'Home still uses the circular Sara portrait')
 assert(!/TalkingPortrait|ask-sara-stage/.test(homeSrc), 'Home does not become fullscreen Ask Sara')
+const askAt = homeSrc.indexOf('to="/ask"')
+const startDiaryAt = homeSrc.indexOf('{START_NEW_DIARY_LABEL}')
+assert(askAt !== -1 && startDiaryAt > askAt, 'Ask Sara renders above Start New Diary')
 
 const appSrc = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')
 assert(/path="\/diary"/.test(appSrc) && /DiaryReport/.test(appSrc), 'App routes the bladder diary report')
@@ -374,6 +378,15 @@ assert(/NeedSession/.test(appSrc) && /path="\/diary"[\s\S]*NeedSession/.test(app
 assert(/path="\/exercise"[\s\S]*NeedSession/.test(appSrc), 'exercise log stays behind the redeem session')
 assert(/PatientOnboarding/.test(appSrc) && /NeedProfile/.test(appSrc), 'first-open profile gate wraps the companion')
 assert(/path="\/r\/:token"/.test(appSrc) && !/NeedProfile[\s\S]*Redeem/.test(appSrc), 'redeem gate is unchanged')
+assert(
+  /path="\/r\/:token"[\s\S]*?element=\{session \? <Navigate to="\/" replace \/> : <Redeem \/>\}/.test(appSrc),
+  'a saved redeem session skips the email form',
+)
+const indexHtml = readFileSync(new URL('../../index.html', import.meta.url), 'utf8')
+assert(
+  /sara\.session/.test(indexHtml) && /location\.replace\('\/'\)/.test(indexHtml),
+  'reloading a redeem link skips the email form when sara.session is saved',
+)
 
 const diaryPage = readFileSync(new URL('../pages/DiaryReport.tsx', import.meta.url), 'utf8')
 const pdfButton = readFileSync(new URL('../components/DownloadDiaryPdfButton.tsx', import.meta.url), 'utf8')
@@ -565,6 +578,37 @@ const brokenRaw = new TextDecoder('latin1').decode(brokenLogo.bytes)
 assert(brokenRaw.includes(PFILATES_BRAND), 'logo addImage failure falls back to the PfilAtes text brand')
 assert(brokenRaw.includes('Bladder diary report'), 'logo addImage failure still embeds the report title')
 assert(brokenRaw.includes('Incomplete'), 'logo addImage failure keeps incomplete-day export')
+
+drinkUnitMemory.clear()
+const redeemed = await redeemToken('demo-sara-001', 'Buyer@Example.com')
+assert(redeemed.ok === true, 'demo redeem succeeds on this phone')
+assert(readSession()?.email === 'buyer@example.com', 'redeem saves the email in localStorage')
+assert(readSession()?.redeemToken === 'DEMO-SARA-001', 'redeem saves the pass token for the next open')
+drinkUnitMemory.delete('sara.deviceId')
+assert(readSession()?.email === 'buyer@example.com', 'session still opens if only the device id key was dropped')
+assert(
+  drinkUnitMemory.get('sara.deviceId') === JSON.stringify(readSession()?.deviceId),
+  'the saved session puts its device id back',
+)
+drinkUnitMemory.set('sara.deviceId', JSON.stringify('other-phone'))
+assert(readSession() === null, 'a rotated device id does not reuse the old session')
+drinkUnitMemory.delete('sara.deviceId')
+assert(readSession()?.email === 'buyer@example.com', 'restoring the missing device id keeps the saved session')
+
+simulateNewPhone()
+assert(readSession() === null, 'pretend new phone clears the session')
+const blocked = await redeemToken('DEMO-SARA-001', 'buyer@example.com')
+assert(
+  blocked.ok === false && blocked.reason === 'bound-other-device',
+  'pretend new phone still requires move before redeem',
+)
+assert(releaseBinding('buyer@example.com') === true, 'move releases the redeemed email')
+assert(readSession() === null, 'move leaves the phone logged out')
+const moved = await redeemToken('DEMO-SARA-001', 'buyer@example.com')
+assert(moved.ok === true && readSession()?.email === 'buyer@example.com', 'redeem after move saves a new session')
+assert(releaseBinding('Buyer@Example.com') === true, 'release matches the redeemed email')
+assert(readSession() === null, 'release clears the session so the email form is required again')
+assert(drinkUnitMemory.get('sara.session') === undefined, 'release removes sara.session instead of keeping a null login')
 
 if (process.exitCode) {
   console.error('diary smoke failed')

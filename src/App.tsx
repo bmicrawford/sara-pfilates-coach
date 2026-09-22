@@ -36,7 +36,10 @@ export default function App() {
         }`}
       >
         <Routes location={location}>
-          <Route path="/r/:token" element={<Redeem />} />
+          <Route
+            path="/r/:token"
+            element={session ? <Navigate to="/" replace /> : <Redeem />}
+          />
           <Route path="/move" element={<Move />} />
           <Route
             path="/ask"

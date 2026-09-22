@@ -25,6 +25,26 @@
     <title>Sara — PfilAtes Coach</title>
   </head>
   <body>
+    <script>
+      // Redeem links (/r/TOKEN) are how the phone is opened. A saved session should
+      // land on Home before React paints the email form. New phone clears this key.
+      ;(function () {
+        try {
+          if (!/^\/r\//.test(location.pathname)) return
+          var raw = localStorage.getItem('sara.session')
+          if (!raw) return
+          var session = JSON.parse(raw)
+          if (!session || typeof session.email !== 'string' || session.email.indexOf('@') < 0) return
+          if (!session.redeemToken || !session.deviceId) return
+          var deviceRaw = localStorage.getItem('sara.deviceId')
+          if (deviceRaw) {
+            var deviceId = JSON.parse(deviceRaw)
+            if (deviceId && deviceId !== session.deviceId) return
+          }
+          location.replace('/')
+        } catch (e) {}
+      })()
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
