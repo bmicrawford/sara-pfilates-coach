@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PfilatesBrandHeader } from '../components/PfilatesLogo'
 import {
   blankDraft,
@@ -7,9 +7,12 @@ import {
   completeAnswers,
   currentWorksheet,
   readMovementPlan,
+  saveHealthScreen,
   saveWorksheetResult,
+  syncPregnancyExclusions,
   writeWorksheetDraft,
   type DraftAnswer,
+  type HealthScreen,
   type MovementPlanState,
   type WorksheetRecord,
 } from '../lib/movementPlan'
@@ -20,37 +23,76 @@ import {
   COURSE_LINE,
   ESSENTIAL_LABEL,
   ESSENTIAL_TIE_NOTE,
+  HEALTH_HIP_REPLACEMENT,
+  HEALTH_OSTEOPOROSIS,
+  HEALTH_PREGNANT,
+  HEALTH_SCREEN_TITLE,
+  HEALTH_WEEKS,
   NO_EVERYDAY_PLAN_MESSAGE,
+  NOT_RECOMMENDED,
   PAIN_QUESTION,
+  PAIN_STOP_LINE,
   REGULAR_QUESTION,
   STANDARD_MOVEMENT_CATALOG,
   TOP_MOVEMENTS_TITLE,
   WORKSHEET_INTRO,
   WORKSHEET_TITLE,
   adjustTopMovements,
+  exclusionReasons,
   movementIsEssential,
   movementName,
+  parseWeeksPregnant,
   selectTopMovements,
   selectionHasRatingTie,
   type MovementAnswers,
+  type YesNo,
 } from '../lib/movements'
 import { formatDay } from '../lib/storage'
 
 export function Worksheet() {
-  const [plan, setPlan] = useState<MovementPlanState>(() => readMovementPlan())
+  const [params, setParams] = useSearchParams()
+  const [plan, setPlan] = useState<MovementPlanState>(() => syncPregnancyExclusions())
+  const [now, setNow] = useState(() => new Date())
   const [review, setReview] = useState(false)
   const [chosen, setChosen] = useState<string[]>([])
   const [limitNote, setLimitNote] = useState(false)
+  const editingHealth = params.get('edit') === 'health'
+  const showHealth = !plan.health || editingHealth
+
+  useEffect(() => {
+    const sync = () => {
+      const nextNow = new Date()
+      setNow(nextNow)
+      setPlan(syncPregnancyExclusions(nextNow))
+    }
+    window.addEventListener('focus', sync)
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      window.removeEventListener('focus', sync)
+      document.removeEventListener('visibilitychange', sync)
+    }
+  }, [])
+
+  const excludedIds = useMemo(() => {
+    if (!plan.health) return []
+    return STANDARD_MOVEMENT_CATALOG.movements
+      .filter((movement) => exclusionReasons(movement.id, plan.health, now).length > 0)
+      .map((movement) => movement.id)
+  }, [plan.health, now])
   const current = currentWorksheet(plan)
   const editing = review || plan.draft !== null || !current
   const draft = plan.draft ?? blankDraft()
-  const answers = useMemo(() => completeAnswers(draft), [draft])
+  const answers = useMemo(() => completeAnswers(draft, excludedIds), [draft, excludedIds])
   const selection = useMemo(
-    () => (answers ? selectTopMovements(STANDARD_MOVEMENT_CATALOG, answers) : null),
-    [answers],
+    () => (answers ? selectTopMovements(STANDARD_MOVEMENT_CATALOG, answers, excludedIds) : null),
+    [answers, excludedIds],
   )
   const answeredCount = draft.filter(
-    (row) => row.pain !== null && row.regular !== null && row.contraction !== null,
+    (row) =>
+      !excludedIds.includes(row.movementId) &&
+      row.pain !== null &&
+      row.regular !== null &&
+      row.contraction !== null,
   ).length
 
   const update = (movementId: string, patch: Partial<DraftAnswer>) => {
@@ -62,7 +104,7 @@ export function Worksheet() {
 
   const beginReview = () => {
     if (!answers) return
-    const next = selectTopMovements(STANDARD_MOVEMENT_CATALOG, answers)
+    const next = selectTopMovements(STANDARD_MOVEMENT_CATALOG, answers, excludedIds)
     setChosen(next.suggestedIds)
     setLimitNote(false)
     setReview(true)
@@ -100,9 +142,20 @@ export function Worksheet() {
       <div className="mt-4">
         <PfilatesBrandHeader compact />
       </div>
-      <h1 className="font-serif text-3xl font-bold leading-tight text-black">{WORKSHEET_TITLE}</h1>
+      <h1 className="font-serif text-3xl font-bold leading-tight text-black">
+        {showHealth ? HEALTH_SCREEN_TITLE : WORKSHEET_TITLE}
+      </h1>
 
-      {editing ? (
+      {showHealth ? (
+        <HealthScreenForm
+          initial={plan.health}
+          onSave={(input) => {
+            setPlan(saveHealthScreen(input, new Date()))
+            setNow(new Date())
+            if (editingHealth) setParams({}, { replace: true })
+          }}
+        />
+      ) : editing ? (
         review && selection ? (
           <Review
             answers={answers ?? []}
@@ -115,7 +168,10 @@ export function Worksheet() {
         ) : (
           <Form
             draft={draft}
+            health={plan.health}
+            now={now}
             answeredCount={answeredCount}
+            answerTotal={STANDARD_MOVEMENT_CATALOG.movements.length - excludedIds.length}
             ready={answers !== null}
             onChange={update}
             onReview={beginReview}
@@ -138,14 +194,20 @@ export function Worksheet() {
 
 function Form({
   draft,
+  health,
+  now,
   answeredCount,
+  answerTotal,
   ready,
   onChange,
   onReview,
   onCancel,
 }: {
   draft: DraftAnswer[]
+  health: HealthScreen | null
+  now: Date
   answeredCount: number
+  answerTotal: number
   ready: boolean
   onChange: (movementId: string, patch: Partial<DraftAnswer>) => void
   onReview: () => void
@@ -154,6 +216,7 @@ function Form({
   return (
     <>
       <p className="mt-3 text-sm font-bold leading-relaxed text-black">{WORKSHEET_INTRO}</p>
+      <p className="mt-2 text-sm font-bold leading-relaxed text-black">{PAIN_STOP_LINE}</p>
       <p className="mt-2 text-sm font-bold text-black">{CIRCLE_ANSWERS}</p>
       <div className="glass-card mt-4 px-4 py-3 text-sm font-bold leading-relaxed text-black">
         <p>{CONTRACTION_QUESTION}</p>
@@ -169,8 +232,9 @@ function Form({
       <ol className="mt-4 space-y-3">
         {STANDARD_MOVEMENT_CATALOG.movements.map((movement, index) => {
           const row = draft.find((answer) => answer.movementId === movement.id)
+          const reasons = exclusionReasons(movement.id, health, now)
           return (
-            <li key={movement.id} className="glass-card px-4 py-4">
+            <li key={movement.id} className="glass-card px-4 py-4" aria-disabled={reasons.length > 0}>
               <h2 className="font-serif text-xl font-bold text-black">
                 <span>
                   {index + 1}. {movement.name}
@@ -178,6 +242,14 @@ function Form({
                 {movement.essential ? <EssentialTag /> : null}
               </h2>
               <p className="mt-1 text-xs font-bold text-black">{COURSE_LINE}</p>
+              {reasons.length > 0 ? (
+                <>
+                  <p className="mt-3 text-sm font-bold text-black">{NOT_RECOMMENDED}</p>
+                  <p className="mt-1 text-sm font-bold text-black">{reasons.join(', ')}</p>
+                </>
+              ) : null}
+              {reasons.length > 0 ? null : (
+              <>
               <div className="mt-3" role="group" aria-label={`${movement.name}. ${PAIN_QUESTION}`}>
                 <p className="text-sm font-bold text-black">{PAIN_QUESTION}</p>
                 <div className="mt-2 flex gap-2">
@@ -224,6 +296,8 @@ function Form({
                   ))}
                 </div>
               </div>
+              </>
+              )}
             </li>
           )
         })}
@@ -231,7 +305,7 @@ function Form({
 
       <div className="sticky bottom-0 z-10 -mx-5 mt-4 bg-gradient-to-t from-cream from-60% to-transparent px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-6">
         <p className="mb-2 text-center text-xs font-bold text-black">
-          {answeredCount} of {STANDARD_MOVEMENT_CATALOG.movements.length} movements answered
+          {answeredCount} of {answerTotal} movements answered
         </p>
         <button
           type="button"
@@ -272,7 +346,8 @@ function Review({
   if (selection.status === 'empty') {
     return (
       <section className="glass-card mt-4 px-4 py-4">
-        <h2 className="font-serif text-2xl font-bold text-black">{TOP_MOVEMENTS_TITLE}</h2>
+        <p className="text-sm font-bold leading-relaxed text-black">{PAIN_STOP_LINE}</p>
+        <h2 className="mt-3 font-serif text-2xl font-bold text-black">{TOP_MOVEMENTS_TITLE}</h2>
         <p className="mt-3 text-sm font-bold leading-relaxed text-black">{NO_EVERYDAY_PLAN_MESSAGE}</p>
         <button
           type="button"
@@ -291,7 +366,8 @@ function Review({
   return (
     <section className="mt-4">
       <div className="glass-card px-4 py-4">
-        <h2 className="font-serif text-2xl font-bold text-black">{TOP_MOVEMENTS_TITLE}</h2>
+        <p className="text-sm font-bold leading-relaxed text-black">{PAIN_STOP_LINE}</p>
+        <h2 className="mt-3 font-serif text-2xl font-bold text-black">{TOP_MOVEMENTS_TITLE}</h2>
         <p className="mt-2 text-sm font-bold leading-relaxed text-black">
           Highest contraction ratings, up to 3. Change this to 1–3 movements.
         </p>
@@ -378,7 +454,8 @@ function Saved({
   return (
     <section className="mt-4">
       <div className="glass-card px-4 py-4">
-        <h2 className="font-serif text-2xl font-bold text-black">{TOP_MOVEMENTS_TITLE}</h2>
+        <p className="text-sm font-bold leading-relaxed text-black">{PAIN_STOP_LINE}</p>
+        <h2 className="mt-3 font-serif text-2xl font-bold text-black">{TOP_MOVEMENTS_TITLE}</h2>
         {record.selectedIds.length === 0 ? (
           <p className="mt-3 text-sm font-bold leading-relaxed text-black">{NO_EVERYDAY_PLAN_MESSAGE}</p>
         ) : (
@@ -426,6 +503,96 @@ function Saved({
         </div>
       ) : null}
     </section>
+  )
+}
+
+function HealthScreenForm({
+  initial,
+  onSave,
+}: {
+  initial: HealthScreen | null
+  onSave: (input: {
+    osteoporosis: YesNo
+    hipReplacement: YesNo
+    pregnant: YesNo
+    weeksPregnant: number | null
+  }) => void
+}) {
+  const [osteoporosis, setOsteoporosis] = useState<YesNo | null>(initial?.osteoporosis ?? null)
+  const [hipReplacement, setHipReplacement] = useState<YesNo | null>(initial?.hipReplacement ?? null)
+  const [pregnant, setPregnant] = useState<YesNo | null>(initial?.pregnant ?? null)
+  const [weeks, setWeeks] = useState(
+    initial?.weeksPregnant === null || initial?.weeksPregnant === undefined ? '' : String(initial.weeksPregnant),
+  )
+  const weeksNumber = parseWeeksPregnant(weeks)
+  const ready =
+    osteoporosis !== null &&
+    hipReplacement !== null &&
+    pregnant !== null &&
+    (pregnant === 'no' || weeksNumber !== null)
+
+  return (
+    <form
+      className="mt-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!ready || !osteoporosis || !hipReplacement || !pregnant) return
+        onSave({
+          osteoporosis,
+          hipReplacement,
+          pregnant,
+          weeksPregnant: pregnant === 'yes' ? weeksNumber : null,
+        })
+      }}
+    >
+      <YesNoField label={HEALTH_OSTEOPOROSIS} value={osteoporosis} onChange={setOsteoporosis} />
+      <YesNoField label={HEALTH_HIP_REPLACEMENT} value={hipReplacement} onChange={setHipReplacement} />
+      <YesNoField label={HEALTH_PREGNANT} value={pregnant} onChange={setPregnant} />
+      {pregnant === 'yes' ? (
+        <label className="glass-card mt-3 block px-4 py-4 text-sm font-bold text-black">
+          {HEALTH_WEEKS}
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={weeks}
+            onChange={(event) => setWeeks(event.target.value)}
+            className="mt-2 min-h-11 w-full rounded-2xl border border-black/15 bg-white/75 px-3 text-base font-bold text-black"
+          />
+        </label>
+      ) : null}
+      <button
+        type="submit"
+        disabled={!ready}
+        className="mt-4 w-full rounded-full bg-sage py-3 font-bold text-white disabled:opacity-40"
+      >
+        Save
+      </button>
+    </form>
+  )
+}
+
+function YesNoField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: YesNo | null
+  onChange: (value: YesNo) => void
+}) {
+  return (
+    <div className="glass-card mt-3 px-4 py-4" role="group" aria-label={label}>
+      <p className="text-sm font-bold text-black">{label}</p>
+      <div className="mt-2 flex gap-2">
+        <Choice pressed={value === 'yes'} onClick={() => onChange('yes')}>
+          Yes
+        </Choice>
+        <Choice pressed={value === 'no'} onClick={() => onChange('no')}>
+          No
+        </Choice>
+      </div>
+    </div>
   )
 }
 

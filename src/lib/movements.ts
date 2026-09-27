@@ -78,6 +78,49 @@ export const NO_EVERYDAY_PLAN_MESSAGE =
 export const RESTART_CUE =
   "A missed day is just a missed day. Start again with today's movements whenever you're ready."
 
+export const HEALTH_SCREEN_TITLE = 'Health screen'
+export const HEALTH_OSTEOPOROSIS = 'Osteoporosis'
+export const HEALTH_HIP_REPLACEMENT = 'Hip replacement'
+export const HEALTH_PREGNANT = 'Pregnant'
+export const HEALTH_WEEKS = 'How many weeks?'
+
+export const NOT_RECOMMENDED = 'Not recommended for you'
+export const REASON_OSTEOPOROSIS = 'osteoporosis'
+export const REASON_HIP_REPLACEMENT = 'hip replacement'
+export const REASON_PREGNANCY_AFTER_12 = 'pregnancy after 12 weeks'
+
+export const PAIN_STOP_LINE = 'If a movement at any time causes pain, stop that movement.'
+export const THIS_CAUSED_PAIN = 'This caused pain'
+export const PAIN_REDO_LINE = 'Redo the worksheet to choose a replacement.'
+
+export const SYMPTOM_CHECK_QUESTION =
+  'Are your pelvic floor symptoms, such as incontinence, frequency, urgency, bulge, or painful intercourse, getting worse?'
+export const SYMPTOMS_WORSE_LINK = 'My symptoms are getting worse'
+export const STOP_ALL_MOVEMENTS_LINE =
+  'Stop all movements and see a medical provider for a pelvic floor evaluation.'
+export const RESUME_AFTER_EVALUATION = "I've been evaluated by a provider and cleared to continue."
+export const WORKSHEET_REDO_PROMPT = 'Redo the worksheet.'
+
+/** Whole weeks until an estimated gestational age is past 12 weeks. */
+export const PREGNANCY_EXCLUSION_WEEKS = 12
+
+export type HealthFlags = {
+  osteoporosis: YesNo
+  hipReplacement: YesNo
+  pregnant: YesNo
+  /** Local calendar date when gestational age is estimated to reach 12 weeks. */
+  twelveWeekDate: string | null
+}
+
+const HIP_REPLACEMENT_MOVEMENTS = new Set([
+  'side-lying-bent-knee-lift',
+  'side-lying-straight-leg-circle',
+  'butterfly',
+  'all-4s-side-leg-lift',
+])
+
+const PREGNANCY_AFTER_12_MOVEMENTS = new Set(['butterfly', 'bridging', 'corkscrew'])
+
 /** Names, order, and Essential flags. Essential marks the high-probability movements. */
 export const STANDARD_MOVEMENT_CATALOG: MovementCatalog = {
   id: 'standard',
@@ -112,12 +155,66 @@ export function movementIsEssential(id: string, catalog: MovementCatalog = STAND
   return catalog.movements.find((movement) => movement.id === id)?.essential === true
 }
 
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function addLocalDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
+}
+
+function localDayKey(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/**
+ * Local date when the entered whole-week count reaches 12 weeks.
+ * Exclusion starts the following day: that is past 12 weeks, "pregnancy after 12 weeks".
+ */
+export function estimateTwelveWeekDate(weeksPregnant: number, today = new Date()): string {
+  const weeks = Math.trunc(weeksPregnant)
+  return localDayKey(addLocalDays(startOfLocalDay(today), (PREGNANCY_EXCLUSION_WEEKS - weeks) * 7))
+}
+
+export function parseWeeksPregnant(value: string): number | null {
+  const trimmed = value.trim()
+  if (!/^\d{1,2}$/.test(trimmed)) return null
+  return Number(trimmed)
+}
+
+export function pregnancyAfterTwelveWeeks(health: HealthFlags | null, today = new Date()): boolean {
+  if (!health || health.pregnant !== 'yes' || !health.twelveWeekDate) return false
+  return localDayKey(startOfLocalDay(today)) > health.twelveWeekDate
+}
+
+/** Reasons this movement cannot be selected. Empty when it can. */
+export function exclusionReasons(movementId: string, health: HealthFlags | null, today = new Date()): string[] {
+  if (!health) return []
+  const reasons: string[] = []
+  if (health.osteoporosis === 'yes' && movementId === 'cat-cow') reasons.push(REASON_OSTEOPOROSIS)
+  if (health.hipReplacement === 'yes' && HIP_REPLACEMENT_MOVEMENTS.has(movementId)) {
+    reasons.push(REASON_HIP_REPLACEMENT)
+  }
+  if (pregnancyAfterTwelveWeeks(health, today) && PREGNANCY_AFTER_12_MOVEMENTS.has(movementId)) {
+    reasons.push(REASON_PREGNANCY_AFTER_12)
+  }
+  return reasons
+}
+
+export function excludedMovementIds(health: HealthFlags | null, today = new Date()): string[] {
+  return STANDARD_MOVEMENT_CATALOG.movements
+    .map((movement) => movement.id)
+    .filter((id) => exclusionReasons(id, health, today).length > 0)
+}
+
 /** True when two or more kept movements share a contraction rating. */
 export function selectionHasRatingTie(
   catalog: MovementCatalog,
   answers: readonly MovementAnswers[],
+  excludedIds: readonly string[] = [],
 ): boolean {
-  const selection = selectTopMovements(catalog, answers)
+  const selection = selectTopMovements(catalog, answers, excludedIds)
   if (selection.status !== 'plan') return false
   const seen = new Set<ContractionRating>()
   for (const id of selection.rankedIds) {
@@ -142,18 +239,24 @@ export function isEliminated(answer: Pick<MovementAnswers, 'pain' | 'regular'>):
 export function selectTopMovements(
   catalog: MovementCatalog,
   answers: readonly MovementAnswers[],
+  excludedIds: readonly string[] = [],
 ): SelectionResult {
   const byId = new Map<string, MovementAnswers>()
   for (const answer of answers) {
     if (!byId.has(answer.movementId)) byId.set(answer.movementId, answer)
   }
 
+  const excluded = new Set(excludedIds)
   const index = new Map(catalog.movements.map((movement, position) => [movement.id, position]))
   const essential = new Map(catalog.movements.map((movement) => [movement.id, movement.essential]))
   const kept: MovementAnswers[] = []
   let sawAnswer = false
 
   for (const movement of catalog.movements) {
+    if (excluded.has(movement.id)) {
+      sawAnswer = true
+      continue
+    }
     const answer = byId.get(movement.id)
     if (!answer) continue
     sawAnswer = true

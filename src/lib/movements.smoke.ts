@@ -6,13 +6,20 @@ import { addLog, readLogs } from './mockServer.ts'
 import {
   MOVEMENT_PLAN_STORAGE_KEY,
   adherenceSummary,
+  answerSymptomCheck,
   completeAnswers,
   everydayMovementsAskContext,
+  isPlanPaused,
   readMovementPlan,
   readReminderTime,
+  resumeAfterProviderClearance,
+  saveHealthScreen,
   saveWorksheetResult,
   setEverydayMovementDone,
   shouldShowRestartCue,
+  stopMovementForPain,
+  symptomCheckDue,
+  syncPregnancyExclusions,
   writeReminderTime,
   writeWorksheetDraft,
   blankDraft,
@@ -25,19 +32,36 @@ import {
   ESSENTIAL_TIE_NOTE,
   MOVEMENT_CATALOGS,
   NO_EVERYDAY_PLAN_MESSAGE,
+  NOT_RECOMMENDED,
   PAIN_QUESTION,
+  PAIN_REDO_LINE,
+  PAIN_STOP_LINE,
   REGULAR_QUESTION,
+  REASON_HIP_REPLACEMENT,
+  REASON_OSTEOPOROSIS,
+  REASON_PREGNANCY_AFTER_12,
   RESTART_CUE,
+  RESUME_AFTER_EVALUATION,
   STANDARD_MOVEMENT_CATALOG,
+  STOP_ALL_MOVEMENTS_LINE,
+  SYMPTOM_CHECK_QUESTION,
+  SYMPTOMS_WORSE_LINK,
+  THIS_CAUSED_PAIN,
   TOP_MOVEMENTS_TITLE,
   WORKSHEET_INTRO,
+  WORKSHEET_REDO_PROMPT,
   WORKSHEET_TITLE,
   adjustTopMovements,
+  estimateTwelveWeekDate,
+  excludedMovementIds,
+  exclusionReasons,
   isEliminated,
   movementIsEssential,
+  pregnancyAfterTwelveWeeks,
   selectTopMovements,
   selectionHasRatingTie,
   type ContractionRating,
+  type HealthFlags,
   type MovementAnswers,
   type MovementDefinition,
   type YesNo,
@@ -378,6 +402,177 @@ assert(readMovementPlan().draft?.[0]?.contraction === 2, 'an in-progress workshe
 assert(completeAnswers(draft) === null, 'a draft is incomplete until every movement is answered')
 assert(completeAnswers(planAnswers.map((answer) => ({ ...answer })))?.length === 10, 'a full draft completes')
 
+const sept1 = new Date(2026, 8, 1, 9, 0, 0)
+const noHealth: HealthFlags = {
+  osteoporosis: 'no',
+  hipReplacement: 'no',
+  pregnant: 'no',
+  twelveWeekDate: null,
+}
+
+assert(PAIN_STOP_LINE === 'If a movement at any time causes pain, stop that movement.', 'pain rule uses Dr C wording')
+assert(NOT_RECOMMENDED === 'Not recommended for you', 'excluded movements use the not-recommended line')
+assert(THIS_CAUSED_PAIN === 'This caused pain', 'daily plan pain action uses Dr C wording')
+assert(PAIN_REDO_LINE === 'Redo the worksheet to choose a replacement.', 'pain removal suggests a worksheet redo')
+assert(
+  SYMPTOM_CHECK_QUESTION ===
+    'Are your pelvic floor symptoms, such as incontinence, frequency, urgency, bulge, or painful intercourse, getting worse?',
+  'symptom check uses Dr C wording',
+)
+assert(SYMPTOMS_WORSE_LINK === 'My symptoms are getting worse', 'worsening link uses Dr C wording')
+assert(
+  STOP_ALL_MOVEMENTS_LINE === 'Stop all movements and see a medical provider for a pelvic floor evaluation.',
+  'pause card uses Dr C wording',
+)
+assert(
+  RESUME_AFTER_EVALUATION === "I've been evaluated by a provider and cleared to continue.",
+  'resume confirms a provider evaluation and clearance',
+)
+assert(WORKSHEET_REDO_PROMPT === 'Redo the worksheet.', 'an emptied plan prompts a worksheet redo')
+
+assert(excludedMovementIds(null).length === 0, 'no health screen excludes nothing')
+assert(excludedMovementIds({ ...noHealth, osteoporosis: 'yes' }).join(',') === 'cat-cow', 'osteoporosis excludes Cat-Cow')
+assert(
+  excludedMovementIds({ ...noHealth, hipReplacement: 'yes' }).join(',') ===
+    'side-lying-bent-knee-lift,side-lying-straight-leg-circle,butterfly,all-4s-side-leg-lift',
+  'hip replacement excludes movements 3, 4, 5, and 9',
+)
+assert(
+  estimateTwelveWeekDate(8, sept1) === '2026-09-29',
+  '8 weeks on Sept 1 stores the estimated 12-week date',
+)
+assert(estimateTwelveWeekDate(12, sept1) === '2026-09-01', '12 weeks stores today as the 12-week date')
+assert(estimateTwelveWeekDate(13, sept1) === '2026-08-25', '13 weeks stores a 12-week date in the past')
+
+const eightWeeks: HealthFlags = { ...noHealth, pregnant: 'yes', twelveWeekDate: '2026-09-29' }
+assert(!pregnancyAfterTwelveWeeks(eightWeeks, new Date(2026, 8, 29, 12)), 'the 12-week date itself is not yet past 12 weeks')
+assert(pregnancyAfterTwelveWeeks(eightWeeks, new Date(2026, 8, 30, 12)), 'the next day is pregnancy after 12 weeks')
+assert(
+  excludedMovementIds(eightWeeks, new Date(2026, 8, 29, 12)).length === 0,
+  'pregnancy before the crossover excludes nothing',
+)
+assert(
+  excludedMovementIds(eightWeeks, new Date(2026, 8, 30, 12)).join(',') === 'butterfly,bridging,corkscrew',
+  'pregnancy after 12 weeks excludes Butterfly, Bridging, and Corkscrew',
+)
+assert(
+  exclusionReasons('butterfly', { ...eightWeeks, hipReplacement: 'yes' }, new Date(2026, 8, 30, 12)).join(', ') ===
+    `${REASON_HIP_REPLACEMENT}, ${REASON_PREGNANCY_AFTER_12}`,
+  'Butterfly can carry both hip replacement and pregnancy after 12 weeks',
+)
+assert(exclusionReasons('cat-cow', { ...noHealth, osteoporosis: 'yes' }).join() === REASON_OSTEOPOROSIS, 'Cat-Cow reason is osteoporosis')
+assert(
+  !selectTopMovements(STANDARD_MOVEMENT_CATALOG, sheet({ 'cat-cow': 3, lunge: 2 }), ['cat-cow']).rankedIds.includes('cat-cow'),
+  'an excluded movement cannot be selected',
+)
+assert(
+  adjustTopMovements(['lunge'], ['lunge', 'cat-cow']) === null,
+  'an excluded movement cannot be added to the plan',
+)
+
+memory.clear()
+const healthSaved = saveHealthScreen(
+  { osteoporosis: 'no', hipReplacement: 'no', pregnant: 'yes', weeksPregnant: 8 },
+  sept1,
+)
+assert(healthSaved.health?.twelveWeekDate === '2026-09-29', 'the health screen stores the 12-week date on the phone')
+assert(healthSaved.health?.weeksPregnant === 8, 'the health screen stores the weeks entered')
+const pregnancyPlan = saveWorksheetResult(
+  sheet({ butterfly: 3, bridging: 2, corkscrew: 1, lunge: 1 }),
+  ['butterfly', 'bridging', 'corkscrew'],
+  sept1,
+)
+assert(pregnancyPlan.ok && pregnancyPlan.state.history[0]?.selectedIds.join(',') === 'butterfly,bridging,corkscrew', 'before 12 weeks the pregnancy movements can be the plan')
+const onTwelve = syncPregnancyExclusions(new Date(2026, 8, 29, 18, 0, 0))
+assert(onTwelve.history[0]?.selectedIds.join(',') === 'butterfly,bridging,corkscrew', 'the plan stays put on the 12-week date')
+assert(!onTwelve.worksheetRedoPrompt, 'the 12-week date does not prompt a redo')
+const afterTwelve = syncPregnancyExclusions(new Date(2026, 8, 30, 9, 0, 0))
+assert(afterTwelve.history[0]?.selectedIds.length === 0, 'crossing 12 weeks removes those movements from the plan')
+assert(afterTwelve.worksheetRedoPrompt, 'a plan that drops to zero prompts a worksheet redo')
+assert(afterTwelve.history[0]?.answers.some((answer) => answer.movementId === 'lunge'), 'the crossover keeps the rest of the worksheet result')
+
+memory.clear()
+saveHealthScreen({ osteoporosis: 'no', hipReplacement: 'no', pregnant: 'yes', weeksPregnant: 8 }, sept1)
+saveWorksheetResult(sheet({ lunge: 3, butterfly: 3 }), ['lunge', 'butterfly'], sept1)
+const keptLunge = syncPregnancyExclusions(new Date(2026, 8, 30, 9, 0, 0))
+assert(keptLunge.history[0]?.selectedIds.join(',') === 'lunge', 'a movement that is still allowed stays on the plan')
+assert(!keptLunge.worksheetRedoPrompt, 'a plan that still has a movement does not prompt a redo')
+
+memory.clear()
+saveWorksheetResult(sheet({ lunge: 2, 'cat-cow': 3 }), ['lunge', 'cat-cow'], sept1)
+const osteo = saveHealthScreen(
+  { osteoporosis: 'yes', hipReplacement: 'no', pregnant: 'no', weeksPregnant: null },
+  sept1,
+)
+assert(osteo.history[0]?.selectedIds.join(',') === 'lunge', 'editing osteoporosis removes Cat-Cow from the current plan')
+const onlyCat = saveWorksheetResult(sheet({ 'cat-cow': 3 }), ['cat-cow'], sept1)
+assert(!onlyCat.ok, 'Cat-Cow cannot be saved once osteoporosis excludes it')
+
+memory.clear()
+saveHealthScreen({ osteoporosis: 'yes', hipReplacement: 'no', pregnant: 'no', weeksPregnant: null }, sept1)
+const withoutCat = saveWorksheetResult(
+  sheet({ lunge: 2 }).filter((answer) => answer.movementId !== 'cat-cow'),
+  ['lunge'],
+  sept1,
+)
+assert(withoutCat.ok && withoutCat.state.history[0]?.selectedIds.join(',') === 'lunge', 'an excluded movement does not have to be answered')
+assert(
+  completeAnswers(blankDraft(), ['cat-cow']) === null,
+  'the other movements are still required',
+)
+
+memory.clear()
+const painPlan = saveWorksheetResult(planAnswers, ['lunge', 'bridging', 'cat-cow'], new Date(2026, 8, 27, 9, 0, 0))
+assert(painPlan.ok, 'pain fixture plan saves')
+const painDay = new Date(2026, 8, 27, 15, 0, 0)
+for (const id of ['lunge', 'bridging', 'cat-cow']) setEverydayMovementDone(id, true, painDay)
+const stopped = stopMovementForPain('bridging', painDay)
+assert(stopped.history[0]?.selectedIds.join(',') === 'lunge,cat-cow', 'pain removes that movement from the plan')
+assert(
+  stopped.history[0]?.answers.find((answer) => answer.movementId === 'bridging')?.pain === 'yes',
+  'pain marks that movement eliminated in the worksheet result',
+)
+assert(!stopped.history[0]?.rankedIds.includes('bridging'), 'an eliminated movement leaves the ranking')
+assert(stopped.history[0]?.answers.find((answer) => answer.movementId === 'lunge')?.pain === 'no', 'pain leaves the other movements')
+assert(stopped.painRedoPrompt, 'pain suggests redoing the worksheet')
+const painLogs = exerciseLogs(readLogs()).filter((log) => log.activity.includes('Lunge'))
+assert(painLogs.length === 1 && painLogs[0]?.activity === 'Lunge · Cat-Cow', 'the day log drops the painful movement')
+const ignoredPain = stopMovementForPain('squat', painDay)
+assert(ignoredPain.history[0]?.selectedIds.join(',') === 'lunge,cat-cow', 'pain does nothing to a movement that is not on the plan')
+
+memory.clear()
+saveWorksheetResult(sheet({ bridging: 2 }), ['bridging'], new Date(2026, 8, 27, 9, 0, 0))
+const lastStopped = stopMovementForPain('bridging', new Date(2026, 8, 27, 11, 0, 0))
+assert(lastStopped.history[0]?.selectedIds.length === 0, 'stopping the last movement clears the plan')
+assert(lastStopped.painRedoPrompt, 'stopping the last movement still suggests a replacement')
+
+memory.clear()
+saveWorksheetResult(planAnswers, ['lunge', 'bridging'], new Date(2026, 8, 1, 9, 0, 0))
+assert(!symptomCheckDue(readMovementPlan(), new Date(2026, 8, 7, 9)), 'the weekly check-in waits 7 days')
+assert(symptomCheckDue(readMovementPlan(), new Date(2026, 8, 8, 9)), 'the weekly check-in is due a week after the plan')
+const symptomNo = answerSymptomCheck(false, new Date(2026, 8, 8, 10, 0, 0))
+assert(!isPlanPaused(symptomNo), 'No on the symptom check does not pause movements')
+assert(!symptomCheckDue(symptomNo, new Date(2026, 8, 14, 10)), 'answering No starts another week')
+const symptomYes = answerSymptomCheck(true, new Date(2026, 8, 15, 10, 0, 0))
+assert(isPlanPaused(symptomYes), 'Yes pauses all movements')
+assert(symptomYes.symptomPauses[0]?.pausedAt === new Date(2026, 8, 15, 10, 0, 0).toISOString(), 'the pause date is stored')
+assert(symptomYes.symptomPauses[0]?.resumedAt === null, 'a pause has no resume date until they are cleared')
+assert(symptomYes.history[0]?.selectedIds.join(',') === 'lunge,bridging', 'pausing hides the plan without deleting it')
+assert(everydayMovementsAskContext(symptomYes) === '', 'a paused plan is not sent as current movements')
+assert(!symptomCheckDue(symptomYes, new Date(2026, 8, 22, 10)), 'the weekly check-in stays down while movements are paused')
+const blocked = setEverydayMovementDone('lunge', true, new Date(2026, 8, 15, 11, 0, 0))
+assert(blocked.days.length === 0, 'checks do not record while movements are paused')
+const resumed = resumeAfterProviderClearance(new Date(2026, 8, 20, 9, 0, 0))
+assert(!isPlanPaused(resumed), 'clearance resumes movements')
+assert(resumed.symptomPauses[0]?.resumedAt === new Date(2026, 8, 20, 9, 0, 0).toISOString(), 'the resume date is stored')
+assert(resumed.symptomPauses[0]?.pausedAt === symptomYes.symptomPauses[0]?.pausedAt, 'resume keeps the original pause date')
+const secondPause = answerSymptomCheck(true, new Date(2026, 8, 21, 9, 0, 0))
+assert(secondPause.symptomPauses.length === 2, 'a later pause is recorded beside the first')
+assert(secondPause.symptomPauses[0]?.resumedAt !== null && secondPause.symptomPauses[1]?.resumedAt === null, 'only the open pause is waiting for clearance')
+assert(resumeAfterProviderClearance(new Date(2026, 8, 22, 9)).symptomPauses[1]?.resumedAt !== null, 'the second pause can be cleared')
+memory.clear()
+assert(!isPlanPaused(resumeAfterProviderClearance()), 'resume does nothing when movements are not paused')
+
 const page = readFileSync(new URL('../pages/Worksheet.tsx', import.meta.url), 'utf8')
 const home = readFileSync(new URL('../pages/Home.tsx', import.meta.url), 'utf8')
 const planCard = readFileSync(new URL('../components/TodayPlan.tsx', import.meta.url), 'utf8')
@@ -388,6 +583,13 @@ assert(/TodayPlanCard/.test(home) && /MovementPhoneSettings/.test(home), 'Home s
 assert(/to="\/ask"/.test(home) && /openSheet\('exercise'\)/.test(home), 'Home keeps Ask Sara and the exercise sheet')
 assert(/everydayMovementsAskContext/.test(askPage), 'Ask Sara sends the everyday movements when asking')
 assert(/context: typeof body\.context === 'string'/.test(worker), 'the worker forwards optional ask context')
+assert(page.includes('PAIN_STOP_LINE') && page.includes('NOT_RECOMMENDED'), 'the worksheet shows the pain line and excluded movements')
+assert(page.includes('HEALTH_SCREEN_TITLE') && page.includes('HEALTH_WEEKS'), 'the worksheet asks the health screen before the movements')
+assert(planCard.includes('PAIN_STOP_LINE') && planCard.includes('THIS_CAUSED_PAIN'), 'the daily plan shows the pain line and the pain action')
+assert(planCard.includes('SYMPTOM_CHECK_QUESTION') && planCard.includes('SYMPTOMS_WORSE_LINK'), 'the daily plan asks the symptom check and keeps the link')
+assert(planCard.includes('STOP_ALL_MOVEMENTS_LINE') && planCard.includes('RESUME_AFTER_EVALUATION'), 'the daily plan shows the pause card and the clearance confirmation')
+const askServer = readFileSync(new URL('../../server/askGrok.mjs', import.meta.url), 'utf8')
+assert(!askServer.includes(STOP_ALL_MOVEMENTS_LINE), 'this PR does not change the Ask Sara server prompt')
 
 if (process.exitCode) {
   console.error('movement smoke failed')

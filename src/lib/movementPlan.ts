@@ -4,9 +4,13 @@ import {
   COURSE_LINE,
   STANDARD_MOVEMENT_CATALOG,
   adjustTopMovements,
+  estimateTwelveWeekDate,
+  excludedMovementIds,
   movementName,
+  pregnancyAfterTwelveWeeks,
   selectTopMovements,
   type ContractionRating,
+  type HealthFlags,
   type MovementAnswers,
   type YesNo,
 } from './movements.ts'
@@ -45,6 +49,16 @@ export type PlanDay = {
   exerciseLogId?: string
 }
 
+export type HealthScreen = HealthFlags & {
+  weeksPregnant: number | null
+  answeredAt: string
+}
+
+export type SymptomPause = {
+  pausedAt: string
+  resumedAt: string | null
+}
+
 export type MovementPlanState = {
   history: WorksheetRecord[]
   currentId: string | null
@@ -52,6 +66,13 @@ export type MovementPlanState = {
   days: PlanDay[]
   /** `HH:MM` 24-hour preference. Not a live notification. */
   reminderTime: string | null
+  health: HealthScreen | null
+  symptomPauses: SymptomPause[]
+  lastSymptomCheckAt: string | null
+  /** Pregnancy progression removed the last everyday movement. */
+  worksheetRedoPrompt: boolean
+  /** A daily-plan movement was stopped because it caused pain. */
+  painRedoPrompt: boolean
 }
 
 const EMPTY_STATE: MovementPlanState = {
@@ -60,7 +81,15 @@ const EMPTY_STATE: MovementPlanState = {
   draft: null,
   days: [],
   reminderTime: null,
+  health: null,
+  symptomPauses: [],
+  lastSymptomCheckAt: null,
+  worksheetRedoPrompt: false,
+  painRedoPrompt: false,
 }
+
+/** Days between symptom check-ins on the daily plan. */
+export const SYMPTOM_CHECK_EVERY_DAYS = 7
 
 const HISTORY_LIMIT = 40
 const DAY_LIMIT = 60
@@ -76,10 +105,17 @@ export function blankDraft(
   }))
 }
 
-export function completeAnswers(draft: readonly DraftAnswer[]): MovementAnswers[] | null {
-  if (draft.length !== STANDARD_MOVEMENT_CATALOG.movements.length) return null
+export function completeAnswers(
+  draft: readonly DraftAnswer[],
+  excludedIds: readonly string[] = [],
+): MovementAnswers[] | null {
+  const excluded = new Set(excludedIds)
+  const byId = new Map(draft.map((row) => [row.movementId, row]))
   const out: MovementAnswers[] = []
-  for (const row of draft) {
+  for (const movement of STANDARD_MOVEMENT_CATALOG.movements) {
+    if (excluded.has(movement.id)) continue
+    const row = byId.get(movement.id)
+    if (!row) return null
     if (row.pain !== 'yes' && row.pain !== 'no') return null
     if (row.regular !== 'yes' && row.regular !== 'no') return null
     if (row.contraction !== 0 && row.contraction !== 1 && row.contraction !== 2 && row.contraction !== 3) {
@@ -92,8 +128,6 @@ export function completeAnswers(draft: readonly DraftAnswer[]): MovementAnswers[
       contraction: row.contraction,
     })
   }
-  const ids = new Set(out.map((answer) => answer.movementId))
-  if (!STANDARD_MOVEMENT_CATALOG.movements.every((movement) => ids.has(movement.id))) return null
   return out
 }
 
@@ -134,6 +168,7 @@ export function everydayMovementNames(state: MovementPlanState = readMovementPla
  * request stays unchanged for people who have not filled out the worksheet.
  */
 export function everydayMovementsAskContext(state: MovementPlanState = readMovementPlan()): string {
+  if (isPlanPaused(state)) return ''
   const names = everydayMovementNames(state)
   if (names.length === 0) return ''
   return `The person's current everyday movements, chosen on their Movement Selection Worksheet, are: ${names.join('; ')}. ${COURSE_LINE} They are done as taught in the PfilAtes course on Kajabi. Do not invent exercise instructions, and do not suggest movements they did not choose.`
@@ -144,12 +179,22 @@ export function saveWorksheetResult(
   chosenIds: readonly string[],
   now = new Date(),
 ): { ok: true; state: MovementPlanState } | { ok: false; reason: 'incomplete' | 'selection' } {
-  const answeredIds = new Set(answers.map((answer) => answer.movementId))
-  if (!STANDARD_MOVEMENT_CATALOG.movements.every((movement) => answeredIds.has(movement.id))) {
+  const state = readMovementPlan()
+  const excluded = excludedMovementIds(state.health, now)
+  const excludedSet = new Set(excluded)
+  const usable = answers.filter((answer) => !excludedSet.has(answer.movementId))
+  const usableIds = new Set(usable.map((answer) => answer.movementId))
+  const required = STANDARD_MOVEMENT_CATALOG.movements.filter((movement) => !excludedSet.has(movement.id))
+  if (!required.every((movement) => usableIds.has(movement.id))) {
     return { ok: false, reason: 'incomplete' }
   }
+  if (chosenIds.some((id) => excludedSet.has(id))) return { ok: false, reason: 'selection' }
 
-  const selection = selectTopMovements(STANDARD_MOVEMENT_CATALOG, answers)
+  const today = localDayKeyFromDate(startOfLocalDay(now))
+  const todayProgress = state.days.find((day) => day.day === today)
+  if (todayProgress?.exerciseLogId) removeLog(todayProgress.exerciseLogId)
+
+  const selection = selectTopMovements(STANDARD_MOVEMENT_CATALOG, usable, excluded)
   let selectedIds: string[] = []
   if (selection.status === 'plan') {
     const adjusted = adjustTopMovements(selection.rankedIds, chosenIds)
@@ -157,16 +202,11 @@ export function saveWorksheetResult(
     selectedIds = adjusted
   }
 
-  const state = readMovementPlan()
-  const today = localDayKeyFromDate(startOfLocalDay(now))
-  const todayProgress = state.days.find((day) => day.day === today)
-  if (todayProgress?.exerciseLogId) removeLog(todayProgress.exerciseLogId)
-
   const record: WorksheetRecord = {
     id: uid(),
     catalogId: STANDARD_MOVEMENT_CATALOG.id,
     completedAt: now.toISOString(),
-    answers: answers.map((answer) => ({ ...answer })),
+    answers: usable.map((answer) => ({ ...answer })),
     status: selection.status,
     emptyReason: selection.reason,
     rankedIds: selection.rankedIds,
@@ -182,6 +222,8 @@ export function saveWorksheetResult(
     days: state.days
       .filter((day) => day.day !== today)
       .slice(0, DAY_LIMIT),
+    worksheetRedoPrompt: false,
+    painRedoPrompt: false,
   }
   persist(next)
   return { ok: true, state: next }
@@ -211,6 +253,7 @@ export function setEverydayMovementDone(
   now = new Date(),
 ): MovementPlanState {
   const state = readMovementPlan()
+  if (isPlanPaused(state)) return state
   const selected = everydayMovementIds(state)
   if (!selected.includes(movementId)) return state
 
@@ -279,6 +322,163 @@ export function writeReminderTime(value: string | null): MovementPlanState {
   return next
 }
 
+export type HealthScreenInput = {
+  osteoporosis: YesNo
+  hipReplacement: YesNo
+  pregnant: YesNo
+  weeksPregnant: number | null
+}
+
+export function saveHealthScreen(input: HealthScreenInput, now = new Date()): MovementPlanState {
+  const pregnant = input.pregnant === 'yes'
+  const weeks = pregnant && typeof input.weeksPregnant === 'number' ? Math.trunc(input.weeksPregnant) : null
+  if (input.osteoporosis !== 'yes' && input.osteoporosis !== 'no') return readMovementPlan()
+  if (input.hipReplacement !== 'yes' && input.hipReplacement !== 'no') return readMovementPlan()
+  if (input.pregnant !== 'yes' && input.pregnant !== 'no') return readMovementPlan()
+  if (pregnant && (weeks === null || weeks < 0 || weeks > 99)) return readMovementPlan()
+
+  const health: HealthScreen = {
+    osteoporosis: input.osteoporosis,
+    hipReplacement: input.hipReplacement,
+    pregnant: input.pregnant,
+    weeksPregnant: pregnant ? weeks : null,
+    twelveWeekDate: pregnant && weeks !== null ? estimateTwelveWeekDate(weeks, now) : null,
+    answeredAt: now.toISOString(),
+  }
+  const next = stripExcludedMovements({ ...readMovementPlan(), health }, now)
+  persist(next)
+  return next
+}
+
+/** Drop movements the health screen now excludes. Prompts a redo only when the plan hits zero. */
+export function syncPregnancyExclusions(now = new Date()): MovementPlanState {
+  const state = readMovementPlan()
+  if (!pregnancyAfterTwelveWeeks(state.health, now)) return state
+  const next = stripExcludedMovements(state, now)
+  if (next === state) return state
+  persist(next)
+  return next
+}
+
+export function stopMovementForPain(movementId: string, now = new Date()): MovementPlanState {
+  const state = readMovementPlan()
+  const current = currentWorksheet(state)
+  if (!current || !current.selectedIds.includes(movementId)) return state
+
+  const answers = current.answers.map((answer) =>
+    answer.movementId === movementId ? { ...answer, pain: 'yes' as const } : answer,
+  )
+  const excluded = excludedMovementIds(state.health, now)
+  const selection = selectTopMovements(STANDARD_MOVEMENT_CATALOG, answers, excluded)
+  const selectedIds = current.selectedIds.filter((id) => id !== movementId && selection.rankedIds.includes(id))
+  const record: WorksheetRecord = {
+    ...current,
+    answers,
+    status: selection.status,
+    emptyReason: selection.reason,
+    rankedIds: selection.rankedIds,
+    suggestedIds: selection.suggestedIds,
+    selectedIds,
+  }
+  const history = state.history.map((item) => (item.id === record.id ? record : item))
+  const next: MovementPlanState = {
+    ...state,
+    history,
+    days: alignToday({ ...state, history }, selectedIds, now),
+    painRedoPrompt: true,
+  }
+  persist(next)
+  return next
+}
+
+export function isPlanPaused(state: MovementPlanState = readMovementPlan()): boolean {
+  return state.symptomPauses.some((pause) => pause.resumedAt === null)
+}
+
+export function symptomCheckDue(state: MovementPlanState = readMovementPlan(), now = new Date()): boolean {
+  if (isPlanPaused(state)) return false
+  const anchor = state.lastSymptomCheckAt ?? currentWorksheet(state)?.completedAt ?? null
+  if (!anchor) return false
+  const last = new Date(anchor)
+  if (Number.isNaN(last.getTime())) return true
+  const due = addLocalDays(startOfLocalDay(last), SYMPTOM_CHECK_EVERY_DAYS)
+  return startOfLocalDay(now).getTime() >= due.getTime()
+}
+
+export function answerSymptomCheck(gettingWorse: boolean, now = new Date()): MovementPlanState {
+  const state = readMovementPlan()
+  const at = now.toISOString()
+  if (!gettingWorse || isPlanPaused(state)) {
+    const next = { ...state, lastSymptomCheckAt: at }
+    persist(next)
+    return next
+  }
+  const next: MovementPlanState = {
+    ...state,
+    lastSymptomCheckAt: at,
+    symptomPauses: [...state.symptomPauses, { pausedAt: at, resumedAt: null }],
+  }
+  persist(next)
+  return next
+}
+
+export function resumeAfterProviderClearance(now = new Date()): MovementPlanState {
+  const state = readMovementPlan()
+  const open = state.symptomPauses.findIndex((pause) => pause.resumedAt === null)
+  if (open < 0) return state
+  const symptomPauses = state.symptomPauses.map((pause, index) =>
+    index === open ? { ...pause, resumedAt: now.toISOString() } : pause,
+  )
+  const next = { ...state, symptomPauses }
+  persist(next)
+  return next
+}
+
+function stripExcludedMovements(state: MovementPlanState, now: Date): MovementPlanState {
+  const excluded = new Set(excludedMovementIds(state.health, now))
+  if (excluded.size === 0) return state
+  const current = currentWorksheet(state)
+  if (!current) return state
+  const selectedIds = current.selectedIds.filter((id) => !excluded.has(id))
+  if (selectedIds.length === current.selectedIds.length) return state
+  const dropped = current.selectedIds.length > 0 && selectedIds.length === 0
+  const record: WorksheetRecord = {
+    ...current,
+    selectedIds,
+    rankedIds: current.rankedIds.filter((id) => !excluded.has(id)),
+    suggestedIds: current.suggestedIds.filter((id) => !excluded.has(id)),
+  }
+  const history = state.history.map((item) => (item.id === record.id ? record : item))
+  return {
+    ...state,
+    history,
+    days: alignToday({ ...state, history }, selectedIds, now),
+    worksheetRedoPrompt: state.worksheetRedoPrompt || dropped,
+  }
+}
+
+function alignToday(state: MovementPlanState, selectedIds: readonly string[], now: Date): PlanDay[] {
+  const day = localDayKeyFromDate(startOfLocalDay(now))
+  const existing = state.days.find((entry) => entry.day === day)
+  const checkedIds = selectedIds.filter((id) => existing?.checkedIds.includes(id))
+  const complete = selectedIds.length > 0 && selectedIds.every((id) => checkedIds.includes(id))
+  let exerciseLogId = existing?.exerciseLogId
+  if (complete) {
+    if (exerciseLogId) removeLog(exerciseLogId)
+    exerciseLogId = writePlanExerciseLog(selectedIds, now)
+  } else if (exerciseLogId) {
+    removeLog(exerciseLogId)
+    exerciseLogId = undefined
+  }
+  if (!existing && !exerciseLogId && checkedIds.length === 0) return state.days
+  const progress: PlanDay = {
+    day,
+    checkedIds,
+    ...(exerciseLogId ? { exerciseLogId } : {}),
+  }
+  return [progress, ...state.days.filter((entry) => entry.day !== day)].slice(0, DAY_LIMIT)
+}
+
 function writePlanExerciseLog(selectedIds: readonly string[], now: Date): string {
   const names = selectedIds.map((id) => movementName(id))
   const entry: ExerciseLog = {
@@ -343,7 +543,52 @@ function sanitize(raw: unknown): MovementPlanState {
     draft: sanitizeDraft(value.draft),
     days: sanitizeDays(value.days),
     reminderTime: normalizeReminderTime(typeof value.reminderTime === 'string' ? value.reminderTime : null),
+    health: sanitizeHealth(value.health),
+    symptomPauses: sanitizePauses(value.symptomPauses),
+    lastSymptomCheckAt: typeof value.lastSymptomCheckAt === 'string' ? value.lastSymptomCheckAt : null,
+    worksheetRedoPrompt: value.worksheetRedoPrompt === true,
+    painRedoPrompt: value.painRedoPrompt === true,
   }
+}
+
+function sanitizeHealth(raw: unknown): HealthScreen | null {
+  if (!raw || typeof raw !== 'object') return null
+  const value = raw as Partial<HealthScreen>
+  if (value.osteoporosis !== 'yes' && value.osteoporosis !== 'no') return null
+  if (value.hipReplacement !== 'yes' && value.hipReplacement !== 'no') return null
+  if (value.pregnant !== 'yes' && value.pregnant !== 'no') return null
+  const weeks =
+    typeof value.weeksPregnant === 'number' && Number.isInteger(value.weeksPregnant) && value.weeksPregnant >= 0
+      ? value.weeksPregnant
+      : null
+  const twelveWeekDate =
+    typeof value.twelveWeekDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.twelveWeekDate)
+      ? value.twelveWeekDate
+      : null
+  if (value.pregnant === 'yes' && (weeks === null || !twelveWeekDate)) return null
+  return {
+    osteoporosis: value.osteoporosis,
+    hipReplacement: value.hipReplacement,
+    pregnant: value.pregnant,
+    weeksPregnant: value.pregnant === 'yes' ? weeks : null,
+    twelveWeekDate: value.pregnant === 'yes' ? twelveWeekDate : null,
+    answeredAt: typeof value.answeredAt === 'string' ? value.answeredAt : '',
+  }
+}
+
+function sanitizePauses(raw: unknown): SymptomPause[] {
+  if (!Array.isArray(raw)) return []
+  const pauses: SymptomPause[] = []
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue
+    const pause = row as Partial<SymptomPause>
+    if (typeof pause.pausedAt !== 'string' || !pause.pausedAt) continue
+    pauses.push({
+      pausedAt: pause.pausedAt,
+      resumedAt: typeof pause.resumedAt === 'string' && pause.resumedAt ? pause.resumedAt : null,
+    })
+  }
+  return pauses
 }
 
 function sanitizeRecord(raw: unknown): WorksheetRecord | null {
