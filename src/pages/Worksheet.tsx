@@ -18,6 +18,8 @@ import {
   CONTRACTION_QUESTION,
   CONTRACTION_SCALE,
   COURSE_LINE,
+  ESSENTIAL_LABEL,
+  ESSENTIAL_TIE_NOTE,
   NO_EVERYDAY_PLAN_MESSAGE,
   PAIN_QUESTION,
   REGULAR_QUESTION,
@@ -26,8 +28,10 @@ import {
   WORKSHEET_INTRO,
   WORKSHEET_TITLE,
   adjustTopMovements,
+  movementIsEssential,
   movementName,
   selectTopMovements,
+  selectionHasRatingTie,
   type MovementAnswers,
 } from '../lib/movements'
 import { formatDay } from '../lib/storage'
@@ -168,7 +172,10 @@ function Form({
           return (
             <li key={movement.id} className="glass-card px-4 py-4">
               <h2 className="font-serif text-xl font-bold text-black">
-                {index + 1}. {movement.name}
+                <span>
+                  {index + 1}. {movement.name}
+                </span>
+                {movement.essential ? <EssentialTag /> : null}
               </h2>
               <p className="mt-1 text-xs font-bold text-black">{COURSE_LINE}</p>
               <div className="mt-3" role="group" aria-label={`${movement.name}. ${PAIN_QUESTION}`}>
@@ -286,12 +293,18 @@ function Review({
       <div className="glass-card px-4 py-4">
         <h2 className="font-serif text-2xl font-bold text-black">{TOP_MOVEMENTS_TITLE}</h2>
         <p className="mt-2 text-sm font-bold leading-relaxed text-black">
-          Highest contraction ratings, up to 3. A tie stays in worksheet order. Change this to 1–3 movements.
+          Highest contraction ratings, up to 3. Change this to 1–3 movements.
         </p>
+        {selectionHasRatingTie(STANDARD_MOVEMENT_CATALOG, answers) ? (
+          <p className="mt-2 text-sm font-bold leading-relaxed text-black">{ESSENTIAL_TIE_NOTE}</p>
+        ) : null}
         <ol className="mt-4 space-y-2">
           {ordered.map((id, index) => (
             <li key={id} className="font-serif text-xl font-bold text-black">
-              {index + 1}. {movementName(id)}
+              <span>
+                {index + 1}. {movementName(id)}
+              </span>
+              {movementIsEssential(id) ? <EssentialTag /> : null}
             </li>
           ))}
         </ol>
@@ -324,7 +337,10 @@ function Review({
                   >
                     ✓
                   </span>
-                  <span className="flex-1">{movementName(id)}</span>
+                  <span className="flex flex-1 flex-wrap items-center gap-2">
+                    {movementName(id)}
+                    {movementIsEssential(id) ? <EssentialTag /> : null}
+                  </span>
                   <span className="text-sm font-bold text-black">{rating}</span>
                 </button>
               </li>
@@ -370,7 +386,10 @@ function Saved({
             <ol className="mt-4 space-y-2">
               {record.selectedIds.map((id, index) => (
                 <li key={id} className="font-serif text-xl font-bold text-black">
-                  {index + 1}. {movementName(id)}
+                  <span>
+                    {index + 1}. {movementName(id)}
+                  </span>
+                  {movementIsEssential(id) ? <EssentialTag /> : null}
                 </li>
               ))}
             </ol>
@@ -407,6 +426,14 @@ function Saved({
         </div>
       ) : null}
     </section>
+  )
+}
+
+function EssentialTag() {
+  return (
+    <span className="ml-2 inline-block rounded-full border border-black/30 bg-white/80 px-2 py-0.5 align-middle text-xs font-bold text-black">
+      {ESSENTIAL_LABEL}
+    </span>
   )
 }
 

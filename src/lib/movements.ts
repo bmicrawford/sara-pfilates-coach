@@ -3,7 +3,7 @@
  *
  * The printed sheet is the source of the names, order, and three questions.
  * Catalogs are data so another list can be added later — for example the
- * 7-movement prolapse sheet, which drops Lunge, Squat, and Cat & Cow.
+ * 7-movement prolapse sheet, which drops Lunge, Squat, and Cat-Cow.
  * This app ships only the standard 10-movement worksheet. No other catalog
  * is offered in the UI.
  */
@@ -14,6 +14,8 @@ export type ContractionRating = 0 | 1 | 2 | 3
 export type MovementDefinition = {
   id: string
   name: string
+  /** High-probability PfilAtes movement. Essential wins a contraction-rating tie. */
+  essential: boolean
 }
 
 export type MovementCatalog = {
@@ -35,7 +37,10 @@ export type SelectionResult = {
   status: 'plan' | 'empty'
   /** Set when status is empty. */
   reason?: 'all-eliminated' | 'all-zero'
-  /** Non-eliminated ids, highest contraction first. Ties keep worksheet order. */
+  /**
+   * Non-eliminated ids. Highest contraction first, then Essential before
+   * low-probability, then worksheet order.
+   */
   rankedIds: string[]
   /** Up to 3 ids Sara suggests. Empty when no plan is possible. */
   suggestedIds: string[]
@@ -48,15 +53,21 @@ export const WORKSHEET_INTRO =
 
 export const PAIN_QUESTION = 'Does This Movement Cause Pain?'
 export const REGULAR_QUESTION = 'Is This A Movement You Could Perform Regularly?'
-export const CONTRACTION_QUESTION = 'Feeling of Pelvic Floor Contraction'
+export const CONTRACTION_QUESTION = 'Feeling of pelvic floor contraction'
 export const CIRCLE_ANSWERS = 'Circle your answers'
 
 export const CONTRACTION_SCALE: readonly { value: ContractionRating; label: string }[] = [
-  { value: 0, label: 'Not at all' },
-  { value: 1, label: 'Mild' },
+  { value: 0, label: 'None' },
+  { value: 1, label: 'Slight' },
   { value: 2, label: 'Moderate' },
   { value: 3, label: 'Strong' },
 ]
+
+export const ESSENTIAL_LABEL = 'Essential'
+
+/** Shown while adjusting a plan that has a contraction-rating tie. */
+export const ESSENTIAL_TIE_NOTE =
+  'When a rating is tied, an Essential movement is the recommended pick.'
 
 export const TOP_MOVEMENTS_TITLE = 'My top movements'
 export const COURSE_LINE = 'As taught in your PfilAtes course.'
@@ -67,21 +78,21 @@ export const NO_EVERYDAY_PLAN_MESSAGE =
 export const RESTART_CUE =
   "A missed day is just a missed day. Start again with today's movements whenever you're ready."
 
-/** Names and order match the printed Movement Selection Worksheet. */
+/** Names, order, and Essential flags. Essential marks the high-probability movements. */
 export const STANDARD_MOVEMENT_CATALOG: MovementCatalog = {
   id: 'standard',
   title: WORKSHEET_TITLE,
   movements: [
-    { id: 'lunge', name: 'Lunge' },
-    { id: 'squat', name: 'Squat' },
-    { id: 'side-lying-bent-knee-lift', name: 'Side-Lying Bent Knee Lift' },
-    { id: 'side-lying-straight-leg-circles', name: 'Side-Lying Straight-Leg Circles' },
-    { id: 'butterfly', name: 'Butterfly' },
-    { id: 'bridge', name: 'Bridge' },
-    { id: 'corkscrew', name: 'Corkscrew' },
-    { id: 'hovering', name: 'Hovering' },
-    { id: 'all-4s', name: 'All 4s' },
-    { id: 'cat-cow', name: 'Cat & Cow' },
+    { id: 'lunge', name: 'Lunge', essential: false },
+    { id: 'squat', name: 'Squat', essential: true },
+    { id: 'side-lying-bent-knee-lift', name: 'Side-lying bent knee lift', essential: false },
+    { id: 'side-lying-straight-leg-circle', name: 'Side-lying straight leg circle', essential: false },
+    { id: 'butterfly', name: 'Butterfly', essential: true },
+    { id: 'bridging', name: 'Bridging', essential: true },
+    { id: 'corkscrew', name: 'Corkscrew', essential: false },
+    { id: 'hovering', name: 'Hovering', essential: true },
+    { id: 'all-4s-side-leg-lift', name: 'All-4s side leg lift', essential: false },
+    { id: 'cat-cow', name: 'Cat-Cow', essential: true },
   ],
 }
 
@@ -97,6 +108,27 @@ export function movementName(id: string, catalog: MovementCatalog = STANDARD_MOV
   return catalog.movements.find((movement) => movement.id === id)?.name ?? id
 }
 
+export function movementIsEssential(id: string, catalog: MovementCatalog = STANDARD_MOVEMENT_CATALOG): boolean {
+  return catalog.movements.find((movement) => movement.id === id)?.essential === true
+}
+
+/** True when two or more kept movements share a contraction rating. */
+export function selectionHasRatingTie(
+  catalog: MovementCatalog,
+  answers: readonly MovementAnswers[],
+): boolean {
+  const selection = selectTopMovements(catalog, answers)
+  if (selection.status !== 'plan') return false
+  const seen = new Set<ContractionRating>()
+  for (const id of selection.rankedIds) {
+    const rating = answers.find((answer) => answer.movementId === id)?.contraction
+    if (rating === undefined) continue
+    if (seen.has(rating)) return true
+    seen.add(rating)
+  }
+  return false
+}
+
 /** Yes on pain, or No on "could perform regularly", drops the movement. */
 export function isEliminated(answer: Pick<MovementAnswers, 'pain' | 'regular'>): boolean {
   return answer.pain === 'yes' || answer.regular === 'no'
@@ -104,8 +136,8 @@ export function isEliminated(answer: Pick<MovementAnswers, 'pain' | 'regular'>):
 
 /**
  * Among movements that were not eliminated, suggest the top 3 by contraction
- * rating. Equal ratings keep worksheet order. If every movement is eliminated,
- * or every remaining movement is rated 0, there is no plan.
+ * rating. A tie prefers an Essential movement, then worksheet order. If every
+ * movement is eliminated, or every remaining movement is rated 0, there is no plan.
  */
 export function selectTopMovements(
   catalog: MovementCatalog,
@@ -117,6 +149,7 @@ export function selectTopMovements(
   }
 
   const index = new Map(catalog.movements.map((movement, position) => [movement.id, position]))
+  const essential = new Map(catalog.movements.map((movement) => [movement.id, movement.essential]))
   const kept: MovementAnswers[] = []
   let sawAnswer = false
 
@@ -138,6 +171,8 @@ export function selectTopMovements(
   const rankedIds = [...kept]
     .sort((a, b) => {
       if (b.contraction !== a.contraction) return b.contraction - a.contraction
+      const essentialDelta = Number(essential.get(b.movementId) === true) - Number(essential.get(a.movementId) === true)
+      if (essentialDelta !== 0) return essentialDelta
       return (index.get(a.movementId) ?? 0) - (index.get(b.movementId) ?? 0)
     })
     .map((answer) => answer.movementId)
