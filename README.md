@@ -54,7 +54,7 @@ npm run preview
 | Model | `grok-4.6` (override with `XAI_MODEL`) |
 | Secret | `XAI_API_KEY` — **server only**, never `VITE_*` |
 
-The Sara system prompt lives in `server/askGrok.mjs` (peer coach, Kajabi stays the course, soft irritant coaching, no casual “stress”, pain/UTI safety, session cap).
+The Sara system prompt lives in `server/askGrok.mjs` (peer coach, Kajabi stays the course, soft irritant coaching, no casual “stress”, UTI safety, session cap). Dr C's approved claims, the ten movement names, and red-flag rules are edited only in `server/saraGuardrails.mjs` and composed into that prompt. Sample prompts for manual QA are in `docs/sara-red-flag-qa.md`. Prompt changes reach the phone only after the Worker is redeployed.
 
 Spoken replies use the same key via **xAI neural TTS** (`POST https://api.x.ai/v1/tts`, voice **`ara`** — warm adult female). The browser Web Speech API is not the voice path.
 
