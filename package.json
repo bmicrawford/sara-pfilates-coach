@@ -16,6 +16,7 @@
     "smoke:speak": "node server/speakSara.smoke.mjs",
     "smoke:diary": "node --experimental-strip-types src/lib/diary.smoke.ts",
     "smoke:exercise": "node --experimental-strip-types src/lib/exercise.smoke.ts",
+    "smoke:movement": "node --experimental-strip-types src/lib/movements.smoke.ts",
     "smoke:verify-api": "node scripts/verify-sara-api.mjs --self-test",
     "smoke:redeem": "node server/redeem.smoke.mjs",
     "smoke:install": "node --experimental-strip-types src/lib/installCoach.smoke.ts",

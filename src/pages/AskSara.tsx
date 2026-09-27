@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { TalkingPortrait } from '../components/TalkingPortrait'
 import { askSaraRemote, isSaraUnreachable } from '../lib/askSara'
+import { everydayMovementsAskContext } from '../lib/movementPlan'
 import { readChat, writeChat } from '../lib/mockServer'
 import {
   bindSaraStreamVideo,
@@ -157,7 +158,7 @@ export function AskSara() {
     setMessages((cur) => [...cur, you])
     setDraft('')
     setBusy(true)
-    const reply = await askSaraRemote(text, prior)
+    const reply = await askSaraRemote(text, prior, everydayMovementsAskContext())
     const sara: ChatMessage = { id: uid(), from: 'sara', text: reply, at: nowIso() }
     setMessages((cur) => {
       const next = [...cur, sara]

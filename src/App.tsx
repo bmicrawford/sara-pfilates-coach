@@ -11,6 +11,7 @@ import { Move } from './pages/Move'
 import { PatientOnboarding } from './pages/PatientOnboarding'
 import { Redeem } from './pages/Redeem'
 import { Welcome } from './pages/Welcome'
+import { Worksheet } from './pages/Worksheet'
 
 export default function App() {
   const location = useLocation()
@@ -67,6 +68,16 @@ export default function App() {
               <NeedSession session={session}>
                 <NeedProfile>
                   <ExerciseLog />
+                </NeedProfile>
+              </NeedSession>
+            }
+          />
+          <Route
+            path="/worksheet"
+            element={
+              <NeedSession session={session}>
+                <NeedProfile>
+                  <Worksheet />
                 </NeedProfile>
               </NeedSession>
             }
