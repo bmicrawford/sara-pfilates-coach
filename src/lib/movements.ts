@@ -83,8 +83,8 @@ export const STANDARD_MOVEMENT_CATALOG: MovementCatalog = {
   id: 'standard',
   title: WORKSHEET_TITLE,
   movements: [
-    { id: 'lunge', name: 'Lunge', essential: false },
-    { id: 'squat', name: 'Squat', essential: true },
+    { id: 'lunge', name: 'Lunge', essential: true },
+    { id: 'squat', name: 'Squat', essential: false },
     { id: 'side-lying-bent-knee-lift', name: 'Side-lying bent knee lift', essential: false },
     { id: 'side-lying-straight-leg-circle', name: 'Side-lying straight leg circle', essential: false },
     { id: 'butterfly', name: 'Butterfly', essential: true },

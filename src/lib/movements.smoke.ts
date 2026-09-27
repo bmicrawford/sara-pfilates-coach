@@ -127,13 +127,14 @@ assert(
   STANDARD_MOVEMENT_CATALOG.movements
     .filter((movement) => movement.essential)
     .map((movement) => movement.name)
-    .join('|') === 'Squat|Butterfly|Bridging|Hovering|Cat-Cow',
-  'essential movements are 2, 5, 6, 8, and 10',
+    .join('|') === 'Lunge|Butterfly|Bridging|Hovering|Cat-Cow',
+  'essential movements are 1, 5, 6, 8, and 10',
 )
 assert(
-  STANDARD_MOVEMENT_CATALOG.movements.every((movement, index) => movement.essential === [1, 4, 5, 7, 9].includes(index)),
-  'essential flags sit on worksheet positions 2, 5, 6, 8, and 10',
+  STANDARD_MOVEMENT_CATALOG.movements.every((movement, index) => movement.essential === [0, 4, 5, 7, 9].includes(index)),
+  'essential flags sit on worksheet positions 1, 5, 6, 8, and 10',
 )
+assert(!movementIsEssential('squat'), 'Squat is a low-probability movement')
 assert(CIRCLE_ANSWERS === 'Circle your answers', 'circle-your-answers note is kept')
 assert(TOP_MOVEMENTS_TITLE === 'My top movements', 'result title matches the sheet')
 assert(COURSE_LINE === 'As taught in your PfilAtes course.', 'course line does not invent instructions')
@@ -180,18 +181,18 @@ const ranked = selectTopMovements(
 assert(ranked.status === 'plan', 'mixed ratings produce a plan')
 assert(
   ranked.rankedIds.join(',') ===
-    'squat,butterfly,bridging,lunge,side-lying-bent-knee-lift,side-lying-straight-leg-circle',
+    'butterfly,squat,lunge,bridging,side-lying-bent-knee-lift,side-lying-straight-leg-circle',
   'ranking is contraction desc, then Essential, then worksheet order',
 )
-assert(ranked.suggestedIds.join(',') === 'squat,butterfly,bridging', 'top 3 drops the fourth-highest')
-assert(ranked.suggestedIds[0] === 'squat' && ranked.suggestedIds[1] === 'butterfly', 'two Essential 3s keep Squat before Butterfly')
-assert(ranked.rankedIds[2] === 'bridging' && ranked.rankedIds[3] === 'lunge', 'Essential Bridging beats low-probability Lunge at the same rating')
+assert(ranked.suggestedIds.join(',') === 'butterfly,squat,lunge', 'top 3 drops the fourth-highest')
+assert(ranked.rankedIds[0] === 'butterfly' && ranked.rankedIds[1] === 'squat', 'Essential Butterfly beats low-probability Squat at the same rating')
+assert(ranked.rankedIds[2] === 'lunge' && ranked.rankedIds[3] === 'bridging', 'two Essential 2s keep Lunge before Bridging')
 
 const essentialFirst = selectTopMovements(
   STANDARD_MOVEMENT_CATALOG,
-  sheet({ lunge: 3, squat: 3 }),
+  sheet({ squat: 3, butterfly: 3 }),
 )
-assert(essentialFirst.suggestedIds.join(',') === 'squat,lunge', 'Essential Squat beats earlier Lunge when the rating is tied')
+assert(essentialFirst.suggestedIds.join(',') === 'butterfly,squat', 'Essential Butterfly beats earlier Squat when the rating is tied')
 assert(selectionHasRatingTie(STANDARD_MOVEMENT_CATALOG, sheet({ lunge: 3, squat: 3 })), 'a rating tie is visible while adjusting')
 assert(
   !selectionHasRatingTie(STANDARD_MOVEMENT_CATALOG, sheet({ lunge: 3, squat: 2 })),
@@ -202,22 +203,22 @@ assert(!/cure|treat|diagnos/i.test(ESSENTIAL_TIE_NOTE), 'tie note makes no medic
 
 const bothEssential = selectTopMovements(
   STANDARD_MOVEMENT_CATALOG,
-  sheet({ butterfly: 2, squat: 2 }),
+  sheet({ butterfly: 2, lunge: 2 }),
 )
-assert(bothEssential.suggestedIds.join(',') === 'squat,butterfly', 'two Essential movements at the same rating keep worksheet order')
+assert(bothEssential.suggestedIds.join(',') === 'lunge,butterfly', 'two Essential movements at the same rating keep worksheet order')
 
 const bothLow = selectTopMovements(
   STANDARD_MOVEMENT_CATALOG,
-  sheet({ corkscrew: 2, lunge: 2 }),
+  sheet({ corkscrew: 2, squat: 2 }),
 )
-assert(bothLow.suggestedIds.join(',') === 'lunge,corkscrew', 'two low-probability movements at the same rating keep worksheet order')
+assert(bothLow.suggestedIds.join(',') === 'squat,corkscrew', 'two low-probability movements at the same rating keep worksheet order')
 
 const tied = selectTopMovements(
   STANDARD_MOVEMENT_CATALOG,
   sheet({ lunge: 2, squat: 2, hovering: 2 }),
 )
-assert(tied.suggestedIds.join(',') === 'squat,hovering,lunge', 'Essential movements lead a three-way rating tie, then worksheet order')
-assert(movementIsEssential('squat') && movementIsEssential('hovering') && !movementIsEssential('lunge'), 'tie-break fixture matches essential flags')
+assert(tied.suggestedIds.join(',') === 'lunge,hovering,squat', 'Essential movements lead a three-way rating tie, then worksheet order')
+assert(movementIsEssential('lunge') && movementIsEssential('hovering') && !movementIsEssential('squat'), 'tie-break fixture matches essential flags')
 
 const eliminated = selectTopMovements(STANDARD_MOVEMENT_CATALOG, sheet({}))
 assert(eliminated.status === 'empty' && eliminated.reason === 'all-eliminated', 'every eliminated movement makes no plan')
@@ -247,14 +248,14 @@ const zerosFillTop = selectTopMovements(
   sheet({ lunge: 2, squat: 0, butterfly: 0 }),
 )
 assert(
-  zerosFillTop.suggestedIds.join(',') === 'lunge,squat,butterfly',
-  'a single higher rating still suggests the next worksheet-order zeros up to 3',
+  zerosFillTop.suggestedIds.join(',') === 'lunge,butterfly,squat',
+  'a higher rating leads, then Essential Butterfly beats low-probability Squat at 0',
 )
 
 const one = adjustTopMovements(ranked.rankedIds, ['bridging'])
 assert(one?.join(',') === 'bridging', 'the person can keep a single eligible movement')
 const three = adjustTopMovements(ranked.rankedIds, ['bridging', 'squat', 'lunge'])
-assert(three?.join(',') === 'squat,bridging,lunge', 'an adjusted set is returned in rank order, not tap order')
+assert(three?.join(',') === 'squat,lunge,bridging', 'an adjusted set is returned in rank order, not tap order')
 assert(adjustTopMovements(ranked.rankedIds, ['squat', 'butterfly', 'lunge', 'bridging']) === null, 'four movements is not a plan')
 assert(adjustTopMovements(ranked.rankedIds, []) === null, 'zero movements is not a plan')
 assert(adjustTopMovements(ranked.rankedIds, ['lunge', 'corkscrew']) === null, 'an eliminated movement cannot be added')
