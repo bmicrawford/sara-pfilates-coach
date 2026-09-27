@@ -206,6 +206,13 @@ export function addLog(entry: LogEntry): LogEntry {
   return entry
 }
 
+/** Remove one stored event. Used when an everyday-plan check is undone. */
+export function removeLog(id: string): void {
+  if (!id) return
+  const logs = readLogs().filter((log) => log.id !== id)
+  writeJson('logs', logs)
+}
+
 export function readDiaries(): Diary[] {
   return readJson<Diary[]>('diaries', [])
 }

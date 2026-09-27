@@ -34,6 +34,30 @@ const built = buildMessages('how much water?', [
 assert(built[0].role === 'system' && built[0].content === SARA_SYSTEM, 'system message first')
 assert(built.at(-1).content === 'how much water?', 'latest user message last')
 assert(built.some((m) => m.role === 'assistant'), 'history maps sara → assistant')
+assert(built.filter((m) => m.role === 'system').length === 1, 'no extra system note without context')
+
+const withContext = buildMessages('hello', [], 'Everyday movements: Lunge; Bridge')
+assert(withContext[0].content === SARA_SYSTEM, 'movement context does not rewrite the Sara system prompt')
+assert(
+  withContext[1]?.role === 'system' && withContext[1].content.includes('Lunge'),
+  'everyday movement context is a second system note',
+)
+assert(withContext.at(-1).content === 'hello', 'user message stays last when context is set')
+
+const contextSent = await askSaraGrok({
+  message: 'what should I do today?',
+  context: 'Everyday movements: Lunge; Bridge',
+  apiKey: 'test-not-a-real-key',
+  fetchFn: async (_url, init) => {
+    const body = JSON.parse(init.body)
+    const notes = body.messages.filter((message) => message.role === 'system')
+    assert(notes.length === 2, 'ask sends the worksheet context beside the system prompt')
+    assert(notes[1].content.includes('Bridge'), 'ask forwards the everyday movement names')
+    assert(!notes[0].content.includes('Bridge'), 'base Sara prompt stays free of the worksheet note')
+    return { ok: true, json: async () => ({ choices: [{ message: { content: 'Those two, as you learned them.' } }] }) }
+  },
+})
+assert(contextSent.ok, 'context ask still returns the model reply')
 
 const missing = await askSaraGrok({ message: 'hello', apiKey: '' })
 assert(missing.reply === SARA_OFFLINE && missing.ok === false, 'missing key → honest offline line')

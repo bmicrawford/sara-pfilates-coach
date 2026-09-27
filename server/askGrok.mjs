@@ -58,8 +58,10 @@ function clip(text, max = 2000) {
   return String(text ?? '').trim().slice(0, max)
 }
 
-export function buildMessages(userMessage, history = []) {
+export function buildMessages(userMessage, history = [], context = '') {
   const messages = [{ role: 'system', content: SARA_SYSTEM }]
+  const note = clip(context, 800)
+  if (note) messages.push({ role: 'system', content: note })
   const recent = Array.isArray(history) ? history.slice(-12) : []
   for (const turn of recent) {
     const text = clip(turn?.text)
@@ -74,6 +76,7 @@ export function buildMessages(userMessage, history = []) {
 export async function askSaraGrok({
   message,
   history = [],
+  context = '',
   apiKey,
   model = GROK_MODEL,
   fetchFn = fetch,
@@ -91,7 +94,7 @@ export async function askSaraGrok({
     stream: false,
     temperature: 0.6,
     max_tokens: 600,
-    messages: buildMessages(userMessage, history),
+    messages: buildMessages(userMessage, history, context),
   }
 
   let res

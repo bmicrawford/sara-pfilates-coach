@@ -15,6 +15,7 @@ function apiUrl(): string {
 export async function askSaraRemote(
   message: string,
   history: ChatMessage[],
+  context = '',
 ): Promise<string> {
   const ctrl = new AbortController()
   const timer = window.setTimeout(() => ctrl.abort(), 45_000)
@@ -26,6 +27,7 @@ export async function askSaraRemote(
       body: JSON.stringify({
         message,
         history: history.slice(-12).map((m) => ({ from: m.from, text: m.text })),
+        ...(context.trim() ? { context: context.trim() } : {}),
       }),
     })
     const data = (await res.json().catch(() => ({}))) as { reply?: string }

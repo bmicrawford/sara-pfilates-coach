@@ -118,6 +118,7 @@ const server = createServer(async (req, res) => {
       const result = await askSaraGrok({
         message: body.message ?? body.text,
         history: body.history,
+        context: typeof body.context === 'string' ? body.context : '',
         apiKey: process.env.XAI_API_KEY,
         model: process.env.XAI_MODEL || GROK_MODEL,
       })
