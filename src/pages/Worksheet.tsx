@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PfilatesBrandHeader } from '../components/PfilatesLogo'
 import {
@@ -283,15 +283,17 @@ function Form({
               </div>
               <div className="mt-3" role="radiogroup" aria-label={`${movement.name}. ${CONTRACTION_QUESTION}`}>
                 <p className="text-sm font-bold text-black">{CONTRACTION_QUESTION}</p>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex gap-1.5">
                   {CONTRACTION_SCALE.map((item) => (
                     <Choice
                       key={item.value}
                       pressed={row?.contraction === item.value}
-                      label={`${item.value}, ${item.label}`}
+                      label={`${item.value} ${item.label}`}
+                      scale
                       onClick={() => onChange(movement.id, { contraction: item.value })}
                     >
-                      {item.value}
+                      <span className="block text-base leading-none">{item.value}</span>
+                      <span className="mt-1 block text-[11px] font-bold leading-none">{item.label}</span>
                     </Choice>
                   ))}
                 </div>
@@ -609,11 +611,13 @@ function Choice({
   onClick,
   children,
   label,
+  scale = false,
 }: {
   pressed: boolean
   onClick: () => void
-  children: string | number
+  children: ReactNode
   label?: string
+  scale?: boolean
 }) {
   return (
     <button
@@ -621,7 +625,7 @@ function Choice({
       aria-pressed={pressed}
       aria-label={label}
       onClick={onClick}
-      className="answer-choice text-sm"
+      className={scale ? 'answer-choice answer-choice-scale text-sm' : 'answer-choice text-sm'}
     >
       {children}
     </button>

@@ -584,6 +584,10 @@ assert(/to="\/ask"/.test(home) && /openSheet\('exercise'\)/.test(home), 'Home ke
 assert(/everydayMovementsAskContext/.test(askPage), 'Ask Sara sends the everyday movements when asking')
 assert(/context: typeof body\.context === 'string'/.test(worker), 'the worker forwards optional ask context')
 assert(page.includes('PAIN_STOP_LINE') && page.includes('NOT_RECOMMENDED'), 'the worksheet shows the pain line and excluded movements')
+assert(
+  page.includes('answer-choice-scale') && page.includes('{item.label}'),
+  'contraction buttons show None, Slight, Moderate, and Strong',
+)
 assert(page.includes('HEALTH_SCREEN_TITLE') && page.includes('HEALTH_WEEKS'), 'the worksheet asks the health screen before the movements')
 assert(planCard.includes('PAIN_STOP_LINE') && planCard.includes('THIS_CAUSED_PAIN'), 'the daily plan shows the pain line and the pain action')
 assert(planCard.includes('SYMPTOM_CHECK_QUESTION') && planCard.includes('SYMPTOMS_WORSE_LINK'), 'the daily plan asks the symptom check and keeps the link')
