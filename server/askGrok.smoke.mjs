@@ -10,6 +10,12 @@ import {
   matchingRedFlags,
   saraGuardrailPrompt,
 } from './saraGuardrails.mjs'
+import {
+  RESEARCH_FACTS,
+  RESEARCH_QA_CASES,
+  researchReplyIssues,
+  saraKnowledgePrompt,
+} from './saraKnowledge.mjs'
 
 function assert(cond, msg) {
   if (!cond) {
@@ -132,6 +138,50 @@ assert(
   combinedLead.indexOf('stop that movement') !== -1 &&
     combinedLead.indexOf('stop that movement') < combinedLead.indexOf('after 12 weeks gestational age'),
   'combined lead-in states pain before the pregnancy limit',
+)
+
+// PfilAtes research knowledge (docs/pfilates-research.md)
+const knowledge = saraKnowledgePrompt()
+assert(SARA_SYSTEM.includes(knowledge), 'system prompt includes PfilAtes research knowledge')
+assert(
+  SARA_SYSTEM.indexOf(saraGuardrailPrompt()) < SARA_SYSTEM.indexOf(knowledge),
+  'red-flag guardrails come before research knowledge',
+)
+assert(/Red-flag rules always come first/.test(knowledge), 'research block defers to red-flag rules')
+assert(/I don't know of a PfilAtes study on that/.test(knowledge), 'research block says "I don\'t know" for unknown studies')
+assert(/never say proven, cure, or 10x/i.test(knowledge), 'research block bans overstatement')
+assert(/plus the PfilAtes research facts/.test(SARA_SYSTEM), 'claims whitelist admits the research facts')
+assert(knowledge.length < 4500, `research block stays within budget (${knowledge.length} chars)`)
+for (const item of RESEARCH_FACTS) {
+  assert(knowledge.includes(item.fact), `research fact in prompt: ${item.id}`)
+  assert(item.source && knowledge.includes(item.source), `research fact cites a source: ${item.id}`)
+}
+const researchDoc = readFileSync(new URL('../docs/pfilates-research.md', import.meta.url), 'utf8')
+for (const [label, needle] of [
+  ['EMG range', '21% to +56%'],
+  ['Bridge 56%', '56% (15-82)'],
+  ['strength 33%', '33% (13.2 – 16.9 cm H2O, p=.006)'],
+  ['Au leaks', '2.07 vs 0.94'],
+  ['VESy expansion', 'Video, EMG, Synchronization'],
+]) {
+  assert(researchDoc.includes(needle), `research doc backs ${label}`)
+}
+for (const sample of RESEARCH_QA_CASES) {
+  for (const needle of sample.mustMention) {
+    assert(knowledge.includes(needle), `${sample.id}: prompt holds "${needle}"`)
+  }
+  assert(researchReplyIssues(sample.goodReply).length === 0, `${sample.id}: sourced reply passes`)
+  assert(researchReplyIssues(sample.badReply).length > 0, `${sample.id}: overstated reply is caught`)
+  assert(buildMessages(sample.prompt)[0].content === SARA_SYSTEM, `${sample.id}: no red-flag lead-in`)
+}
+const painResearch = "Bridging hurts, but the research says it's the strongest one. Should I keep going?"
+assert(
+  matchingRedFlags(painResearch).some((rule) => rule.id === 'movement-pain'),
+  'pain + research question still triggers the pain rule',
+)
+assert(
+  buildMessages(painResearch)[0].content.includes('If a movement at any time causes pain, stop that movement.'),
+  'pain + research question leads with the stop rule',
 )
 
 const built = buildMessages('how much water?', [

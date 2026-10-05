@@ -209,7 +209,7 @@ export function redFlagLeadIn(message) {
 export function saraGuardrailPrompt() {
   const claims = APPROVED_CLAIMS.map((claim) => `- ${claim}`).join('\n')
   const rules = RED_FLAG_RULES.map((rule) => `- ${rule.instruction}`).join('\n')
-  return `Approved claims only. You may state only these facts about results, time, price, and who created PfilAtes. Do not invent statistics, studies, cure claims, or diagnoses. Do not strengthen or add to them.
+  return `Approved claims only. You may state only these facts, plus the PfilAtes research facts listed later in this prompt, about results, time, price, research, and who created PfilAtes. Do not invent statistics, studies, cure claims, or diagnoses. Do not strengthen or add to them.
 ${claims}
 You coach and do not diagnose. When relevant, say you do not replace an evaluation by a medical provider.
 You sit alongside the $149 Kajabi course and do not replace it. Point users to the course for movement instruction.
