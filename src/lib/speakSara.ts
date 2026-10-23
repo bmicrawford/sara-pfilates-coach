@@ -60,6 +60,8 @@ type SpeakOpts = {
   onError?: (message: string) => void
   /** play() rejected, or currentTime did not advance within 1.5s. */
   onBlocked?: () => void
+  /** First chunk's blob URL is stored. May still be held and not playing. */
+  onFirstChunk?: () => void
 }
 
 type ChunkSlot = {
@@ -91,6 +93,8 @@ type Engine = {
   playingEvent: boolean
   /** playToken that has fired 'playing'. Ended before that is a src swap. */
   heardToken: number
+  /** Prefetch only. acceptChunk must not play until release. Do not pause while held. */
+  holding: boolean
 }
 
 let engine: Engine | null = null
@@ -201,6 +205,7 @@ function ensureEngine(): Engine | null {
     lastAdvanceAt: 0,
     playingEvent: false,
     heardToken: -1,
+    holding: false,
   }
   return engine
 }
@@ -230,6 +235,7 @@ export function stopSaraSpeech(): void {
   engine.waiting = false
   engine.blocked = false
   engine.playingEvent = false
+  engine.holding = false
   engine.lastAdvanceAt = 0
   clearStall(engine)
   try {
@@ -436,6 +442,10 @@ function acceptChunk(gen: number, index: number, blob: Blob | null | 'busy' | 'd
   if (!slot || slot.url || slot.error) return
   if (blob === 'busy' || blob === 'denied' || !blob) {
     slot.error = blob === 'busy' ? 'busy' : blob === 'denied' ? 'denied' : 'offline'
+    if (current.holding) {
+      if (index === 0) current.opts.onFirstChunk?.()
+      return
+    }
     const readyToPlay = index === 0 ? !current.speech : current.waiting && current.index === index
     if (readyToPlay) failFetch(current, slot.error)
     return
@@ -447,6 +457,11 @@ function acceptChunk(gen: number, index: number, blob: Blob | null | 'busy' | 'd
   }
   slot.url = url
   current.urls[index] = url
+  if (current.holding) {
+    if (index === 0) current.opts.onFirstChunk?.()
+    return
+  }
+  if (index === 0) current.opts.onFirstChunk?.()
   if (current.blocked) return
   if (index === 0 && !current.speech) {
     current.index = 0
@@ -502,7 +517,7 @@ export function playCachedSaraSpeech(): boolean {
   return true
 }
 
-export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<void> {
+function startSpeak(text: string, opts: SpeakOpts, holding: boolean): void {
   if (!isVoiceReady() || isSaraMuted()) {
     opts.onEnd?.()
     return
@@ -526,6 +541,7 @@ export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<voi
   current.started = false
   current.waiting = false
   current.speech = false
+  current.holding = holding
   current.index = 0
   current.chunkCount = chunks.length
   current.slots = chunks.map(() => ({ url: null, error: null }))
@@ -539,4 +555,54 @@ export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<voi
       acceptChunk(gen, i, blob)
     })
   }
+}
+
+/** True once the first held or playing chunk has a blob URL. */
+export function saraSpeechChunkReady(): boolean {
+  const current = engine
+  if (!current || current.closed) return false
+  return Boolean(current.slots[0]?.url)
+}
+
+/**
+ * Fetch chunks without playing. Does not pause the element, so an unlock
+ * from the same tap stays valid until release or an explicit stop.
+ */
+export function holdSaraSpeech(text: string, opts: SpeakOpts = {}): void {
+  startSpeak(text, opts, true)
+}
+
+/** Play a held reply. Later chunks still advance on ended. */
+export function releaseHeldSaraSpeech(): boolean {
+  const current = engine
+  if (!current || current.closed || !current.holding) return false
+  current.holding = false
+  if (current.blocked || current.speech) return current.speech
+  const slot = current.slots[0]
+  if (slot?.error) {
+    failFetch(current, slot.error)
+    return false
+  }
+  if (slot?.url) {
+    current.index = 0
+    assignSrcAndPlay(current, slot.url)
+    return true
+  }
+  return false
+}
+
+/** Discard a held reply without pausing. In-flight fetches are ignored. */
+export function dropHeldSaraSpeech(): void {
+  const current = engine
+  if (!current || !current.holding) return
+  current.holding = false
+  current.generation += 1
+  current.closed = true
+  current.speech = false
+  current.waiting = false
+  revokeUrls(current)
+}
+
+export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<void> {
+  startSpeak(text, opts, false)
 }

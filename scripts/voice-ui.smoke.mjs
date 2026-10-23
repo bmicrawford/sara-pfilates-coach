@@ -122,8 +122,8 @@ const server = createServer(async (req, res) => {
     return
   }
   if (req.method === 'POST' && (url.pathname === '/stream' || url.pathname === '/talk')) {
-    res.writeHead(500, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ error: 'demo must not open D-ID' }))
+    res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60', 'Cache-Control': 'no-store' })
+    res.end(JSON.stringify({ ok: false, error: 'did_unavailable', message: '', reply: '' }))
     return
   }
   let rel = decodeURIComponent(url.pathname).replace(/^\/+/, '')
@@ -450,7 +450,16 @@ try {
   const firstDone = Math.min(...traffic.speaks.map((row) => row.doneAt))
   const lastRequest = Math.max(...traffic.speaks.map((row) => row.at))
   assert(firstDone > lastRequest, 'all /speak requests are in flight before the first response')
-  assert(!traffic.paths.some((path) => path.includes('/stream') || path.includes('/talk')), 'demo path does not open a D-ID session')
+  assert(
+    traffic.paths.some((path) => path === 'POST /stream'),
+    'demo tries D-ID lip-sync and falls back when the session is unavailable',
+  )
+  assert(!traffic.paths.some((path) => path.includes('/talk')), 'demo lip-sync uses /stream, not a Talks mp4')
+  const streamErrorShown = await evaluate(`(() => {
+    const note = document.querySelector('.ask-sara-note');
+    return note ? note.textContent || '' : '';
+  })()`)
+  assert(!/did_unavailable|busy|D-ID|stream/i.test(String(streamErrorShown)), 'a D-ID fallback shows no error to the user')
 
   const speaksBeforeReject = traffic.speaks.length
   await send('Page.reload', { ignoreCache: true })

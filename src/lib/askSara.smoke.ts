@@ -231,6 +231,10 @@ assert(
   'unmutes D-ID only when stream speak is heard and frames are live',
 )
 assert(
+  streamVideoShouldBeMuted({ voicePath: 'visual', userMuted: false, videoLive: true }),
+  'iPhone keeps D-ID video muted so ara on the media element is the voice',
+)
+assert(
   !streamVideoShouldUnlockElement({ voicePath: 'pending', userMuted: false }),
   'pending stays muted so autoplay can decode after async connect',
 )

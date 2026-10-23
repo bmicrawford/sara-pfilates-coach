@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { askSaraGrok, buildMessages, SARA_DEMO_AUDIENCE, SARA_NO_RED_FLAG, SARA_SYSTEM } from './askGrok.mjs'
 import {
   DEMO_DAY_TTL_SECONDS,
+  DEMO_DID_LEASE_TTL_SECONDS,
   DEMO_HOUR_TTL_SECONDS,
   DEMO_LIMITS,
   SARA_BUSY_MESSAGE,
@@ -17,7 +18,8 @@ import {
 import { memoryRedeemStore } from './redeem.mjs'
 import { saraGuardrailPrompt } from './saraGuardrails.mjs'
 import { saraKnowledgePrompt } from './saraKnowledge.mjs'
-import { resetStreamKeyCache } from './streamSara.mjs'
+import { mintSaraStreamKey, resetStreamKeyCache } from './streamSara.mjs'
+import { isDidCapacityResult } from './talkSara.mjs'
 import worker from '../worker/src/index.js'
 
 function assert(cond, msg) {
@@ -41,7 +43,18 @@ assert(DEMO_LIMITS.askPerIpPerDay === 60, 'demo /ask daily cap is 60')
 assert(DEMO_LIMITS.speakPerIpPerDay === 150, 'demo /speak daily cap is 150 so 3 chunks fit a day of asks')
 assert(DEMO_LIMITS.globalAsksPerDay === 3000, 'global demo ask ceiling is 3000')
 assert(DEMO_LIMITS.globalSpeaksPerDay === 3000, 'global demo speak ceiling is 3000')
+assert(DEMO_LIMITS.didPerIpPerHour === 3, 'demo D-ID cap is 3 sessions per IP per hour')
+assert(DEMO_LIMITS.didPerIpPerDay === 6, 'demo D-ID cap is 6 sessions per IP per day')
+assert(DEMO_LIMITS.globalDidPerDay === 150, 'global demo D-ID cap is 150 sessions per day')
+assert(DEMO_LIMITS.didConcurrentMax === 2, 'demo D-ID allows 2 concurrent sessions')
+assert(DEMO_DID_LEASE_TTL_SECONDS === 90, 'demo D-ID lease is a short 90s TTL')
+assert(DEMO_LIMITS.askPerIpPerHour === 20 && DEMO_LIMITS.speakPerIpPerHour === 60, 'ask and speak caps stay put')
 assert(SARA_BUSY_MESSAGE === 'Sara is busy, please try again in a bit.', '429 copy is the friendly busy line')
+assert(isDidCapacityResult(403, { kind: 'Forbidden', description: 'Max user sessions reached' }), '403 max sessions is D-ID capacity')
+assert(isDidCapacityResult(402, { kind: 'InsufficientCredits' }), '402 credits is D-ID capacity')
+assert(isDidCapacityResult(429, { message: 'slow down' }), '429 from D-ID is capacity')
+assert(!isDidCapacityResult(500, { kind: 'Forbidden' }), 'a 500 is not treated as the session cap')
+assert(!isDidCapacityResult(401, { description: 'Unauthorized' }), 'a 401 is not the session cap')
 
 function paidRecord(token, multiUse = false) {
   return {
@@ -80,19 +93,106 @@ assert(unknown.body.message === UNKNOWN_PASS_MESSAGE, 'unknown pass message is f
 const demoAsk = await allow('demo-sara-001', '/ask')
 assert(demoAsk.allow === true && demoAsk.pass.kind === 'demo' && demoAsk.pass.voiceOnly === true, 'demo pass is voice-only')
 
-const demoStream = await allow('DEMO-SARA-001', '/stream')
+{
+const didCounters = memoryCounterStore()
+const demoStream = await allow('DEMO-SARA-001', '/stream', { counterStore: didCounters })
 assert(
-  demoStream.allow === false && demoStream.status === 403 && demoStream.body.error === 'demo_voice_only',
-  'demo pass cannot open a talk stream',
+  demoStream.allow === true && demoStream.pass.voiceOnly === true,
+  'demo pass can open /stream and stays voiceOnly for the audience note',
+)
+assert(
+  [...didCounters.rows.keys()].some((key) => key.startsWith('rl:demo:did:lease:')),
+  'demo /stream takes a concurrency lease',
+)
+const demoTalkPost = await allow('DEMO-SARA-001', '/talk', { counterStore: didCounters })
+assert(demoTalkPost.allow === true, 'demo pass can open POST /talk')
+assert(
+  [...didCounters.rows.keys()].filter((key) => key.startsWith('rl:demo:did:lease:')).length === 1,
+  'POST /talk shares the did budget and does not take another lease',
 )
 const demoTalk = await authorizePaidRequest({
   method: 'GET',
   pathname: '/talk',
   pass: 'DEMO-SARA-001',
-  counterStore: memoryCounterStore(),
+  counterStore: didCounters,
   nowMs: NOW,
 })
-assert(demoTalk.allow === false && demoTalk.body.error === 'demo_voice_only', 'demo pass cannot open /talk')
+assert(demoTalk.allow === true && demoTalk.pass.voiceOnly === true, 'demo GET /talk is allowed and is not a new session')
+{
+  const before = didCounters.rows.size
+  await authorizePaidRequest({
+    method: 'GET',
+    pathname: '/talk/tlk_1',
+    pass: 'DEMO-SARA-001',
+    counterStore: didCounters,
+    nowMs: NOW,
+  })
+  assert(didCounters.rows.size === before, 'demo talk polling does not write a new counter')
+}
+
+const didHour = memoryCounterStore()
+for (let i = 0; i < DEMO_LIMITS.didPerIpPerHour; i += 1) {
+  const ok = await allow('DEMO-SARA-001', '/talk', { counterStore: didHour, ip: '198.51.100.9' })
+  assert(ok.allow === true, `demo D-ID session ${i + 1} under the hourly cap is allowed`)
+}
+const overHour = await allow('DEMO-SARA-001', '/stream', { counterStore: didHour, ip: '198.51.100.9' })
+assert(
+  overHour.allow === false &&
+    overHour.status === 429 &&
+    overHour.body.error === 'did_unavailable' &&
+    overHour.body.message === '' &&
+    overHour.body.reply === '' &&
+    overHour.body.scope === 'ip_hour',
+  'hourly D-ID cap returns a quiet 429',
+)
+assert(overHour.retryAfter > 0, 'hourly D-ID cap sets Retry-After')
+
+const didDay = memoryCounterStore()
+const dayLimits = { ...DEMO_LIMITS, didPerIpPerHour: 20, didPerIpPerDay: 2, globalDidPerDay: 20 }
+const dayOne = await allow('DEMO-SARA-001', '/stream', { counterStore: didDay, limits: dayLimits, ip: '198.51.100.10' })
+const dayTwo = await allow('DEMO-SARA-001', '/talk', { counterStore: didDay, limits: dayLimits, ip: '198.51.100.10' })
+const dayThree = await allow('DEMO-SARA-001', '/stream', { counterStore: didDay, limits: dayLimits, ip: '198.51.100.10' })
+assert(dayOne.allow && dayTwo.allow, 'stream and talk share the did daily budget')
+assert(dayThree.allow === false && dayThree.body.scope === 'ip_day', 'per-IP daily D-ID cap is quiet')
+
+const didGlobal = memoryCounterStore()
+const globalLimits = { ...DEMO_LIMITS, didPerIpPerHour: 20, didPerIpPerDay: 20, globalDidPerDay: 1 }
+const globalOne = await allow('DEMO-SARA-001', '/stream', { counterStore: didGlobal, limits: globalLimits, ip: '198.51.100.11' })
+const globalTwo = await allow('DEMO-SARA-001', '/stream', {
+  counterStore: didGlobal,
+  limits: globalLimits,
+  ip: '198.51.100.12',
+})
+assert(globalOne.allow === true, 'first global D-ID session is allowed')
+assert(
+  globalTwo.allow === false && globalTwo.body.error === 'did_unavailable' && globalTwo.body.scope === 'global_day',
+  'global daily D-ID cap is 150 by default and overridable',
+)
+
+const leased = memoryCounterStore()
+const leaseLimits = { ...DEMO_LIMITS, didConcurrentMax: 2, didPerIpPerHour: 20, didPerIpPerDay: 20, globalDidPerDay: 20 }
+const slotA = await allow('DEMO-SARA-001', '/stream', { counterStore: leased, limits: leaseLimits, ip: '198.51.100.13' })
+const slotB = await allow('DEMO-SARA-001', '/stream', { counterStore: leased, limits: leaseLimits, ip: '198.51.100.14' })
+const slotC = await allow('DEMO-SARA-001', '/stream', { counterStore: leased, limits: leaseLimits, ip: '198.51.100.15' })
+assert(slotA.allow && slotB.allow, 'two concurrent demo D-ID sessions fit the lease')
+assert(
+  slotC.allow === false && slotC.status === 429 && slotC.body.scope === 'concurrent' && slotC.body.message === '',
+  'a third concurrent demo stream is a quiet 429 and does not call D-ID',
+)
+const expired = memoryCounterStore()
+await expired.put('rl:demo:did:lease:0', String(NOW - 1000), DEMO_DID_LEASE_TTL_SECONDS)
+await expired.put('rl:demo:did:lease:1', String(NOW - 1000), DEMO_DID_LEASE_TTL_SECONDS)
+const reused = await allow('DEMO-SARA-001', '/stream', { counterStore: expired, limits: leaseLimits })
+assert(reused.allow === true, 'an expired D-ID lease can be taken again')
+const rateFirst = memoryCounterStore()
+await rateFirst.put('rl:demo:did:lease:0', String(NOW + 60_000), DEMO_DID_LEASE_TTL_SECONDS)
+await rateFirst.put('rl:demo:did:lease:1', String(NOW + 60_000), DEMO_DID_LEASE_TTL_SECONDS)
+const didHourKey = `rl:demo:did:h:${await demoIpHash('198.51.100.16')}:${hourBucket(NOW)}`
+await rateFirst.put(didHourKey, String(DEMO_LIMITS.didPerIpPerHour), DEMO_HOUR_TTL_SECONDS)
+const rateBeforeLease = await allow('DEMO-SARA-001', '/stream', { counterStore: rateFirst, ip: '198.51.100.16' })
+assert(rateBeforeLease.body.scope === 'ip_hour', 'the hourly cap is checked before a lease is taken')
+assert(rateFirst.rows.get('rl:demo:did:lease:0').value === String(NOW + 60_000), 'a rate-limit deny does not rewrite the lease')
+}
 
 const store = memoryRedeemStore()
 await store.put(PAID, paidRecord(PAID))
@@ -247,6 +347,24 @@ globalThis.fetch = async (url, init) => {
   const href = String(url)
   calls.push(href)
   if (href.includes('api.d-id.com')) {
+    if (globalThis.__didCapacity) {
+      return new Response(
+        JSON.stringify({ kind: 'Forbidden', description: 'Max user sessions reached' }),
+        { status: 403, headers: { 'content-type': 'application/json' } },
+      )
+    }
+    if (href.includes('/audios')) {
+      return new Response(JSON.stringify({ url: 'https://d-id.example/a.mp3' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    if (href.includes('/talks')) {
+      return new Response(JSON.stringify({ id: 'tlk_demo', status: 'done', result_url: 'https://d-id.example/sara.mp4' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
     return new Response(JSON.stringify({ client_key: CLIENT_KEY }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -288,16 +406,15 @@ async function post(pathname, pass, extraHeaders = {}) {
 try {
   resetStreamKeyCache()
   const beforeStream = calls.length
-  const deniedStream = await post('/stream', 'DEMO-SARA-001')
-  const deniedBody = await deniedStream.json()
-  assert(deniedStream.status === 403 && deniedBody.error === 'demo_voice_only', 'worker refuses demo /stream')
-  assert(calls.length === beforeStream, 'demo /stream does not call D-ID')
-  assert(!JSON.stringify(deniedBody).includes(CLIENT_KEY), 'demo /stream does not return a client key')
-  assert(!JSON.stringify(deniedBody).includes('test-did-key'), 'demo /stream does not leak the D-ID key')
+  const demoStreamRes = await post('/stream', 'DEMO-SARA-001')
+  const demoStreamBody = await demoStreamRes.json()
+  assert(demoStreamRes.status === 200 && demoStreamBody.clientKey === CLIENT_KEY, 'worker mints a demo /stream client key')
+  assert(calls.length > beforeStream && calls.some((href) => href.includes('api.d-id.com')), 'demo /stream calls D-ID under the cap')
+  assert(!JSON.stringify(demoStreamBody).includes('test-did-key'), 'demo /stream does not leak the D-ID key')
 
-  const deniedTalk = await post('/talk', 'DEMO-SARA-001')
-  assert((await deniedTalk.json()).error === 'demo_voice_only', 'worker refuses demo /talk')
-  assert(calls.length === beforeStream, 'demo /talk does not call D-ID or TTS')
+  const demoTalkRes = await post('/talk', 'DEMO-SARA-001')
+  const demoTalkBody = await demoTalkRes.json()
+  assert(demoTalkRes.status === 200 && demoTalkBody.talkId, 'worker allows demo POST /talk under the cap')
 
   const talkGet = await worker.fetch(
     new Request('https://sara-pfilates-ask.example/talk?id=tlk_1&pass=DEMO-SARA-001', {
@@ -305,29 +422,78 @@ try {
     }),
     env,
   )
-  assert((await talkGet.json()).error === 'demo_voice_only', 'worker refuses demo talk polling')
-  assert(calls.length === beforeStream, 'demo talk poll does not call D-ID')
+  const talkGetBody = await talkGet.json()
+  assert(talkGet.status === 200 && talkGetBody.error !== 'demo_voice_only', 'worker allows demo talk polling')
 
+  const beforeMissing = calls.length
   const missingPass = await post('/ask', '')
   assert(missingPass.status === 401, 'worker /ask requires a pass')
-  assert(calls.length === beforeStream, 'missing pass does not call Grok')
+  assert(calls.length === beforeMissing, 'missing pass does not call Grok')
 
+  const beforeUnknown = calls.length
   const unknownPass = await post('/ask', UNKNOWN)
   const unknownBody = await unknownPass.json()
   assert(unknownPass.status === 403 && unknownBody.error === 'unknown_pass', 'worker rejects an unknown pass')
-  assert(calls.length === beforeStream, 'unknown pass does not call Grok')
+  assert(calls.length === beforeUnknown, 'unknown pass does not call Grok')
 
   const paidStream = await post('/stream', PAID)
   const paidStreamBody = await paidStream.json()
   assert(paidStream.status === 200 && paidStreamBody.clientKey === CLIENT_KEY, 'paid pass can still mint a stream')
   assert(calls.some((href) => href.includes('api.d-id.com')), 'paid /stream reaches D-ID')
 
-  const afterPaid = calls.length
-  const demoAgain = await post('/stream', 'DEMO-SARA-001')
-  const demoAgainBody = await demoAgain.json()
-  assert(demoAgain.status === 403, 'a warm D-ID cache still does not open for demo')
-  assert(!JSON.stringify(demoAgainBody).includes(CLIENT_KEY), 'cached client key is not handed to the demo pass')
-  assert(calls.length === afterPaid, 'demo /stream does not use the cached mint')
+  const hashDid = await demoIpHash(IP)
+  const didHourNow = hourBucket(Date.now())
+  const didDayNow = dayBucket(Date.now())
+  await kv.put(`rl:demo:did:h:${hashDid}:${didHourNow}`, '3', { expirationTtl: DEMO_HOUR_TTL_SECONDS })
+  const didCallsAtCap = calls.length
+  const didLimited = await post('/stream', 'DEMO-SARA-001')
+  const didLimitedBody = await didLimited.json()
+  assert(
+    didLimited.status === 429 &&
+      didLimitedBody.error === 'did_unavailable' &&
+      didLimitedBody.message === '' &&
+      didLimited.headers.get('Retry-After'),
+    'worker returns a quiet 429 at the demo D-ID hourly cap',
+  )
+  assert(calls.length === didCallsAtCap, 'a capped demo /stream does not call D-ID')
+
+  await kv.put(`rl:demo:did:h:${hashDid}:${didHourNow}`, '0', { expirationTtl: DEMO_HOUR_TTL_SECONDS })
+  await kv.put(`rl:demo:did:lease:0`, String(Date.now() + 60_000), { expirationTtl: DEMO_DID_LEASE_TTL_SECONDS })
+  await kv.put(`rl:demo:did:lease:1`, String(Date.now() + 60_000), { expirationTtl: DEMO_DID_LEASE_TTL_SECONDS })
+  const leaseCalls = calls.length
+  const leaseFull = await post('/stream', 'DEMO-SARA-001')
+  const leaseBody = await leaseFull.json()
+  assert(
+    leaseFull.status === 429 && leaseBody.error === 'did_unavailable' && leaseBody.scope === 'concurrent',
+    'worker returns a quiet 429 when the demo D-ID lease is full',
+  )
+  assert(calls.length === leaseCalls, 'a full lease does not call D-ID')
+  await kv.put(`rl:demo:did:lease:0`, String(Date.now() - 1000), { expirationTtl: DEMO_DID_LEASE_TTL_SECONDS })
+  await kv.put(`rl:demo:did:lease:1`, String(Date.now() - 1000), { expirationTtl: DEMO_DID_LEASE_TTL_SECONDS })
+
+  await kv.put(`rl:demo:did:g:${didDayNow}`, '150', { expirationTtl: DEMO_DAY_TTL_SECONDS })
+  await kv.put(`rl:demo:did:h:${hashDid}:${didHourNow}`, '0', { expirationTtl: DEMO_HOUR_TTL_SECONDS })
+  const globalDid = await post('/stream', 'DEMO-SARA-001', { 'CF-Connecting-IP': '198.51.100.40' })
+  const globalDidBody = await globalDid.json()
+  assert(
+    globalDid.status === 429 && globalDidBody.error === 'did_unavailable' && globalDidBody.scope === 'global_day',
+    'global demo D-ID ceiling returns a quiet 429',
+  )
+  await kv.put(`rl:demo:did:g:${didDayNow}`, '0', { expirationTtl: DEMO_DAY_TTL_SECONDS })
+
+  resetStreamKeyCache()
+  globalThis.__didCapacity = true
+  const capacityCalls = calls.length
+  const capacity = await post('/stream', 'DEMO-SARA-001', { 'CF-Connecting-IP': '198.51.100.41' })
+  const capacityBody = await capacity.json()
+  assert(
+    capacity.status === 429 && capacityBody.error === 'did_unavailable' && !capacityBody.clientKey,
+    'D-ID max-sessions 403 becomes a quiet 429 so the phone falls back',
+  )
+  assert(calls.length > capacityCalls, 'the worker asks D-ID before mapping a capacity error')
+  assert(!JSON.stringify(capacityBody).includes('test-did-key'), 'capacity 429 does not leak the D-ID key')
+  globalThis.__didCapacity = false
+  resetStreamKeyCache()
 
   const ask = await post('/ask', 'DEMO-SARA-001')
   assert(ask.status === 200, 'demo /ask under the cap reaches Grok')
@@ -350,11 +516,12 @@ try {
   )
 
   await kv.put(`rl:demo:speak:h:${hash}:${hour}`, '60', { expirationTtl: DEMO_HOUR_TTL_SECONDS })
+  const ttsBeforeSpeakCap = calls.filter((href) => href.includes('/tts')).length
   const speakLimited = await post('/speak', 'DEMO-SARA-001')
   const speakBody = await speakLimited.json()
   assert(speakLimited.status === 429 && speakBody.message === SARA_BUSY_MESSAGE, 'worker returns 429 at the demo speak cap')
   assert(
-    calls.filter((href) => href.includes('/tts')).length === 0,
+    calls.filter((href) => href.includes('/tts')).length === ttsBeforeSpeakCap,
     'over-limit demo /speak does not call TTS',
   )
 

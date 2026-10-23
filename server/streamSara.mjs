@@ -1,6 +1,6 @@
 /** D-ID Agents Streams credentials. Never import from the Vite app. */
 
-import { didAuth, saraStillUrl, SARA_STILL_URL } from './talkSara.mjs'
+import { didAuth, isDidCapacityResult, saraStillUrl, SARA_STILL_URL } from './talkSara.mjs'
 
 export const DID_AGENTS_URL = 'https://api.d-id.com/agents'
 export const STREAM_TTL_SECONDS = 600
@@ -103,7 +103,14 @@ export async function mintSaraStreamKey({
   const data = await res.json().catch(() => ({}))
   const clientKey = data.client_key || data.clientKey || null
   if (!res.ok || !clientKey) {
-    return { ok: false, agentId: id, clientKey: null, reason: 'did_stream_failed' }
+    return {
+      ok: false,
+      agentId: id,
+      clientKey: null,
+      reason: 'did_stream_failed',
+      capacity: isDidCapacityResult(res.status, data),
+      status: res.status,
+    }
   }
 
   const expiresAt = data.expires_at ? Date.parse(data.expires_at) : t + ttl * 1000

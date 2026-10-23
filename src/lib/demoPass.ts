@@ -5,7 +5,11 @@ export function isDemoPass(token: string | null | undefined): boolean {
   return String(token ?? '').trim().toUpperCase() === DEMO_TOKEN
 }
 
-/** Demo chats stay on the still portrait plus ara. They must not open D-ID. */
+/**
+ * True only for DEMO-SARA-001. Selects prospect copy and the server
+ * `audience: 'demo'` note. The demo still tries D-ID lip-sync and falls
+ * back to ara; this flag does not mean "skip the stream".
+ */
 export function isDemoVoiceOnly(token: string | null | undefined): boolean {
   return isDemoPass(token)
 }
