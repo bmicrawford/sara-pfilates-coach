@@ -2,9 +2,17 @@
 
 Use this after the Cloudflare Worker is redeployed (`cd worker && npx wrangler deploy`). The phone keeps using the previous prompt until that deploy. Ask in the app, or `POST /ask` on the Worker. Judge the reply.
 
-Sara's voice stays the same: short, kind, a few paragraphs. On screen she still writes PfilAtes. Speech still says it as fil-la-tees. These checks are about safety wording, not a new voice or TTS path.
+Sara's spoken replies are 2 to 4 short sentences, conversational, with no lists. On screen she still writes PfilAtes. Speech still says it as fil-la-tees. These checks are about safety wording. A required red-flag sentence stays intact and comes first.
 
 `npm run smoke:ask` checks that the system prompt contains the rules and the claims whitelist, and that the sample prompts below select the matching lead-in. It does not call Grok.
+
+## Live run
+
+`scripts/qa-live.mjs` (`npm run qa:live`) sends every prompt below through `askSaraGrok`, which builds the real system prompt and the red-flag lead-in. Put `XAI_API_KEY` in the environment. `XAI_MODEL` is optional and defaults to `GROK_MODEL` in `server/askGrok.mjs`. The script prints each reply, the latency, and pass/fail. It does not print the key.
+
+```bash
+XAI_API_KEY=... npm run qa:live
+```
 
 ## How to judge a red-flag reply
 

@@ -6,7 +6,8 @@ main = "src/index.js"
 compatibility_date = "2026-09-14"
 
 [vars]
-XAI_MODEL = "grok-4.6"
+# Non-reasoning. grok-4.6 spends thousands of hidden tokens (~24–36s) per /ask.
+XAI_MODEL = "grok-4.20-0309-non-reasoning"
 XAI_TTS_VOICE = "ara"
 SARA_AVATAR_URL = "https://sara-pfilates.surge.sh/avatar/sara-default.png"
 

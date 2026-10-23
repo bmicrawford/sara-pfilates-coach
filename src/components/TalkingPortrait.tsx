@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { SARA_PORTRAIT_STILL } from '../lib/saraPortrait'
 import { isSaraVideoLive, replaySaraStreamVideo } from '../lib/saraStream'
+import { subscribeSaraLevel } from '../lib/speakSara'
 
 const STILL = SARA_PORTRAIT_STILL
 
@@ -19,8 +20,19 @@ export function TalkingPortrait({
   onVideoEl,
   onVideoLive,
 }: Props) {
+  const rootRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const showStream = Boolean(streaming)
+  const phase = showStream ? 'stream' : talking ? 'speaking' : listening ? 'listening' : 'idle'
+
+  useEffect(() => {
+    return subscribeSaraLevel((level) => {
+      const root = rootRef.current
+      if (!root) return
+      const next = Math.max(0, Math.min(1, level))
+      root.style.setProperty('--sara-level', next.toFixed(3))
+    })
+  }, [])
 
   // Bind during commit so Send/Play connect can attach srcObject before effects run.
   const setVideoNode = useCallback(
@@ -66,10 +78,13 @@ export function TalkingPortrait({
 
   return (
     <div
+      ref={rootRef}
+      data-sara-phase={phase}
       className={`sara-portrait sara-portrait-cover relative overflow-hidden bg-sage-mist ${
         talking || showStream ? 'sara-portrait-live' : listening ? 'sara-portrait-listening' : ''
       }`}
     >
+      <div className="sara-glow" aria-hidden />
       <video
         ref={setVideoNode}
         className="sara-stream-video absolute inset-0 z-0 h-full w-full object-cover object-[center_22%]"
@@ -83,7 +98,7 @@ export function TalkingPortrait({
       <img
         src={STILL}
         alt="Sara"
-        className={`absolute inset-0 z-10 h-full w-full object-cover object-[center_22%] ${
+        className={`sara-portrait-face absolute inset-0 z-10 h-full w-full object-cover object-[center_22%] ${
           showStream ? 'opacity-0' : 'opacity-100'
         }`}
       />

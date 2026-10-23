@@ -45,7 +45,7 @@ function seventyFourProblems(text) {
   return problems
 }
 
-assert(GROK_MODEL === 'grok-4.6', 'model id is grok-4.6')
+assert(GROK_MODEL === 'grok-4.20-0309-non-reasoning', 'model id is the non-reasoning grok-4.20')
 assert(
   corsHeaders('https://sara-pfilates.surge.sh')['Access-Control-Allow-Origin'] ===
     'https://sara-pfilates.surge.sh',
@@ -61,7 +61,12 @@ assert(!/reduce stress|don't stress|less stress/i.test(SARA_SYSTEM), 'prompt doe
 assert(/Kajabi/.test(SARA_SYSTEM), 'course stays on Kajabi')
 assert(/UTI/.test(SARA_SYSTEM) && /do not diagnose|Never diagnose/i.test(SARA_SYSTEM), 'UTI: no diagnosis')
 assert(/three/i.test(SARA_SYSTEM), 'session cap mentioned')
-assert(/a few short paragraphs at most/.test(SARA_SYSTEM), 'response length guidance unchanged')
+assert(/2 to 4 short sentences/.test(SARA_SYSTEM), 'voice replies are 2 to 4 short sentences')
+assert(/no lists/.test(SARA_SYSTEM), 'voice replies have no lists')
+assert(
+  SARA_SYSTEM.indexOf('2 to 4 short sentences') < SARA_SYSTEM.indexOf(saraGuardrailPrompt()),
+  'voice style stays ahead of the guardrails',
+)
 assert(SARA_SYSTEM.includes(saraGuardrailPrompt()), 'system prompt includes Dr C guardrails')
 assert(
   /do not invent statistics, studies, cure claims, or diagnoses/i.test(SARA_SYSTEM),
@@ -285,7 +290,8 @@ const mocked = await askSaraGrok({
     const body = JSON.parse(init.body)
     assert(url.includes('api.x.ai/v1/chat/completions'), 'calls xAI chat completions')
     assert(init.headers.Authorization === 'Bearer test-not-a-real-key', 'Bearer from env, not hardcoded')
-    assert(body.model === 'grok-4.6', 'sends grok-4.6')
+    assert(body.model === 'grok-4.20-0309-non-reasoning', 'sends the non-reasoning model')
+    assert(body.max_tokens === 600, 'keeps max_tokens at 600')
     assert(body.messages[0].content.includes('Never diagnose'), 'sends Sara system prompt')
     assert(
       body.messages[0].content.includes(

@@ -36,9 +36,9 @@ const CLASS = 'SARA-WXYZ-2345-6789-ABCD'
 const UNKNOWN = 'SARA-ZZZZ-ZZZZ-ZZZZ-ZZZZ'
 
 assert(DEMO_LIMITS.askPerIpPerHour === 20, 'demo /ask hourly cap is 20')
-assert(DEMO_LIMITS.speakPerIpPerHour === 20, 'demo /speak hourly cap is 20')
+assert(DEMO_LIMITS.speakPerIpPerHour === 60, 'demo /speak hourly cap is 60 so 3 chunks fit an ask')
 assert(DEMO_LIMITS.askPerIpPerDay === 60, 'demo /ask daily cap is 60')
-assert(DEMO_LIMITS.speakPerIpPerDay === 60, 'demo /speak daily cap is 60')
+assert(DEMO_LIMITS.speakPerIpPerDay === 150, 'demo /speak daily cap is 150 so 3 chunks fit a day of asks')
 assert(DEMO_LIMITS.globalAsksPerDay === 3000, 'global demo ask ceiling is 3000')
 assert(DEMO_LIMITS.globalSpeaksPerDay === 3000, 'global demo speak ceiling is 3000')
 assert(SARA_BUSY_MESSAGE === 'Sara is busy, please try again in a bit.', '429 copy is the friendly busy line')
@@ -340,7 +340,7 @@ try {
     'over-limit demo /ask does not call Grok',
   )
 
-  await kv.put(`rl:demo:speak:h:${hash}:${hour}`, '20', { expirationTtl: DEMO_HOUR_TTL_SECONDS })
+  await kv.put(`rl:demo:speak:h:${hash}:${hour}`, '60', { expirationTtl: DEMO_HOUR_TTL_SECONDS })
   const speakLimited = await post('/speak', 'DEMO-SARA-001')
   const speakBody = await speakLimited.json()
   assert(speakLimited.status === 429 && speakBody.message === SARA_BUSY_MESSAGE, 'worker returns 429 at the demo speak cap')

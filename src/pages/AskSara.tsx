@@ -31,6 +31,19 @@ import {
 import { nowIso, uid } from '../lib/storage'
 import type { ChatMessage } from '../lib/types'
 
+function ListeningLine() {
+  return (
+    <span className="sara-listening" data-sara-listening="true">
+      Sara is listening
+      <span className="sara-listening-dots" aria-hidden>
+        <span />
+        <span />
+        <span />
+      </span>
+    </span>
+  )
+}
+
 export function AskSara() {
   const voiceOnly = isDemoVoiceOnly(readSession()?.redeemToken)
   const [messages, setMessages] = useState<ChatMessage[]>(() => readChat())
@@ -212,7 +225,7 @@ export function AskSara() {
       <div className="ask-sara-stage">
         <TalkingPortrait
           talking={speaking}
-          listening={listening}
+          listening={busy}
           streaming={streaming}
           onVideoEl={onVideoEl}
           onVideoLive={onVideoLive}
@@ -247,7 +260,7 @@ export function AskSara() {
             {intro.title}
           </p>
           <p className="ask-sara-greeting px-5 pt-0.5 text-center text-sm font-semibold">
-            {intro.sub}
+            {busy ? <ListeningLine /> : intro.sub}
           </p>
         </div>
 
@@ -298,7 +311,11 @@ export function AskSara() {
                 ) : null}
               </div>
             ))}
-            {busy ? <div className="text-sm font-semibold">Listening…</div> : null}
+            {busy ? (
+              <div className="text-sm font-semibold">
+                <ListeningLine />
+              </div>
+            ) : null}
             <div ref={bottom} />
           </div>
         </div>
@@ -322,7 +339,7 @@ export function AskSara() {
             className="w-full rounded-full bg-sage py-3 font-semibold text-white shadow-card disabled:opacity-40"
             disabled={!draft.trim() || busy}
           >
-            {busy ? 'Sara is thinking…' : 'Send to Sara'}
+            {busy ? 'Sara is listening…' : 'Send to Sara'}
           </button>
         </form>
       </div>

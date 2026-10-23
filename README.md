@@ -4,7 +4,7 @@ Phone-first Progressive Web App companion for after a Kajabi PfilAtes purchase. 
 
 Identity is **email on redeem only** — no password, no Kajabi SSO.
 
-Ask Sara is powered by **xAI Grok** (`grok-4.6`) through a small server-side proxy. The API key never ships in the Vite bundle or on Surge.
+Ask Sara is powered by **xAI Grok** (`grok-4.20-0309-non-reasoning`) through a small server-side proxy. The API key never ships in the Vite bundle or on Surge. That model is non-reasoning so a reply is a couple of seconds, not half a minute.
 
 Eng operating notes (board-first, named trees, who merges, Sara constraints): [docs/eng-playbook.md](docs/eng-playbook.md).
 
@@ -51,10 +51,10 @@ npm run preview
 | | |
 |---|---|
 | Endpoint | `https://api.x.ai/v1/chat/completions` |
-| Model | `grok-4.6` (override with `XAI_MODEL`) |
+| Model | `grok-4.20-0309-non-reasoning` (override with `XAI_MODEL`) |
 | Secret | `XAI_API_KEY` — **server only**, never `VITE_*` |
 
-The Sara system prompt lives in `server/askGrok.mjs` (peer coach, Kajabi stays the course, soft irritant coaching, no casual “stress”, UTI safety, session cap). Dr C's approved claims, the ten movement names, and red-flag rules are edited only in `server/saraGuardrails.mjs` and composed into that prompt. PfilAtes research Sara may cite (sourced, no rounding) lives only in `server/saraKnowledge.mjs`, composed after the guardrails; the full sourced summary and research QA prompts are in `docs/pfilates-research.md`. Sample prompts for red-flag QA are in `docs/sara-red-flag-qa.md`. Prompt changes reach the phone only after the Worker is redeployed.
+The Sara system prompt lives in `server/askGrok.mjs` (peer coach, Kajabi stays the course, soft irritant coaching, no casual “stress”, UTI safety, session cap). Spoken replies are 2 to 4 short sentences, conversational, with no lists, so ara can start quickly. `max_tokens` stays 600. Dr C's approved claims, the ten movement names, and red-flag rules are edited only in `server/saraGuardrails.mjs` and composed into that prompt. PfilAtes research Sara may cite (sourced, no rounding) lives only in `server/saraKnowledge.mjs`, composed after the guardrails; the full sourced summary and research QA prompts are in `docs/pfilates-research.md`. Sample prompts for red-flag QA are in `docs/sara-red-flag-qa.md`. After the Worker is deployed, run them against the live model with `XAI_API_KEY=... npm run qa:live` (`scripts/qa-live.mjs`). Prompt changes reach the phone only after the Worker is redeployed.
 
 Spoken replies use the same key via **xAI neural TTS** (`POST https://api.x.ai/v1/tts`, voice **`ara`** — warm adult female). The browser Web Speech API is not the voice path.
 
@@ -72,7 +72,7 @@ Ask Sara is a fullscreen talking surface: the idle still and the live stream **c
 
 **Heard voice** is D-ID Agents stream audio when `speak()` has started **and** the WebRTC `<video>` has visible playing frames. Keep the element muted until that moment so late `play()` can decode, then unmute / enable audio tracks together so audio cannot lead the mouth — do **not** also play xAI `ara` (no double voice). Do not start ara while waiting for D-ID. If connect/speak fails, hits the Lite session cap, `srcObject` never attaches, or a short budget elapses with **no playable AV**, fall back to `POST /speak` ara + still (or muted video if frames exist without audio). Never wait on a D-ID mp4. Never skip ara after a frozen / empty video.
 
-The public demo pass `DEMO-SARA-001` does not open that stream. Demo visitors get the still portrait, the text reply, and ara TTS only. A modified client cannot mint a session: the Worker refuses `/stream` and `/talk` for that pass. Purchase and class passes keep D-ID.
+The public demo pass `DEMO-SARA-001` does not open that stream. Demo visitors get the still portrait, the text reply, and ara TTS only. Sending a note shows “Sara is listening…” immediately. The reply text shows as soon as Grok returns. Ara then plays sentence by sentence (at most 3 `/speak` calls): the first sentence starts while the rest are fetched and queued. Audio is unlocked inside the Send tap so iOS and Android still play after the `/ask` wait. While she speaks, the still breathes, sways, and a glow ring follows the audio level. Quiet, she keeps a slow breath. `prefers-reduced-motion` turns that off. A modified client cannot mint a session: the Worker refuses `/stream` and `/talk` for that pass. Purchase and class passes keep D-ID.
 
 **Motion** for paying and class passes is D-ID **Agents Streams** (WebRTC) via `@d-id/client-sdk`. The Worker mints a short-lived `client_key` (`POST /stream`) for the allowed Surge origins. Ask Sara does **not** open WebRTC on mount (Lite’s concurrent stream cap is small; idle phone + laptop + Studio tabs exhaust it). Mint + `connect()` start on **Send / Play**, then `agentManager.speak({ type: 'text', input })` as soon as the Grok reply exists (do not wait for ara). Leaving the page (and `pagehide`) disconnects so idle slots are not held. Do not call `agentManager.chat()` — Grok stays the brain (`POST /ask`).
 
@@ -130,7 +130,7 @@ npx surge ./dist https://sara-pfilates.surge.sh
 
 The course stays on Kajabi. A purchase mints a unique pass on this same Worker. The buyer opens `https://sara-pfilates.surge.sh/r/{TOKEN}` on their phone and enters the same email. There is no Kajabi SSO and no lesson content in this app.
 
-`DEMO-SARA-001` is the public prospect link and the local QA pass (welcome screen and `/r/DEMO-SARA-001`). It is not stored in KV as a redeem record and does not need the mint secret. Prospects are not asked for an email, name, or date of birth. Ask Sara on that pass is voice-only (still portrait plus ara) and rate-limited. See `server/demoGate.mjs`: 20 `/ask` and 20 `/speak` per IP per hour, 60 of each per IP per UTC day, and 3000 `/ask` plus 3000 `/speak` per UTC day across all demo traffic. Over the limit the Worker returns HTTP 429 with `Retry-After` and `Sara is busy, please try again in a bit.` Unknown passes are rejected. No new secret and no new KV binding — counters are short-TTL `rl:demo:` keys in `REDEEM_TOKENS`.
+`DEMO-SARA-001` is the public prospect link and the local QA pass (welcome screen and `/r/DEMO-SARA-001`). It is not stored in KV as a redeem record and does not need the mint secret. Prospects are not asked for an email, name, or date of birth. Ask Sara on that pass is voice-only (still portrait plus ara) and rate-limited. See `server/demoGate.mjs`: 20 `/ask` and 60 `/speak` per IP per hour, 60 `/ask` and 150 `/speak` per IP per UTC day, and 3000 `/ask` plus 3000 `/speak` per UTC day across all demo traffic. The speak caps are higher because one reply can take up to 3 `/speak` calls. The global daily speak cap stays 3000. Over the limit the Worker returns HTTP 429 with `Retry-After` and `Sara is busy, please try again in a bit.` Unknown passes are rejected. No new secret and no new KV binding — counters are short-TTL `rl:demo:` keys in `REDEEM_TOKENS`.
 
 | | |
 |---|---|
