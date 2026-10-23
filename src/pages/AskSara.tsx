@@ -3,16 +3,23 @@ import { Link } from 'react-router-dom'
 import { TalkingPortrait } from '../components/TalkingPortrait'
 import { askSaraRemote, isSaraUnreachable } from '../lib/askSara'
 import { isDemoVoiceOnly } from '../lib/demoPass'
+import {
+  DEMO_DID_FRAME_BUDGET_MS,
+  didWebRtcSilencedBySilentSwitch,
+  planDemoVoice,
+} from '../lib/demoVoicePlan'
 import { readChat, readSession, writeChat } from '../lib/mockServer'
 import { askEmptyHint, askIntro } from '../lib/prospectCopy'
 import { isSaraBusy, SARA_PASS_REQUIRED_MESSAGE, SARA_UNKNOWN_PASS_MESSAGE } from '../lib/saraGate'
 import {
   bindSaraStreamVideo,
   connectSaraStream,
+  isSaraStreamSpeechLive,
   preloadSaraStream,
   releaseSaraStream,
   SARA_STREAM_CAPPED_NOTE,
   setSaraStreamCallbacks,
+  setSaraStreamKeepMuted,
   setSaraStreamUserMuted,
   settleSaraStreamVoice,
   shouldShowSaraStream,
@@ -21,9 +28,17 @@ import {
   unlockSaraStream,
 } from '../lib/saraStream'
 import {
+  dropHeldSaraSpeech,
+  holdSaraSpeech,
   isSaraMuted,
   isVoiceReady,
+  playCachedSaraSpeech,
+  releaseHeldSaraSpeech,
+  saraSpeechChunkReady,
   setSaraMuted,
+  SARA_SILENT_SWITCH_HINT,
+  SARA_TAP_TO_HEAR,
+  SARA_TEST_VOICE_LINE,
   speakSara,
   stopSaraSpeech,
   unlockSaraSpeech,
@@ -56,13 +71,20 @@ export function AskSara() {
   const [streamCapped, setStreamCapped] = useState(false)
   const [muted, setMuted] = useState(() => isSaraMuted())
   const [voiceNote, setVoiceNote] = useState<string | null>(null)
+  const [needsTap, setNeedsTap] = useState(false)
+  const [concealStream, setConcealStream] = useState(false)
   const bottom = useRef<HTMLDivElement>(null)
+  const retryTextRef = useRef<string | null>(null)
   const mutedRef = useRef(muted)
   mutedRef.current = muted
   /** True while D-ID stream audio is the heard voice — do not let a late STOP cancel ara. */
   const streamVoiceRef = useRef(false)
   const fallbackTextRef = useRef<string | null>(null)
   const araPlayingRef = useRef(false)
+  const demoTicket = useRef(0)
+  const demoPoll = useRef(0)
+  const demoStreamFailedRef = useRef(false)
+  const demoEvaluateRef = useRef<(() => void) | null>(null)
 
   const onVideoEl = useCallback((el: HTMLVideoElement | null) => {
     bindSaraStreamVideo(el)
@@ -70,6 +92,7 @@ export function AskSara() {
 
   const onVideoLive = useCallback((live: boolean) => {
     setVideoLive(live)
+    demoEvaluateRef.current?.()
   }, [])
 
   useEffect(() => {
@@ -82,33 +105,38 @@ export function AskSara() {
 
   const playAra = useCallback((text: string) => {
     if (mutedRef.current || !isVoiceReady() || araPlayingRef.current) return
+    retryTextRef.current = text
     araPlayingRef.current = true
     streamVoiceRef.current = false
     setVoiceNote(null)
+    setNeedsTap(false)
     void speakSara(text, {
-      onStart: () => setSpeaking(true),
+      onStart: () => {
+        setNeedsTap(false)
+        setSpeaking(true)
+      },
       onEnd: () => {
         araPlayingRef.current = false
         setSpeaking(false)
       },
       onError: (message) => {
         araPlayingRef.current = false
+        setSpeaking(false)
         setVoiceNote(message)
+      },
+      onBlocked: () => {
+        araPlayingRef.current = false
+        setSpeaking(false)
+        setNeedsTap(true)
       },
     })
   }, [])
 
   useEffect(() => {
-    if (voiceOnly) {
-      releaseSaraStream()
-      return () => {
-        releaseSaraStream()
-        stopSaraSpeech()
-      }
-    }
     setSaraStreamCallbacks({
       onTalking: (talking) => {
         setStreamTalking(talking)
+        demoEvaluateRef.current?.()
         if (!talking && streamVoiceRef.current) {
           streamVoiceRef.current = false
           setSpeaking(false)
@@ -120,38 +148,187 @@ export function AskSara() {
         if (status === 'live') setStreamCapped(false)
       },
       onVoiceFallback: () => {
+        if (voiceOnly) {
+          demoStreamFailedRef.current = true
+          demoEvaluateRef.current?.()
+          return
+        }
         const text = fallbackTextRef.current
         if (text) playAra(text)
       },
     })
     preloadSaraStream()
     return () => {
+      demoTicket.current += 1
+      if (demoPoll.current) window.clearInterval(demoPoll.current)
+      demoPoll.current = 0
+      demoEvaluateRef.current = null
       setSaraStreamCallbacks({})
       releaseSaraStream()
       stopSaraSpeech()
     }
   }, [playAra, voiceOnly])
 
-  const streaming = shouldShowSaraStream({ streamReady, speaking, streamTalking, videoLive })
+  const streaming =
+    shouldShowSaraStream({ streamReady, speaking, streamTalking, videoLive }) && !concealStream
   const live = speaking || streamTalking
 
+  const clearDemoPoll = () => {
+    if (demoPoll.current) window.clearInterval(demoPoll.current)
+    demoPoll.current = 0
+    demoEvaluateRef.current = null
+  }
+
   const haltPlayback = () => {
+    demoTicket.current += 1
+    clearDemoPoll()
+    demoStreamFailedRef.current = false
     streamVoiceRef.current = false
     araPlayingRef.current = false
     fallbackTextRef.current = null
+    setConcealStream(false)
     stopSaraSpeech()
     stopSaraStream()
     setSpeaking(false)
     setStreamTalking(false)
+    setNeedsTap(false)
+  }
+
+  const testVoice = () => {
+    if (busy) return
+    if (mutedRef.current) {
+      mutedRef.current = false
+      setMuted(false)
+      setSaraMuted(false)
+    }
+    setVoiceNote(null)
+    setNeedsTap(false)
+    haltPlayback()
+    unlockSaraSpeech()
+    unlockSaraStream()
+    void connectSaraStream()
+    speakDemoReply(SARA_TEST_VOICE_LINE)
+  }
+
+  const hearFromTap = () => {
+    const played = playCachedSaraSpeech()
+    if (!played) unlockSaraSpeech()
+    setNeedsTap(false)
+    setVoiceNote(null)
+    if (played) {
+      araPlayingRef.current = true
+      return
+    }
+    const text = retryTextRef.current
+    if (text) playAra(text)
+  }
+
+  const speakDemoReply = (text: string) => {
+    if (isSaraBusy(text) || mutedRef.current || !isVoiceReady()) return
+    const ticket = demoTicket.current
+    fallbackTextRef.current = text
+    araPlayingRef.current = false
+    demoStreamFailedRef.current = false
+    setConcealStream(false)
+    const ios = didWebRtcSilencedBySilentSwitch(
+      navigator.userAgent,
+      navigator.platform,
+      navigator.maxTouchPoints,
+    )
+    setSaraStreamKeepMuted(ios)
+    const startedAt = Date.now()
+    let framesAt: number | null = null
+    let chunkAt: number | null = null
+    let committed = false
+
+    const finish = (choice: 'did-audio' | 'did-visual-ara' | 'ara') => {
+      if (committed || ticket !== demoTicket.current) return
+      committed = true
+      clearDemoPoll()
+      if (choice === 'did-audio') {
+        setConcealStream(false)
+        setSaraStreamKeepMuted(false)
+        dropHeldSaraSpeech()
+        streamVoiceRef.current = true
+        setVoiceNote(null)
+        setSpeaking(true)
+        return
+      }
+      if (choice === 'did-visual-ara') {
+        setConcealStream(false)
+        setSaraStreamKeepMuted(true)
+        settleSaraStreamVoice('visual')
+        streamVoiceRef.current = false
+        araPlayingRef.current = true
+        releaseHeldSaraSpeech()
+        return
+      }
+      setConcealStream(true)
+      settleSaraStreamVoice('ara')
+      streamVoiceRef.current = false
+      araPlayingRef.current = true
+      releaseHeldSaraSpeech()
+    }
+
+    const evaluate = () => {
+      if (committed || ticket !== demoTicket.current) return
+      const now = Date.now()
+      const speechFramesLive = isSaraStreamSpeechLive()
+      if (speechFramesLive && framesAt == null) framesAt = now
+      const chunkReady = saraSpeechChunkReady()
+      if (chunkReady && chunkAt == null) chunkAt = now
+      const choice = planDemoVoice({
+        araStarted: false,
+        didFailed: demoStreamFailedRef.current,
+        budgetExceeded: now - startedAt >= DEMO_DID_FRAME_BUDGET_MS,
+        speechFramesLive,
+        chunkReady,
+        framesReadyAt: framesAt,
+        chunkReadyAt: chunkAt,
+        now,
+        iosSilentSwitch: ios,
+      })
+      if (choice !== 'wait') finish(choice)
+    }
+
+    demoEvaluateRef.current = evaluate
+    holdSaraSpeech(text, {
+      onStart: () => {
+        setNeedsTap(false)
+        setSpeaking(true)
+      },
+      onEnd: () => {
+        araPlayingRef.current = false
+        setSpeaking(false)
+      },
+      onError: (message) => {
+        araPlayingRef.current = false
+        setSpeaking(false)
+        setVoiceNote(message)
+      },
+      onBlocked: () => {
+        araPlayingRef.current = false
+        setSpeaking(false)
+        setNeedsTap(true)
+      },
+      onFirstChunk: () => evaluate(),
+    })
+    if (demoPoll.current) window.clearInterval(demoPoll.current)
+    demoPoll.current = window.setInterval(evaluate, 100)
+    void speakSaraStream(text).then((outcome) => {
+      if (ticket !== demoTicket.current) return
+      if (outcome !== 'heard') demoStreamFailedRef.current = true
+      evaluate()
+    })
   }
 
   const speakReply = (text: string) => {
     if (isSaraBusy(text)) return
     if (voiceOnly) {
-      fallbackTextRef.current = null
-      playAra(text)
+      speakDemoReply(text)
       return
     }
+    setSaraStreamKeepMuted(false)
     fallbackTextRef.current = text
     araPlayingRef.current = false
     unlockSaraStream()
@@ -180,10 +357,8 @@ export function AskSara() {
     if (!text || busy) return
     haltPlayback()
     unlockSaraSpeech()
-    if (!voiceOnly) {
-      unlockSaraStream()
-      void connectSaraStream()
-    }
+    unlockSaraStream()
+    void connectSaraStream()
     const you: ChatMessage = { id: uid(), from: 'you', text, at: nowIso() }
     const prior = messages
     setMessages((cur) => [...cur, you])
@@ -262,12 +437,37 @@ export function AskSara() {
           <p className="ask-sara-greeting px-5 pt-0.5 text-center text-sm font-semibold">
             {busy ? <ListeningLine /> : intro.sub}
           </p>
+          {voiceOnly ? (
+            <div className="px-5 pt-2 text-center">
+              <button
+                type="button"
+                data-sara-test-voice="true"
+                className="ask-sara-chip text-xs font-semibold disabled:opacity-40"
+                disabled={busy}
+                onClick={testVoice}
+              >
+                Test voice
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="ask-sara-mid flex min-h-0 flex-1 flex-col justify-end px-5 pb-2 pt-3">
-          {voiceNote ? (
+          {needsTap ? (
+            <div className="ask-sara-hear mb-2 px-3 py-2 text-center" data-sara-hear-fallback="true">
+              <button
+                type="button"
+                data-sara-tap-hear="true"
+                className="rounded-full bg-sage px-4 py-2 text-sm font-semibold text-white"
+                onClick={hearFromTap}
+              >
+                {SARA_TAP_TO_HEAR}
+              </button>
+              <p className="mt-1 text-xs font-semibold leading-snug">{SARA_SILENT_SWITCH_HINT}</p>
+            </div>
+          ) : voiceNote ? (
             <p className="ask-sara-note mb-2 text-center text-xs font-semibold leading-snug">{voiceNote}</p>
-          ) : live && streamCapped ? (
+          ) : live && streamCapped && !voiceOnly ? (
             <p className="ask-sara-note mb-2 text-center text-xs font-semibold leading-snug">{SARA_STREAM_CAPPED_NOTE}</p>
           ) : null}
 
@@ -299,10 +499,8 @@ export function AskSara() {
                         return
                       }
                       unlockSaraSpeech()
-                      if (!voiceOnly) {
-                        unlockSaraStream()
-                        void connectSaraStream()
-                      }
+                      unlockSaraStream()
+                      void connectSaraStream()
                       speakReply(m.text)
                     }}
                   >

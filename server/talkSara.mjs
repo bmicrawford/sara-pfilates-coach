@@ -4,6 +4,19 @@ export const DID_TALKS_URL = 'https://api.d-id.com/talks'
 export const DID_AUDIOS_URL = 'https://api.d-id.com/audios'
 export const SARA_STILL_URL = 'https://sara-pfilates.surge.sh/avatar/sara-default.png'
 
+/**
+ * D-ID has no free slot or no credits. 402, 429, and 403 (Forbidden,
+ * max sessions, insufficient credits) all mean the phone should fall
+ * back to ara without showing an error.
+ */
+export function isDidCapacityResult(status, data) {
+  const code = Number(status)
+  if (code === 402 || code === 429) return true
+  if (code !== 403) return false
+  const blob = `${data?.kind || ''} ${data?.description || ''} ${data?.message || ''} ${data?.error || ''}`.toLowerCase()
+  return /forbidden|max user sessions|insufficient\s*credits|out of credits|credit/.test(blob)
+}
+
 export function didAuth(apiKey) {
   const raw = String(apiKey || '').trim()
   if (!raw) return ''
@@ -58,9 +71,9 @@ async function uploadDidAudio(audio, contentType, apiKey, fetchFn) {
     headers: { Authorization: didAuth(apiKey) },
     body: form,
   })
-  if (!res.ok) return null
   const data = await res.json().catch(() => ({}))
-  return data.url || data.audio_url || null
+  if (!res.ok) return { url: null, capacity: isDidCapacityResult(res.status, data) }
+  return { url: data.url || data.audio_url || null, capacity: false }
 }
 
 /** Start a D-ID talk. Returns talkId quickly; does not wait for the mp4. */
@@ -79,15 +92,22 @@ export async function talkSaraDid({
     return { ok: false, talkId: null, videoUrl: null, reason: 'no_audio' }
   }
 
-  let audioUrl
+  let uploaded
   try {
-    audioUrl = await uploadDidAudio(audio, contentType, apiKey, fetchFn)
+    uploaded = await uploadDidAudio(audio, contentType, apiKey, fetchFn)
   } catch {
     return { ok: false, talkId: null, videoUrl: null, reason: 'did_upload_failed' }
   }
-  if (!audioUrl) {
-    return { ok: false, talkId: null, videoUrl: null, reason: 'did_upload_failed' }
+  if (!uploaded?.url) {
+    return {
+      ok: false,
+      talkId: null,
+      videoUrl: null,
+      reason: 'did_upload_failed',
+      capacity: Boolean(uploaded?.capacity),
+    }
   }
+  const audioUrl = uploaded.url
 
   let created
   try {
@@ -105,7 +125,13 @@ export async function talkSaraDid({
     })
     created = await res.json().catch(() => ({}))
     if (!res.ok || !created.id) {
-      return { ok: false, talkId: null, videoUrl: null, reason: 'did_create_failed' }
+      return {
+        ok: false,
+        talkId: null,
+        videoUrl: null,
+        reason: 'did_create_failed',
+        capacity: isDidCapacityResult(res.status, created),
+      }
     }
   } catch {
     return { ok: false, talkId: null, videoUrl: null, reason: 'did_create_failed' }

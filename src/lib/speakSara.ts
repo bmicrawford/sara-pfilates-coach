@@ -5,23 +5,37 @@ import { splitSpeakChunks } from './speakChunks.mjs'
 
 const MUTE_KEY = 'sara.voiceMuted'
 
+/**
+ * Short silent WAV. Played on the persistent element inside the Send/Play
+ * tap so later blob playback can reuse that element. Not paused afterwards:
+ * pausing here is what re-locks the element before /ask returns.
+ */
+const SILENT_WAV =
+  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+
+/** Wall-clock budget after play() for currentTime to move. */
+const ADVANCE_LIMIT_MS = 1500
+
+/** Keep the glow up across a chunk swap so the ring does not blink off. */
+const ADVANCE_GRACE_MS = 240
+
 export const SARA_VOICE_OFFLINE =
   "I couldn't reach my voice just now. Tap Play in a moment — I won't fake it from the phone speaker."
+
+export const SARA_TAP_TO_HEAR = 'Tap to hear Sara'
+
+export const SARA_SILENT_SWITCH_HINT =
+  'If you hear nothing, turn off the Silent switch and turn up the volume'
+
+/** One short sentence. Goes through POST /speak, so demo limits still count it. */
+export const SARA_TEST_VOICE_LINE = "Hi, it's Sara."
 
 function apiBase(): string {
   return (import.meta.env.VITE_SARA_API_URL ?? '').replace(/\/$/, '')
 }
 
-type AudioContextCtor = typeof AudioContext
-
-function audioContextCtor(): AudioContextCtor | null {
-  if (typeof window === 'undefined') return null
-  const webkit = (window as unknown as { webkitAudioContext?: AudioContextCtor }).webkitAudioContext
-  return window.AudioContext || webkit || null
-}
-
 export function isVoiceReady(): boolean {
-  return audioContextCtor() != null
+  return typeof window !== 'undefined' && typeof Audio !== 'undefined'
 }
 
 /** @deprecated Use isVoiceReady — neural TTS is the path, not Web Speech. */
@@ -37,22 +51,59 @@ export function isSaraMuted(): boolean {
   }
 }
 
-type LevelListener = (level: number) => void
+type LevelListener = (level: number, audible: boolean) => void
 
-type Player = {
-  ctx: AudioContext
-  analyser: AnalyserNode
-  hold: AudioBufferSourceNode | null
-  speech: Set<AudioBufferSourceNode>
-  generation: number
-  raf: number
+type SpeakOpts = {
+  onStart?: () => void
+  onEnd?: () => void
+  onLevel?: (level: number) => void
+  onError?: (message: string) => void
+  /** play() rejected, or currentTime did not advance within 1.5s. */
+  onBlocked?: () => void
+  /** First chunk's blob URL is stored. May still be held and not playing. */
+  onFirstChunk?: () => void
 }
 
-let player: Player | null = null
+type ChunkSlot = {
+  url: string | null
+  error: 'busy' | 'denied' | 'offline' | null
+}
+
+type Engine = {
+  audio: HTMLAudioElement
+  generation: number
+  playToken: number
+  urls: Array<string | null>
+  slots: ChunkSlot[]
+  index: number
+  chunkCount: number
+  waiting: boolean
+  speech: boolean
+  closed: boolean
+  blocked: boolean
+  started: boolean
+  opts: SpeakOpts
+  raf: number
+  stallTimer: number
+  advanceForToken: number
+  smoothed: number
+  lastSample: number
+  sawTime: boolean
+  lastAdvanceAt: number
+  playingEvent: boolean
+  /** playToken that has fired 'playing'. Ended before that is a src swap. */
+  heardToken: number
+  /** Prefetch only. acceptChunk must not play until release. Do not pause while held. */
+  holding: boolean
+}
+
+let engine: Engine | null = null
 const levelListeners = new Set<LevelListener>()
 
-function emitLevel(level: number): void {
-  for (const listener of levelListeners) listener(level)
+function emitLevel(level: number, audible: boolean): void {
+  const clamped = Math.max(0, Math.min(0.9, level))
+  for (const listener of levelListeners) listener(clamped, audible)
+  engine?.opts.onLevel?.(clamped)
 }
 
 /** Portrait glow reads this. Does not re-render the chat thread. */
@@ -72,91 +123,352 @@ export function setSaraMuted(muted: boolean): void {
   if (muted) stopSaraSpeech()
 }
 
-function ensurePlayer(): Player | null {
-  const Ctor = audioContextCtor()
-  if (!Ctor) return null
-  if (player) return player
-  const ctx = new Ctor()
-  const analyser = ctx.createAnalyser()
-  analyser.fftSize = 256
-  analyser.smoothingTimeConstant = 0.62
-  analyser.connect(ctx.destination)
-  player = {
-    ctx,
-    analyser,
-    hold: null,
-    speech: new Set(),
-    generation: 0,
-    raf: 0,
-  }
-  return player
-}
-
-function rmsLevel(analyser: AnalyserNode): number {
-  const buf = new Uint8Array(analyser.frequencyBinCount)
-  analyser.getByteTimeDomainData(buf)
-  let sum = 0
-  for (let i = 0; i < buf.length; i += 1) {
-    const v = (buf[i] - 128) / 128
-    sum += v * v
-  }
-  return Math.sqrt(sum / buf.length)
-}
-
-function stopLevels(current: Player): void {
-  if (current.raf) {
-    cancelAnimationFrame(current.raf)
-    current.raf = 0
-  }
-}
-
-function stopSpeechSources(current: Player): void {
-  for (const source of current.speech) {
-    try {
-      source.onended = null
-      source.stop()
-    } catch {
-      /* already stopped */
-    }
-  }
-  current.speech.clear()
-}
-
-export function stopSaraSpeech(): void {
-  if (!player) return
-  player.generation += 1
-  stopLevels(player)
-  stopSpeechSources(player)
-  emitLevel(0)
+function isAbort(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { name?: string }).name === 'AbortError'
 }
 
 /**
- * Call from the Send / Play tap, before any await.
- * iOS and Android only unlock audio inside that gesture. A muted clip that
- * is paused after the tap re-locks playback, so the /ask round trip then
- * plays silence. Resume the context and start a silent buffer here, and
- * leave that buffer running so later speech buffers can start.
+ * Smoothed syllable-like level in 0.25–0.9. The media element is the sound.
+ * A graph tap on that element would pull output off the media channel, which
+ * is the path the hardware silent switch mutes, so the ring is synthetic.
+ */
+function speechEnvelope(seconds: number): number {
+  const n =
+    Math.abs(Math.sin(seconds * 11.2)) * 0.5 +
+    Math.abs(Math.sin(seconds * 4.1 + 0.7)) * 0.3 +
+    Math.abs(Math.sin(seconds * 17.3 + 1.9)) * 0.2
+  return 0.25 + Math.min(1, n) * 0.65
+}
+
+function bindElement(audio: HTMLAudioElement): void {
+  audio.addEventListener('playing', () => {
+    if (!engine || !engine.speech) return
+    engine.playingEvent = true
+    engine.heardToken = engine.playToken
+  })
+  audio.addEventListener('pause', () => {
+    if (!engine) return
+    engine.playingEvent = false
+  })
+  audio.addEventListener('ended', () => {
+    if (!engine) return
+    const heard =
+      engine.heardToken === engine.playToken && engine.speech && !engine.closed && !engine.blocked
+    engine.playingEvent = false
+    if (!heard) return
+    engine.heardToken = -1
+    onSpeechEnded()
+  })
+}
+
+function ensureEngine(): Engine | null {
+  if (engine) return engine
+  if (typeof document === 'undefined') return null
+  const parent = document.body ?? document.documentElement
+  if (!parent) return null
+  const audio = document.createElement('audio')
+  audio.preload = 'auto'
+  ;(audio as HTMLAudioElement & { playsInline: boolean }).playsInline = true
+  audio.setAttribute('playsinline', 'true')
+  audio.setAttribute('webkit-playsinline', 'true')
+  audio.setAttribute('data-sara-voice', 'true')
+  audio.setAttribute('aria-hidden', 'true')
+  audio.controls = false
+  audio.autoplay = false
+  audio.style.position = 'fixed'
+  audio.style.width = '0'
+  audio.style.height = '0'
+  audio.style.opacity = '0'
+  audio.style.pointerEvents = 'none'
+  parent.appendChild(audio)
+  bindElement(audio)
+  engine = {
+    audio,
+    generation: 0,
+    playToken: 0,
+    urls: [],
+    slots: [],
+    index: 0,
+    chunkCount: 0,
+    waiting: false,
+    speech: false,
+    closed: true,
+    blocked: false,
+    started: false,
+    opts: {},
+    raf: 0,
+    stallTimer: 0,
+    advanceForToken: 0,
+    smoothed: 0,
+    lastSample: 0,
+    sawTime: false,
+    lastAdvanceAt: 0,
+    playingEvent: false,
+    heardToken: -1,
+    holding: false,
+  }
+  return engine
+}
+
+function revokeUrls(current: Engine): void {
+  for (const url of current.urls) {
+    if (url) URL.revokeObjectURL(url)
+  }
+  current.urls = current.urls.map(() => null)
+  for (const slot of current.slots) {
+    if (slot) slot.url = null
+  }
+}
+
+function clearStall(current: Engine): void {
+  if (current.stallTimer) {
+    window.clearTimeout(current.stallTimer)
+    current.stallTimer = 0
+  }
+}
+
+export function stopSaraSpeech(): void {
+  if (!engine) return
+  engine.generation += 1
+  engine.speech = false
+  engine.closed = true
+  engine.waiting = false
+  engine.blocked = false
+  engine.playingEvent = false
+  engine.holding = false
+  engine.lastAdvanceAt = 0
+  clearStall(engine)
+  try {
+    engine.audio.pause()
+  } catch {
+    /* ignore */
+  }
+  try {
+    engine.audio.removeAttribute('src')
+  } catch {
+    /* ignore */
+  }
+  revokeUrls(engine)
+  engine.smoothed = 0
+  emitLevel(0, false)
+}
+
+/**
+ * Call from the Send / Play / Test voice tap, before any await.
+ * Plays silence on the one element and leaves it in place for the reply.
  */
 export function unlockSaraSpeech(): void {
-  const current = ensurePlayer()
-  if (!current) return
+  const current = ensureEngine()
+  if (!current || current.speech) return
+  const audio = current.audio
   try {
-    void current.ctx.resume()
-    if (!current.hold) {
-      const buffer = current.ctx.createBuffer(1, current.ctx.sampleRate, current.ctx.sampleRate)
-      const source = current.ctx.createBufferSource()
-      source.buffer = buffer
-      source.loop = true
-      const gain = current.ctx.createGain()
-      gain.gain.value = 0
-      source.connect(gain)
-      gain.connect(current.ctx.destination)
-      source.start()
-      current.hold = source
+    audio.muted = false
+    audio.volume = 1
+    audio.loop = false
+    audio.src = SILENT_WAV
+    const pending = audio.play()
+    if (pending) void pending.catch(() => {})
+  } catch {
+    /* a later tap can try again */
+  }
+}
+
+function startLevels(current: Engine): void {
+  if (current.raf) return
+  const tick = () => {
+    current.raf = 0
+    if (!engine) return
+    stepEnvelope(engine)
+    if (engine.speech || engine.smoothed > 0.02) {
+      engine.raf = requestAnimationFrame(tick)
+    } else {
+      engine.smoothed = 0
+      emitLevel(0, false)
+    }
+  }
+  current.raf = requestAnimationFrame(tick)
+}
+
+function stepEnvelope(current: Engine): void {
+  const audio = current.audio
+  const now = performance.now()
+  let advancing = false
+  if (current.speech && !current.blocked && !current.closed) {
+    const t = Number.isFinite(audio.currentTime) ? audio.currentTime : 0
+    if (!current.sawTime) {
+      current.sawTime = true
+      current.lastSample = t
+    } else {
+      const eventLive = current.playingEvent && !audio.paused && !audio.ended
+      if (eventLive && t > current.lastSample + 0.01) {
+        advancing = true
+        current.lastAdvanceAt = now
+        if (current.advanceForToken !== current.playToken) {
+          current.advanceForToken = current.playToken
+          clearStall(current)
+        }
+        if (!current.started) {
+          current.started = true
+          current.opts.onStart?.()
+        }
+      }
+      current.lastSample = t
+    }
+  }
+  const grace =
+    current.speech &&
+    !current.blocked &&
+    !current.closed &&
+    current.lastAdvanceAt > 0 &&
+    now - current.lastAdvanceAt < ADVANCE_GRACE_MS
+  const fresh = advancing || grace
+  if (fresh) {
+    const target = speechEnvelope(now / 1000)
+    if (current.smoothed < 0.25) current.smoothed = 0.25
+    current.smoothed += (target - current.smoothed) * 0.2
+    if (current.smoothed > 0.9) current.smoothed = 0.9
+  } else {
+    current.smoothed += (0 - current.smoothed) * 0.28
+    if (current.smoothed < 0.02) current.smoothed = 0
+  }
+  const audible = fresh && current.smoothed >= 0.25
+  emitLevel(current.smoothed, audible)
+}
+
+function signalBlocked(current: Engine): void {
+  if (current.blocked || current.closed || !current.speech) return
+  current.blocked = true
+  current.speech = false
+  current.waiting = false
+  current.playingEvent = false
+  current.lastAdvanceAt = 0
+  clearStall(current)
+  try {
+    current.audio.pause()
+  } catch {
+    /* ignore */
+  }
+  current.smoothed = 0
+  emitLevel(0, false)
+  current.opts.onBlocked?.()
+}
+
+function assignSrcAndPlay(current: Engine, url: string): void {
+  const gen = current.generation
+  current.playToken += 1
+  const token = current.playToken
+  current.sawTime = false
+  current.playingEvent = false
+  current.speech = true
+  current.waiting = false
+  current.audio.loop = false
+  current.audio.muted = false
+  current.audio.volume = 1
+  current.audio.src = url
+  clearStall(current)
+  current.stallTimer = window.setTimeout(() => {
+    if (!engine || engine.generation !== gen || engine.playToken !== token) return
+    if (engine.advanceForToken === token || engine.blocked || engine.closed || !engine.speech) return
+    signalBlocked(engine)
+  }, ADVANCE_LIMIT_MS)
+  startLevels(current)
+  try {
+    const pending = current.audio.play()
+    if (pending && typeof pending.then === 'function') {
+      void pending.then(
+        () => {},
+        (err: unknown) => {
+          if (!engine || engine.generation !== gen || engine.playToken !== token) return
+          if (engine.advanceForToken === token || isAbort(err)) return
+          signalBlocked(engine)
+        },
+      )
     }
   } catch {
-    /* a later Play tap can try again */
+    signalBlocked(current)
   }
+}
+
+function failFetch(current: Engine, kind: 'busy' | 'denied' | 'offline'): void {
+  if (current.closed) return
+  current.closed = true
+  current.speech = false
+  current.waiting = false
+  current.playingEvent = false
+  clearStall(current)
+  const message =
+    kind === 'busy' ? SARA_BUSY_MESSAGE : kind === 'denied' ? SARA_UNKNOWN_PASS_MESSAGE : SARA_VOICE_OFFLINE
+  current.opts.onError?.(message)
+  current.opts.onEnd?.()
+}
+
+function finishPlayback(current: Engine): void {
+  if (current.closed) return
+  current.closed = true
+  current.speech = false
+  current.waiting = false
+  current.playingEvent = false
+  clearStall(current)
+  revokeUrls(current)
+  current.opts.onEnd?.()
+}
+
+function onSpeechEnded(): void {
+  const current = engine
+  if (!current || !current.speech || current.closed || current.blocked) return
+  const next = current.index + 1
+  if (next >= current.chunkCount) {
+    finishPlayback(current)
+    return
+  }
+  const slot = current.slots[next]
+  if (slot?.url) {
+    current.index = next
+    assignSrcAndPlay(current, slot.url)
+    return
+  }
+  if (slot?.error) {
+    failFetch(current, slot.error)
+    return
+  }
+  current.index = next
+  current.waiting = true
+}
+
+function acceptChunk(gen: number, index: number, blob: Blob | null | 'busy' | 'denied'): void {
+  const current = engine
+  if (!current || current.generation !== gen || current.closed) return
+  const slot = current.slots[index]
+  if (!slot || slot.url || slot.error) return
+  if (blob === 'busy' || blob === 'denied' || !blob) {
+    slot.error = blob === 'busy' ? 'busy' : blob === 'denied' ? 'denied' : 'offline'
+    if (current.holding) {
+      if (index === 0) current.opts.onFirstChunk?.()
+      return
+    }
+    const readyToPlay = index === 0 ? !current.speech : current.waiting && current.index === index
+    if (readyToPlay) failFetch(current, slot.error)
+    return
+  }
+  const url = URL.createObjectURL(blob)
+  if (!engine || engine.generation !== gen || engine.closed) {
+    URL.revokeObjectURL(url)
+    return
+  }
+  slot.url = url
+  current.urls[index] = url
+  if (current.holding) {
+    if (index === 0) current.opts.onFirstChunk?.()
+    return
+  }
+  if (index === 0) current.opts.onFirstChunk?.()
+  if (current.blocked) return
+  if (index === 0 && !current.speech) {
+    current.index = 0
+    assignSrcAndPlay(current, url)
+    return
+  }
+  if (current.waiting && current.index === index) assignSrcAndPlay(current, url)
 }
 
 export async function fetchSaraSpeech(text: string): Promise<Blob | null | 'busy' | 'denied'> {
@@ -185,34 +497,27 @@ export async function fetchSaraSpeech(text: string): Promise<Blob | null | 'busy
   }
 }
 
-async function decodeAudio(ctx: AudioContext, blob: Blob): Promise<AudioBuffer> {
-  const bytes = await blob.arrayBuffer()
-  return ctx.decodeAudioData(bytes.slice(0))
+/**
+ * Replay the chunks already fetched, from this tap, with no await first.
+ * Returns false when there is nothing cached, so the caller can unlock and
+ * fetch again inside the same tap.
+ */
+export function playCachedSaraSpeech(): boolean {
+  const current = engine
+  if (!current || (current.speech && !current.closed)) return false
+  const first = current.urls[0] ?? current.slots[0]?.url ?? null
+  if (!first) return false
+  current.blocked = false
+  current.closed = false
+  current.started = false
+  current.waiting = false
+  current.index = 0
+  current.opts = current.opts ?? {}
+  assignSrcAndPlay(current, first)
+  return true
 }
 
-type SpeakOpts = {
-  onStart?: () => void
-  onEnd?: () => void
-  onLevel?: (level: number) => void
-  onError?: (message: string) => void
-}
-
-function startLevels(current: Player, gen: number, opts: SpeakOpts): void {
-  const tick = () => {
-    if (!player || gen !== player.generation) {
-      emitLevel(0)
-      opts.onLevel?.(0)
-      return
-    }
-    const level = Math.min(1, rmsLevel(current.analyser) * 7.2)
-    emitLevel(level)
-    opts.onLevel?.(level)
-    current.raf = requestAnimationFrame(tick)
-  }
-  current.raf = requestAnimationFrame(tick)
-}
-
-export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<void> {
+function startSpeak(text: string, opts: SpeakOpts, holding: boolean): void {
   if (!isVoiceReady() || isSaraMuted()) {
     opts.onEnd?.()
     return
@@ -222,104 +527,82 @@ export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<voi
     opts.onEnd?.()
     return
   }
-
-  const current = ensurePlayer()
+  const current = ensureEngine()
   if (!current) {
     opts.onEnd?.()
     return
   }
+
   current.generation += 1
   const gen = current.generation
-  stopLevels(current)
-  stopSpeechSources(current)
+  current.opts = opts
+  current.closed = false
+  current.blocked = false
+  current.started = false
+  current.waiting = false
+  current.speech = false
+  current.holding = holding
+  current.index = 0
+  current.chunkCount = chunks.length
+  current.slots = chunks.map(() => ({ url: null, error: null }))
+  revokeUrls(current)
+  current.urls = chunks.map(() => null)
+  clearStall(current)
 
   const jobs = chunks.map((chunk) => fetchSaraSpeech(chunk))
-  let scheduled = 0
-  let finished = 0
-  let started = false
-  let scheduling = true
-  let nextTime = 0
-  let closed = false
-
-  const finish = () => {
-    if (closed || gen !== current.generation) return
-    closed = true
-    stopLevels(current)
-    emitLevel(0)
-    opts.onLevel?.(0)
-    opts.onEnd?.()
-  }
-
-  const fail = (message: string) => {
-    scheduling = false
-    opts.onError?.(message)
-    if (!started || finished >= scheduled) finish()
-  }
-
   for (let i = 0; i < jobs.length; i += 1) {
-    if (gen !== current.generation) return
-    const blob = await jobs[i]
-    if (gen !== current.generation) return
-    if (blob === 'busy') {
-      fail(SARA_BUSY_MESSAGE)
-      return
-    }
-    if (blob === 'denied') {
-      fail(SARA_UNKNOWN_PASS_MESSAGE)
-      return
-    }
-    if (!blob) {
-      fail(SARA_VOICE_OFFLINE)
-      return
-    }
-
-    let audioBuf: AudioBuffer
-    try {
-      audioBuf = await decodeAudio(current.ctx, blob)
-    } catch {
-      fail(SARA_VOICE_OFFLINE)
-      return
-    }
-    if (gen !== current.generation) return
-
-    try {
-      if (current.ctx.state === 'suspended') await current.ctx.resume()
-    } catch {
-      /* play anyway if the context is already running */
-    }
-    if (current.ctx.state === 'suspended') {
-      fail(SARA_VOICE_OFFLINE)
-      return
-    }
-
-    const source = current.ctx.createBufferSource()
-    source.buffer = audioBuf
-    source.connect(current.analyser)
-    const now = current.ctx.currentTime
-    const when = started ? Math.max(nextTime, now + 0.01) : now + 0.02
-    try {
-      source.start(when)
-    } catch {
-      fail(SARA_VOICE_OFFLINE)
-      return
-    }
-    nextTime = when + (Number.isFinite(audioBuf.duration) ? audioBuf.duration : 0)
-    scheduled += 1
-    current.speech.add(source)
-    source.onended = () => {
-      current.speech.delete(source)
-      if (gen !== current.generation) return
-      finished += 1
-      if (!scheduling && finished >= scheduled) finish()
-    }
-    if (!started) {
-      started = true
-      opts.onStart?.()
-      startLevels(current, gen, opts)
-    }
+    void jobs[i].then((blob) => {
+      acceptChunk(gen, i, blob)
+    })
   }
+}
 
-  scheduling = false
-  if (gen !== current.generation) return
-  if (!started || finished >= scheduled) finish()
+/** True once the first held or playing chunk has a blob URL. */
+export function saraSpeechChunkReady(): boolean {
+  const current = engine
+  if (!current || current.closed) return false
+  return Boolean(current.slots[0]?.url)
+}
+
+/**
+ * Fetch chunks without playing. Does not pause the element, so an unlock
+ * from the same tap stays valid until release or an explicit stop.
+ */
+export function holdSaraSpeech(text: string, opts: SpeakOpts = {}): void {
+  startSpeak(text, opts, true)
+}
+
+/** Play a held reply. Later chunks still advance on ended. */
+export function releaseHeldSaraSpeech(): boolean {
+  const current = engine
+  if (!current || current.closed || !current.holding) return false
+  current.holding = false
+  if (current.blocked || current.speech) return current.speech
+  const slot = current.slots[0]
+  if (slot?.error) {
+    failFetch(current, slot.error)
+    return false
+  }
+  if (slot?.url) {
+    current.index = 0
+    assignSrcAndPlay(current, slot.url)
+    return true
+  }
+  return false
+}
+
+/** Discard a held reply without pausing. In-flight fetches are ignored. */
+export function dropHeldSaraSpeech(): void {
+  const current = engine
+  if (!current || !current.holding) return
+  current.holding = false
+  current.generation += 1
+  current.closed = true
+  current.speech = false
+  current.waiting = false
+  revokeUrls(current)
+}
+
+export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<void> {
+  startSpeak(text, opts, false)
 }

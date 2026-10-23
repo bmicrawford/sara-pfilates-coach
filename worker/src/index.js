@@ -13,6 +13,7 @@ import {
   authorizePaidRequest,
   clientIpFromHeaders,
   denialExtraHeaders,
+  didUnavailableDecision,
   kvCounterStore,
   paidEndpoint,
   passFromParts,
@@ -169,6 +170,10 @@ export default {
             apiKey: env.DID_API_KEY,
             agentId: env.DID_AGENT_ID,
           })
+          if (minted.capacity) {
+            const denied = didUnavailableDecision()
+            return respond(denied.status, denied.body, origin, denialExtraHeaders(denied))
+          }
           const out = talkJson(200, streamStartResponse(minted), origin)
           return new Response(out.body, { status: out.status, headers: out.headers })
         } catch {
@@ -205,6 +210,10 @@ export default {
         apiKey: env.DID_API_KEY,
         imageUrl: env.SARA_AVATAR_URL,
       })
+      if (talked.capacity) {
+        const denied = didUnavailableDecision()
+        return respond(denied.status, denied.body, origin, denialExtraHeaders(denied))
+      }
       const out = talkJson(200, talkStartResponse(talked), origin)
       return new Response(out.body, { status: out.status, headers: out.headers })
     }

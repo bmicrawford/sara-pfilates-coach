@@ -43,7 +43,7 @@ type AgentManagerLike = {
 
 export type SaraStreamStatus = 'live' | 'unavailable' | 'session_capped'
 export type SaraStreamSpeakResult = 'heard' | 'fallback'
-export type SaraStreamVoicePath = 'idle' | 'pending' | 'did' | 'ara'
+export type SaraStreamVoicePath = 'idle' | 'pending' | 'did' | 'ara' | 'visual'
 
 type StreamCallbacks = {
   onTalking?: (talking: boolean) => void
@@ -69,6 +69,7 @@ export function streamVideoShouldBeMuted(opts: {
   videoLive?: boolean
 }): boolean {
   if (opts.userMuted) return true
+  if (opts.voicePath === 'visual') return true
   return !(opts.voicePath === 'did' && opts.videoLive)
 }
 
@@ -109,9 +110,14 @@ let streamWanted = false
 let releaseTimer: number | null = null
 const playTimers = new Set<number>()
 const listeners: StreamCallbacks = {}
-/** Heard-voice state. did + live frames unmute; pending stays silent; ara remutes. */
+/** Heard-voice state. did + live frames unmute; pending stays silent; ara remutes. visual stays muted. */
 let voicePath: SaraStreamVoicePath = 'idle'
 let fallbackLocked = false
+/**
+ * iPhone WebRTC audio is silenced by the hardware Silent switch. When set,
+ * live frames stay a muted visual and ara on the media element is the voice.
+ */
+let keepStreamMuted = false
 /** Speak START / a real speak result — not enough to unmute without frames. */
 let speakingStarted = false
 /** Ask Sara mute preference — kept here so this module does not import speakSara. */
@@ -300,6 +306,15 @@ function setVoicePath(next: SaraStreamVoicePath) {
   if (videoEl) applyHeardMute(videoEl)
 }
 
+export function setSaraStreamKeepMuted(keep: boolean): void {
+  keepStreamMuted = keep
+}
+
+/** Speech frames are on screen (speak started, decoded, not paused). */
+export function isSaraStreamSpeechLive(): boolean {
+  return framesArePlayable()
+}
+
 function resolveAvReady(ready: boolean) {
   const waiters = avReadyWaiters.splice(0, avReadyWaiters.length)
   waiters.forEach((fn) => fn(ready))
@@ -307,9 +322,19 @@ function resolveAvReady(ready: boolean) {
 
 function maybePromoteHeard() {
   if (fallbackLocked) return
-  if (voicePath !== 'pending' && voicePath !== 'did') return
+  if (voicePath !== 'pending' && voicePath !== 'did' && voicePath !== 'visual') return
   if (!speakingStarted || !streamHasLiveFrames()) {
     if (videoEl) applyHeardMute(videoEl)
+    return
+  }
+  if (keepStreamMuted || voicePath === 'visual') {
+    if (voicePath !== 'visual') setVoicePath('visual')
+    if (videoEl) {
+      applyHeardMute(videoEl)
+      schedulePlay(videoEl)
+    }
+    listeners.onTalking?.(true)
+    resolveAvReady(true)
     return
   }
   setVoicePath('did')
@@ -330,7 +355,7 @@ function framesArePlayable(): boolean {
 }
 
 function waitForAvReady(): Promise<boolean> {
-  if (voicePath === 'did' && framesArePlayable()) return Promise.resolve(true)
+  if ((voicePath === 'did' || voicePath === 'visual') && framesArePlayable()) return Promise.resolve(true)
   return new Promise((resolve) => {
     const started = Date.now()
     let settled = false
@@ -345,7 +370,7 @@ function waitForAvReady(): Promise<boolean> {
     }
     const onReady = (ready: boolean) => finish(ready)
     const poll = window.setInterval(() => {
-      if (voicePath === 'did' && framesArePlayable()) {
+      if ((voicePath === 'did' || voicePath === 'visual') && framesArePlayable()) {
         finish(true)
         return
       }
@@ -383,7 +408,7 @@ function scheduleTalkingEnd(result: unknown, gen: number) {
     window.setTimeout(() => {
       if (gen !== speakGen) return
       listeners.onTalking?.(false)
-      if (voicePath === 'did') setVoicePath('idle')
+      if (voicePath === 'did' || voicePath === 'visual') setVoicePath('idle')
     }, Math.round(duration * 1000) + 250),
   )
 }
@@ -578,8 +603,8 @@ export function replaySaraStreamVideo(): void {
   if (videoEl) schedulePlay(videoEl)
 }
 
-/** Remute after an unreachable Grok reply or when ara takes over. */
-export function settleSaraStreamVoice(path: Exclude<SaraStreamVoicePath, 'pending' | 'did'>): void {
+/** Remute after an unreachable Grok reply, when ara takes over, or for muted visuals. */
+export function settleSaraStreamVoice(path: 'idle' | 'ara' | 'visual'): void {
   setVoicePath(path)
   if (videoEl) applyHeardMute(videoEl)
 }
@@ -759,7 +784,7 @@ export async function connectSaraStream(): Promise<boolean> {
             listeners.onTalking?.(talking)
             if (!talking) {
               speakingStarted = false
-              if (voicePath === 'did') setVoicePath('idle')
+              if (voicePath === 'did' || voicePath === 'visual') setVoicePath('idle')
             }
           },
           onFirstAudioDetected() {
@@ -780,12 +805,14 @@ export async function connectSaraStream(): Promise<boolean> {
               deadMode = true
               setReady(false)
               resolveAvReady(false)
-              if (voicePath === 'did') markVoiceFallback('peer closed without playable video — falling back to ara')
+              if (voicePath === 'did' || voicePath === 'visual') {
+                markVoiceFallback('peer closed without playable video — falling back to ara')
+              }
             } else if (s === 'disconnected' && !elementHoldsStream()) {
               logStream('peer has no video srcObject — keeping still', s)
               setReady(false)
               // Intermediate 400 flap: do not resolveAvReady(false) — the 200 retry may attach.
-              if (voicePath === 'did') {
+              if (voicePath === 'did' || voicePath === 'visual') {
                 markVoiceFallback('peer has no video srcObject — falling back to ara')
               }
             }
@@ -865,6 +892,11 @@ function markHeard(result: unknown, gen: number): SaraStreamSpeakResult {
   if (gen !== speakGen || fallbackLocked) return 'fallback'
   speakingStarted = true
   maybePromoteHeard()
+  if (voicePath === 'visual' && framesArePlayable()) {
+    scheduleTalkingEnd(result, gen)
+    logStream('D-ID video is muted for visuals — ara stays the heard voice')
+    return 'heard'
+  }
   if (voicePath !== 'did' || !framesArePlayable()) return 'fallback'
   scheduleTalkingEnd(result, gen)
   logStream('D-ID stream audio is the heard voice — skipping ara')
@@ -872,7 +904,7 @@ function markHeard(result: unknown, gen: number): SaraStreamSpeakResult {
 }
 
 function markVoiceFallback(reason: string, detail?: unknown): SaraStreamSpeakResult {
-  const wasHeard = voicePath === 'did'
+  const wasHeard = voicePath === 'did' || voicePath === 'visual'
   setVoicePath('ara')
   if (videoEl) applyHeardMute(videoEl)
   logStream(reason, detail)
@@ -983,6 +1015,7 @@ export async function speakSaraStream(text: string): Promise<SaraStreamSpeakResu
 export function stopSaraStream(): void {
   speakGen += 1
   fallbackLocked = false
+  keepStreamMuted = false
   speakingStarted = false
   avReadyWaiters.splice(0, avReadyWaiters.length).forEach((fn) => fn(false))
   clearTalkingEndTimers()

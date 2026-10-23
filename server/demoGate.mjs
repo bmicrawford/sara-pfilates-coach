@@ -1,8 +1,10 @@
 /**
  * Public demo pass gate for paid Ask Sara endpoints.
  *
- * DEMO-SARA-001 is voice-only (no D-ID) and rate-limited.
- * Counters are short-TTL keys in the existing REDEEM_TOKENS KV binding.
+ * DEMO-SARA-001 stays a prospect audience (`voiceOnly`) and is rate-limited.
+ * It may open D-ID again under the `did*` caps below. Ask and speak caps
+ * are unchanged. Counters and the concurrent-session lease are short-TTL
+ * keys in the existing REDEEM_TOKENS KV binding.
  * No new namespace and no new secret. Do not log passes, IPs, or secrets.
  *
  * Guardrails (server/saraGuardrails.mjs) and research
@@ -28,10 +30,18 @@ export const DEMO_LIMITS = {
   speakPerIpPerDay: 150,
   globalAsksPerDay: 3000,
   globalSpeaksPerDay: 3000,
+  // D-ID Lite allows very few simultaneous streams, and credits are limited.
+  // POST /stream and POST /talk share this budget. GET /talk does not.
+  didPerIpPerHour: 3,
+  didPerIpPerDay: 6,
+  globalDidPerDay: 150,
+  didConcurrentMax: 2,
 }
 
 export const DEMO_HOUR_TTL_SECONDS = 2 * 60 * 60
 export const DEMO_DAY_TTL_SECONDS = 2 * 24 * 60 * 60
+/** How long one demo WebRTC session holds a global concurrency slot. */
+export const DEMO_DID_LEASE_TTL_SECONDS = 90
 
 export function paidEndpoint(method, pathname) {
   const verb = String(method || '').toUpperCase()
@@ -156,11 +166,94 @@ function capsFor(endpoint, limits) {
       globalPerDay: limits.globalAsksPerDay,
     }
   }
+  if (endpoint === 'did') {
+    return {
+      perIpPerHour: limits.didPerIpPerHour,
+      perIpPerDay: limits.didPerIpPerDay,
+      globalPerDay: limits.globalDidPerDay,
+    }
+  }
   return {
     perIpPerHour: limits.speakPerIpPerHour,
     perIpPerDay: limits.speakPerIpPerDay,
     globalPerDay: limits.globalSpeaksPerDay,
   }
+}
+
+/**
+ * Quiet 429. Empty message so the phone does not speak the busy line or
+ * show an error — it drops to ara voice-only.
+ */
+function denyDid(retryAfter, scope) {
+  return {
+    allow: false,
+    status: 429,
+    retryAfter,
+    body: {
+      ok: false,
+      error: 'did_unavailable',
+      message: '',
+      reply: '',
+      ...(scope ? { scope } : {}),
+    },
+  }
+}
+
+/** Same body the gate uses when a demo D-ID cap or a D-ID capacity error trips. */
+export function didUnavailableDecision(nowMs = Date.now()) {
+  return denyDid(Math.min(secondsUntilNextHour(nowMs), DEMO_DID_LEASE_TTL_SECONDS), 'did')
+}
+
+function leaseKey(slot) {
+  return `rl:demo:did:lease:${slot}`
+}
+
+async function acquireDidLease(counterStore, nowMs, limits) {
+  const max = Math.max(1, Math.floor(Number(limits.didConcurrentMax) || 2))
+  const ttl = DEMO_DID_LEASE_TTL_SECONDS
+  const expiry = Number(nowMs) + ttl * 1000
+  for (let i = 0; i < max; i += 1) {
+    const key = leaseKey(i)
+    const heldUntil = Number(await counterStore.get(key))
+    if (!Number.isFinite(heldUntil) || heldUntil <= Number(nowMs)) {
+      await counterStore.put(key, String(expiry), ttl)
+      return true
+    }
+  }
+  return false
+}
+
+/** Check the shared D-ID budget, then optionally take a concurrency lease, then count. */
+async function consumeDidSession({ counterStore, ip, nowMs, limits, takeLease }) {
+  const caps = capsFor('did', limits)
+  const hash = await demoIpHash(ip)
+  const hour = hourBucket(nowMs)
+  const day = dayBucket(nowMs)
+  const hourKey = counterKey('did', 'h', hash, hour)
+  const dayKey = counterKey('did', 'd', hash, day)
+  const globalKey = counterKey('did', 'global', hash, day)
+
+  const hourCount = await readCount(counterStore, hourKey)
+  if (hourCount >= caps.perIpPerHour) {
+    return denyDid(secondsUntilNextHour(nowMs), 'ip_hour')
+  }
+  const dayCount = await readCount(counterStore, dayKey)
+  if (dayCount >= caps.perIpPerDay) {
+    return denyDid(secondsUntilNextUtcDay(nowMs), 'ip_day')
+  }
+  const globalCount = await readCount(counterStore, globalKey)
+  if (globalCount >= caps.globalPerDay) {
+    return denyDid(secondsUntilNextUtcDay(nowMs), 'global_day')
+  }
+  if (takeLease) {
+    const leased = await acquireDidLease(counterStore, nowMs, limits)
+    if (!leased) return denyDid(DEMO_DID_LEASE_TTL_SECONDS, 'concurrent')
+  }
+
+  await counterStore.put(hourKey, String(hourCount + 1), DEMO_HOUR_TTL_SECONDS)
+  await counterStore.put(dayKey, String(dayCount + 1), DEMO_DAY_TTL_SECONDS)
+  await counterStore.put(globalKey, String(globalCount + 1), DEMO_DAY_TTL_SECONDS)
+  return null
 }
 
 async function readCount(store, key) {
@@ -247,7 +340,25 @@ export async function authorizePaidRequest({
   }
 
   if (kind === 'demo' && (endpoint === 'stream' || endpoint === 'talk')) {
-    return deny(403, 'demo_voice_only', DEMO_VOICE_ONLY_MESSAGE)
+    const verb = String(method || '').toUpperCase()
+    // Polling a Talks clip is not a new session. WebRTC (/stream) takes the lease.
+    if (!(endpoint === 'talk' && verb === 'GET')) {
+      if (!counterStore || typeof counterStore.get !== 'function') {
+        return deny(503, 'rate_limit_unavailable', SARA_BUSY_MESSAGE)
+      }
+      try {
+        const limited = await consumeDidSession({
+          counterStore,
+          ip,
+          nowMs,
+          limits,
+          takeLease: endpoint === 'stream',
+        })
+        if (limited) return limited
+      } catch {
+        return deny(503, 'rate_limit_unavailable', SARA_BUSY_MESSAGE)
+      }
+    }
   }
 
   if (kind === 'demo' && (endpoint === 'ask' || endpoint === 'speak')) {

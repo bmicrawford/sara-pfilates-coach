@@ -15,6 +15,7 @@ import {
   authorizePaidRequest,
   clientIpFromHeaders,
   denialExtraHeaders,
+  didUnavailableDecision,
   memoryCounterStore,
   paidEndpoint,
   passFromParts,
@@ -206,6 +207,16 @@ const server = createServer(async (req, res) => {
           apiKey: process.env.DID_API_KEY,
           agentId: process.env.DID_AGENT_ID,
         })
+        if (minted.capacity) {
+          const denied = didUnavailableDecision()
+          sendJson(
+            res,
+            { status: denied.status, body: denied.body },
+            origin,
+            { 'Cache-Control': 'no-store', ...denialExtraHeaders(denied) },
+          )
+          return
+        }
         sendTalkJson(res, streamStartResponse(minted), origin)
       } catch {
         sendTalkJson(res, streamStartResponse({ ok: false, reason: 'stream_failed' }), origin)
@@ -242,6 +253,16 @@ const server = createServer(async (req, res) => {
         apiKey: process.env.DID_API_KEY,
         imageUrl: process.env.SARA_AVATAR_URL,
       })
+      if (talked.capacity) {
+        const denied = didUnavailableDecision()
+        sendJson(
+          res,
+          { status: denied.status, body: denied.body },
+          origin,
+          { 'Cache-Control': 'no-store', ...denialExtraHeaders(denied) },
+        )
+        return
+      }
       sendTalkJson(res, talkStartResponse(talked), origin)
     } catch {
       sendTalkJson(res, talkStartResponse({ ok: false, reason: 'talk_failed' }), origin)

@@ -3,6 +3,12 @@ import { APPROVED_CLAIMS } from '../../server/saraGuardrails.mjs'
 import { SARA_BUSY_MESSAGE as SERVER_BUSY } from '../../server/demoGate.mjs'
 import { askIntro, askEmptyHint, homeIntro, PROSPECT_ASK_GREETING, PROSPECT_HOME_NOTE, PROSPECT_NO_IDENTITY, PROSPECT_REDEEM_NOTE, PROSPECT_WELCOME, promptsForNameOrDob, redeemAsksForEmail } from './prospectCopy.ts'
 import { isDemoPass, isDemoVoiceOnly } from './demoPass.ts'
+import {
+  DEMO_DID_FRAME_BUDGET_MS,
+  DEMO_DID_SYNC_MS,
+  didWebRtcSilencedBySilentSwitch,
+  planDemoVoice,
+} from './demoVoicePlan.ts'
 import { DEMO_DEVICE_EMAIL, DEMO_TOKEN, redeemDemoPass } from './mockServer.ts'
 import { isSaraBusy, messageForSaraStatus, SARA_BUSY_MESSAGE, SARA_UNKNOWN_PASS_MESSAGE } from './saraGate.ts'
 
@@ -70,7 +76,73 @@ assert(
   'unknown pass becomes a chat line instead of a crash',
 )
 assert(messageForSaraStatus(403, { error: 'demo_voice_only' }) === null, 'stream refusal is not spoken as a chat reply')
+assert(
+  messageForSaraStatus(429, { error: 'did_unavailable', message: '', reply: '' }) === null,
+  'a D-ID cap 429 is not spoken and is not the busy line',
+)
 assert(messageForSaraStatus(200, { reply: 'Hello' }) === null, 'a normal reply is not treated as a gate')
+
+assert(DEMO_DID_FRAME_BUDGET_MS === 3000, 'demo lip-sync budget is 3 seconds')
+assert(DEMO_DID_SYNC_MS === 500, 'muted D-ID video only stays if ara starts within 500ms')
+assert(didWebRtcSilencedBySilentSwitch('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'), 'iPhone WebRTC is treated as silenced by the Silent switch')
+assert(
+  didWebRtcSilencedBySilentSwitch('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'MacIntel', 5),
+  'iPadOS desktop UA is treated as silenced',
+)
+assert(!didWebRtcSilencedBySilentSwitch('Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0.0.0'), 'desktop WebRTC is not treated as silenced')
+
+const basePlan = {
+  araStarted: false,
+  didFailed: false,
+  budgetExceeded: false,
+  speechFramesLive: false,
+  chunkReady: false,
+  framesReadyAt: null,
+  chunkReadyAt: null,
+  now: 10_000,
+  iosSilentSwitch: false,
+}
+assert(planDemoVoice(basePlan) === 'wait', 'demo waits while neither ara nor D-ID frames are ready')
+assert(
+  planDemoVoice({ ...basePlan, chunkReady: true, chunkReadyAt: 10_000 }) === 'ara',
+  'first ara chunk plays immediately when D-ID frames are not live',
+)
+assert(
+  planDemoVoice({ ...basePlan, budgetExceeded: true }) === 'ara',
+  'the 3s budget falls back to ara when frames never arrive',
+)
+assert(planDemoVoice({ ...basePlan, didFailed: true, speechFramesLive: true, framesReadyAt: 9000 }) === 'ara', 'any D-ID failure falls back to ara')
+assert(planDemoVoice({ ...basePlan, araStarted: true, speechFramesLive: true }) === 'ara', 'demo does not switch to D-ID mid-sentence')
+assert(
+  planDemoVoice({ ...basePlan, speechFramesLive: true, framesReadyAt: 9000 }) === 'did-audio',
+  'desktop uses D-ID audio when speech frames are live before ara',
+)
+assert(
+  planDemoVoice({
+    ...basePlan,
+    iosSilentSwitch: true,
+    speechFramesLive: true,
+    chunkReady: true,
+    framesReadyAt: 10_000,
+    chunkReadyAt: 10_400,
+  }) === 'did-visual-ara',
+  'iPhone keeps ara and uses muted D-ID video when they start together',
+)
+assert(
+  planDemoVoice({
+    ...basePlan,
+    iosSilentSwitch: true,
+    speechFramesLive: true,
+    chunkReady: true,
+    framesReadyAt: 8_000,
+    chunkReadyAt: 10_000,
+  }) === 'ara',
+  'iPhone prefers ara when the D-ID mouth is already ahead',
+)
+assert(
+  planDemoVoice({ ...basePlan, iosSilentSwitch: true, speechFramesLive: true, framesReadyAt: 9_500 }) === 'wait',
+  'iPhone waits for the ara chunk when frames just became live',
+)
 
 const memory = new Map<string, string>()
 ;(globalThis as { localStorage?: Storage }).localStorage = {
@@ -118,13 +190,19 @@ const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')
 const diary = readFileSync(new URL('../pages/DiaryReport.tsx', import.meta.url), 'utf8')
 const exercise = readFileSync(new URL('../pages/ExerciseLog.tsx', import.meta.url), 'utf8')
 
-assert(/voiceOnly/.test(askSrc) && /isDemoVoiceOnly/.test(askSrc), 'Ask Sara derives voice-only from the demo pass')
-assert(/if \(voiceOnly\)/.test(askSrc) && /playAra\(text\)/.test(askSrc), 'demo replies use ara')
-assert(/if \(!voiceOnly\) \{[\s\S]*?connectSaraStream\(\)/.test(askSrc), 'D-ID connect stays behind the paid branch')
+assert(/voiceOnly/.test(askSrc) && /isDemoVoiceOnly/.test(askSrc), 'Ask Sara derives prospect copy from the demo pass')
+assert(/if \(voiceOnly\)/.test(askSrc) && /speakDemoReply\(text\)/.test(askSrc), 'demo replies try D-ID then ara')
+assert(/playAra\(text\)/.test(askSrc), 'paid replies still fall back to ara')
+assert(/connectSaraStream\(\)/.test(askSrc), 'Send starts D-ID for the demo pass too')
+assert(/DEMO_DID_FRAME_BUDGET_MS/.test(askSrc) && /planDemoVoice/.test(askSrc), 'demo lip-sync uses the 3s planner')
+assert(/dropHeldSaraSpeech/.test(askSrc) && /releaseHeldSaraSpeech/.test(askSrc), 'demo plays one voice, never both')
+assert(/did-visual-ara/.test(askSrc) && /settleSaraStreamVoice\('ara'\)/.test(askSrc), 'iPhone can keep muted video or hide a desynced stream')
+assert(/live && streamCapped && !voiceOnly/.test(askSrc), 'demo D-ID fallback does not show the session-cap note')
 {
-  const mount = askSrc.match(/useEffect\(\(\) => \{[\s\S]*?preloadSaraStream\(\)/)?.[0] ?? ''
-  assert(/if \(voiceOnly\)/.test(mount), 'demo mount returns before SDK preload')
-  assert(!/connectSaraStream/.test(mount.slice(0, mount.indexOf('if (voiceOnly)'))), 'nothing before the voice-only check connects')
+  const mount = askSrc.match(/setSaraStreamCallbacks\([\s\S]*?preloadSaraStream\(\)/)?.[0] ?? ''
+  assert(/preloadSaraStream\(\)/.test(mount), 'demo mount preloads the SDK')
+  assert(!/connectSaraStream/.test(mount), 'demo mount does not open a D-ID session')
+  assert(!/if \(voiceOnly\) \{\s*releaseSaraStream/.test(askSrc), 'demo mount does not skip SDK preload')
 }
 assert(/isSaraBusy\(reply\)/.test(askSrc), 'a 429 reply does not start playback')
 assert(/pass: currentSaraPass\(\)/.test(askClient), 'Ask Sara sends the pass, not an email')
