@@ -1,8 +1,10 @@
 /**
  * Headless demo of Ask Sara against the built app.
  * Mocks /ask and /speak. Proves the listening state shows during the
- * round trip, audio is unlocked inside the Send tap, speech is fetched
- * in parallel and scheduled gaplessly, and the demo path does not open D-ID.
+ * round trip, one HTMLAudioElement is unlocked inside the Send tap,
+ * speech is fetched in parallel and swapped on ended, the glow shows
+ * only while that element is playing, and a rejected play() shows
+ * Tap to hear Sara. The demo path does not open D-ID.
  *
  *   npm run build && npm run smoke:voice-ui
  */
@@ -211,17 +213,50 @@ try {
   })
   await send('Page.addScriptToEvaluateOnNewDocument', {
     source: `
-      window.__saraAudio = { starts: [], resumes: 0 };
-      const origStart = AudioBufferSourceNode.prototype.start;
-      AudioBufferSourceNode.prototype.start = function(when) {
-        window.__saraAudio.starts.push(typeof when === 'number' ? when : 0);
-        return origStart.apply(this, arguments);
+      window.__saraMedia = { plays: [], srcs: [], ended: [], contexts: 0 };
+      const origPlay = HTMLAudioElement.prototype.play;
+      HTMLAudioElement.prototype.play = function() {
+        const rec = { src: String(this.src || ''), t: performance.now(), ok: false, err: '' };
+        window.__saraMedia.plays.push(rec);
+        const pending = origPlay.apply(this, arguments);
+        if (pending && typeof pending.then === 'function') {
+          pending.then(() => { rec.ok = true; }).catch((err) => { rec.err = String(err && err.name || err); });
+        } else {
+          rec.ok = true;
+        }
+        return pending;
       };
-      const origResume = AudioContext.prototype.resume;
-      AudioContext.prototype.resume = function() {
-        window.__saraAudio.resumes += 1;
-        return origResume.apply(this, arguments);
+      const srcDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+      Object.defineProperty(HTMLMediaElement.prototype, 'src', {
+        configurable: true,
+        enumerable: true,
+        get() { return srcDesc.get.call(this); },
+        set(value) {
+          window.__saraMedia.srcs.push({ src: String(value || ''), t: performance.now() });
+          srcDesc.set.call(this, value);
+        },
+      });
+      const origAdd = HTMLMediaElement.prototype.addEventListener;
+      HTMLMediaElement.prototype.addEventListener = function(type, fn, opts) {
+        if (type === 'ended' && typeof fn === 'function' && !fn.__saraWrapped) {
+          const wrapped = function(ev) {
+            window.__saraMedia.ended.push(performance.now());
+            return fn.call(this, ev);
+          };
+          wrapped.__saraWrapped = true;
+          return origAdd.call(this, type, wrapped, opts);
+        }
+        return origAdd.call(this, type, fn, opts);
       };
+      const OrigAC = window.AudioContext;
+      if (OrigAC) {
+        function SaraAudioContext() {
+          window.__saraMedia.contexts += 1;
+          return new OrigAC(...arguments);
+        }
+        SaraAudioContext.prototype = OrigAC.prototype;
+        window.AudioContext = SaraAudioContext;
+      }
     `,
   })
 
@@ -253,6 +288,8 @@ try {
 
   const ready = await waitFor(evaluate, `Boolean(document.querySelector('textarea'))`)
   assert(ready, 'Ask Sara composer is on the built demo page')
+  const testVoice = await evaluate(`Boolean(document.querySelector('[data-sara-test-voice]'))`)
+  assert(testVoice, 'demo pass shows a Test voice tap')
 
   await evaluate(`(() => {
     const el = document.querySelector('textarea');
@@ -273,24 +310,44 @@ try {
 
   await sleep(250)
   const listening = await evaluate(`(() => {
-    const phase = document.querySelector('[data-sara-phase]')?.getAttribute('data-sara-phase');
+    const root = document.querySelector('[data-sara-phase]');
+    const phase = root?.getAttribute('data-sara-phase');
     const text = document.body.innerText;
+    const voice = document.querySelectorAll('audio[data-sara-voice]');
+    const plays = window.__saraMedia.plays.map((row) => ({
+      kind: row.src.startsWith('blob:') ? 'blob' : row.src.startsWith('data:audio') ? 'silent' : 'other',
+      ok: row.ok,
+    }));
     return {
       phase,
       listening: text.includes('Sara is listening'),
       reply: text.includes('Sip water through the day'),
-      starts: window.__saraAudio?.starts?.length || 0,
-      resumes: window.__saraAudio?.resumes || 0,
       button: document.querySelector('button[type="submit"]')?.textContent || '',
+      elements: voice.length,
+      playsInline: voice[0]?.playsInline === true,
+      preload: voice[0]?.preload || '',
+      inDom: Boolean(voice[0]?.isConnected),
+      plays,
+      audible: root?.getAttribute('data-sara-audible') === 'true',
+      contexts: window.__saraMedia.contexts,
     };
   })()`)
   assert(listening.listening, 'listening copy is on screen while /ask is still running')
   assert(!listening.reply, 'the reply is not shown before /ask returns')
   assert(listening.phase === 'listening', 'portrait phase is listening during the round trip')
   assert(/Sara is listening/.test(listening.button), 'the send button says Sara is listening')
-  assert(listening.starts >= 1, 'a silent buffer starts inside the Send tap, before /ask returns')
-  assert(listening.resumes >= 1, 'AudioContext.resume runs inside the Send tap')
+  assert(listening.elements === 1, 'one persistent audio element exists after the Send tap')
+  assert(listening.playsInline && listening.preload === 'auto' && listening.inDom, 'that element is in the DOM, playsInline, preload auto')
+  assert(listening.plays.some((row) => row.kind === 'silent'), 'silent data URI play() runs inside the Send tap, before /ask returns')
+  assert(!listening.plays.some((row) => row.kind === 'blob'), 'speech play() waits until /speak bytes exist')
+  assert(!listening.audible, 'the glow stays off while she is only listening')
+  assert(listening.contexts === 0, 'Send does not open an AudioContext')
   assert(traffic.askDone === 0, '/ask has not returned yet, so playback was not waiting on the reply')
+  const voiceEl = await evaluate(`(() => {
+    window.__saraVoiceEl = document.querySelector('audio[data-sara-voice]');
+    return Boolean(window.__saraVoiceEl);
+  })()`)
+  assert(voiceEl, 'the voice element is the node later chunks reuse')
   mkdirSync(ARTIFACTS, { recursive: true })
   await shot(send, join(ARTIFACTS, 'sara-listening.png'))
 
@@ -307,28 +364,81 @@ try {
   const speaking = await waitFor(
     evaluate,
     `document.querySelector('[data-sara-phase]')?.getAttribute('data-sara-phase') === 'speaking'`,
-    4000,
+    5000,
   )
-  assert(speaking, 'portrait phase switches to speaking when audio is scheduled')
-  await sleep(400)
+  assert(speaking, 'portrait phase switches to speaking when currentTime advances')
+  const glowing = await waitFor(
+    evaluate,
+    `(() => {
+      const root = document.querySelector('[data-sara-phase]');
+      const level = Number(getComputedStyle(root).getPropertyValue('--sara-level') || 0);
+      const glow = root.querySelector('.sara-glow');
+      const opacity = glow ? Number(getComputedStyle(glow).opacity) : 0;
+      return root?.getAttribute('data-sara-audible') === 'true' && level >= 0.25 && level <= 0.9 && opacity > 0.35;
+    })()`,
+    2000,
+  )
+  assert(glowing, 'smoothed glow is visible only once playback is verified')
   const heard = await evaluate(`(() => {
     const root = document.querySelector('[data-sara-phase]');
     const level = Number(getComputedStyle(root).getPropertyValue('--sara-level') || 0);
+    const glow = root.querySelector('.sara-glow');
+    const plays = window.__saraMedia.plays.map((row) => ({
+      kind: row.src.startsWith('blob:') ? 'blob' : row.src.startsWith('data:audio') ? 'silent' : 'other',
+      ok: row.ok,
+      err: row.err,
+    }));
     return {
       level,
-      starts: window.__saraAudio.starts.slice(),
+      opacity: glow ? Number(getComputedStyle(glow).opacity) : 0,
+      audible: root?.getAttribute('data-sara-audible') === 'true',
+      sameElement: document.querySelector('audio[data-sara-voice]') === window.__saraVoiceEl,
+      elements: document.querySelectorAll('audio[data-sara-voice]').length,
+      plays,
       text: document.body.innerText.includes('Sip water through the day'),
       note: document.querySelector('.ask-sara-note')?.textContent || '',
+      fallback: Boolean(document.querySelector('[data-sara-tap-hear]')),
+      contexts: window.__saraMedia.contexts,
     };
   })()`)
   assert(heard.text, 'the reply stays on screen while she speaks')
   assert(!/couldn't reach my voice/i.test(heard.note), 'playback is not blocked after the async /ask')
-  assert(heard.level > 0.05, 'analyser level drives the glow while the tone plays')
-  const speechWhens = heard.starts.filter((when) => when > 0.2)
-  assert(speechWhens.length === 3, 'three sentence buffers are scheduled')
-  const gaps = speechWhens.slice(1).map((when, i) => when - speechWhens[i])
-  assert(gaps.every((gap) => gap > 0.25 && gap < 0.55), `chunks are queued gaplessly (${gaps.map((n) => n.toFixed(3)).join(', ')})`)
+  assert(!heard.fallback, 'tap-to-hear stays hidden when play() works')
+  assert(heard.sameElement && heard.elements === 1, 'chunk playback reuses the same audio element')
+  assert(heard.plays.some((row) => row.kind === 'blob' && row.ok), 'play() succeeded for a /speak blob after the round trip')
+  assert(heard.audible && heard.level >= 0.25 && heard.level <= 0.9 && heard.opacity > 0.35, 'synthetic envelope holds the ring between 0.25 and 0.9 while playing')
+  assert(heard.contexts === 0, 'speech playback still does not open an AudioContext')
   await shot(send, join(ARTIFACTS, 'sara-speaking.png'))
+
+  const swapped = await waitFor(
+    evaluate,
+    `window.__saraMedia.srcs.filter((row) => String(row.src).startsWith('blob:')).length >= 3 && window.__saraMedia.ended.length >= 2`,
+    4000,
+  )
+  assert(swapped, 'each chunk gets its own blob src and earlier chunks reach ended')
+  const gaps = await evaluate(`(() => {
+    const blobs = window.__saraMedia.srcs.filter((row) => String(row.src).startsWith('blob:'));
+    return blobs.slice(1).map((row) => {
+      const prior = window.__saraMedia.ended.filter((t) => t <= row.t).pop();
+      return prior == null ? null : row.t - prior;
+    });
+  })()`)
+  assert(Array.isArray(gaps) && gaps.length === 2 && gaps.every((gap) => gap != null && gap >= 0 && gap < 50), `src swaps inside the ended handler (${JSON.stringify(gaps)})`)
+
+  const quiet = await waitFor(
+    evaluate,
+    `(() => {
+      const root = document.querySelector('[data-sara-phase]');
+      const phase = root?.getAttribute('data-sara-phase');
+      const level = Number(getComputedStyle(root).getPropertyValue('--sara-level') || 0);
+      const glow = root.querySelector('.sara-glow');
+      const opacity = glow ? Number(getComputedStyle(glow).opacity) : 1;
+      return phase !== 'speaking' && root?.getAttribute('data-sara-audible') !== 'true' && level < 0.05 && opacity < 0.2;
+    })()`,
+    4000,
+  )
+  assert(quiet, 'the ring drops back to idle after the element stops')
+  await shot(send, join(ARTIFACTS, 'sara-quiet.png'))
 
   assert(traffic.speaks.length === 3, 'one /speak per chunk, not one per extra sentence past the cap')
   assert(traffic.speaks[0].text === 'Sip water through the day.', 'first /speak is sentence 1 only')
@@ -341,6 +451,49 @@ try {
   const lastRequest = Math.max(...traffic.speaks.map((row) => row.at))
   assert(firstDone > lastRequest, 'all /speak requests are in flight before the first response')
   assert(!traffic.paths.some((path) => path.includes('/stream') || path.includes('/talk')), 'demo path does not open a D-ID session')
+
+  const speaksBeforeReject = traffic.speaks.length
+  await send('Page.reload', { ignoreCache: true })
+  const testReady = await waitFor(evaluate, `Boolean(document.querySelector('[data-sara-test-voice]'))`, 3000)
+  assert(testReady, 'Test voice is back after reload')
+  await evaluate(`(() => {
+    HTMLAudioElement.prototype.play = function() {
+      window.__saraForcedReject = (window.__saraForcedReject || 0) + 1;
+      return Promise.reject(new DOMException('blocked', 'NotAllowedError'));
+    };
+    return true;
+  })()`)
+  const testBox = await evaluate(`(() => {
+    const el = document.querySelector('[data-sara-test-voice]');
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2, disabled: el.disabled };
+  })()`)
+  assert(testBox && testBox.disabled === false, 'Test voice is enabled before the tap')
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: testBox.x, y: testBox.y, button: 'left', clickCount: 1 })
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: testBox.x, y: testBox.y, button: 'left', clickCount: 1 })
+  const fallback = await waitFor(evaluate, `Boolean(document.querySelector('[data-sara-tap-hear]'))`, 4000)
+  assert(fallback, 'tap-to-hear appears when play() rejects')
+  const blocked = await evaluate(`(() => {
+    const root = document.querySelector('[data-sara-phase]');
+    const glow = root?.querySelector('.sara-glow');
+    return {
+      label: document.querySelector('[data-sara-tap-hear]')?.textContent || '',
+      hint: document.querySelector('[data-sara-hear-fallback]')?.innerText || '',
+      audible: root?.getAttribute('data-sara-audible') === 'true',
+      opacity: glow ? Number(getComputedStyle(glow).opacity) : 1,
+      elements: document.querySelectorAll('audio[data-sara-voice]').length,
+      rejects: window.__saraForcedReject || 0,
+    };
+  })()`)
+  assert(blocked.label.trim() === 'Tap to hear Sara', 'the fallback button says Tap to hear Sara')
+  assert(/turn off the Silent switch and turn up the volume/.test(blocked.hint), 'the fallback hints at the Silent switch and volume')
+  assert(!blocked.audible && blocked.opacity < 0.2, 'a rejected play() does not leave the ring flashing')
+  assert(blocked.elements === 1, 'the rejected play() still uses the one element')
+  assert(blocked.rejects >= 1, 'play() was the call that rejected')
+  const testSpeak = traffic.speaks.slice(speaksBeforeReject)
+  assert(testSpeak.length === 1 && testSpeak[0].text === "Hi, it's Sara.", 'Test voice is one /speak of the fixed sentence')
+  assert(testSpeak[0].pass === 'DEMO-SARA-001', 'Test voice sends the demo pass and counts like any other speak')
+  await shot(send, join(ARTIFACTS, 'sara-tap-to-hear.png'))
 
   await send('Emulation.setEmulatedMedia', {
     features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],

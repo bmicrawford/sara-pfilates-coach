@@ -23,7 +23,11 @@ import {
 import {
   isSaraMuted,
   isVoiceReady,
+  playCachedSaraSpeech,
   setSaraMuted,
+  SARA_SILENT_SWITCH_HINT,
+  SARA_TAP_TO_HEAR,
+  SARA_TEST_VOICE_LINE,
   speakSara,
   stopSaraSpeech,
   unlockSaraSpeech,
@@ -56,7 +60,9 @@ export function AskSara() {
   const [streamCapped, setStreamCapped] = useState(false)
   const [muted, setMuted] = useState(() => isSaraMuted())
   const [voiceNote, setVoiceNote] = useState<string | null>(null)
+  const [needsTap, setNeedsTap] = useState(false)
   const bottom = useRef<HTMLDivElement>(null)
+  const retryTextRef = useRef<string | null>(null)
   const mutedRef = useRef(muted)
   mutedRef.current = muted
   /** True while D-ID stream audio is the heard voice — do not let a late STOP cancel ara. */
@@ -82,18 +88,29 @@ export function AskSara() {
 
   const playAra = useCallback((text: string) => {
     if (mutedRef.current || !isVoiceReady() || araPlayingRef.current) return
+    retryTextRef.current = text
     araPlayingRef.current = true
     streamVoiceRef.current = false
     setVoiceNote(null)
+    setNeedsTap(false)
     void speakSara(text, {
-      onStart: () => setSpeaking(true),
+      onStart: () => {
+        setNeedsTap(false)
+        setSpeaking(true)
+      },
       onEnd: () => {
         araPlayingRef.current = false
         setSpeaking(false)
       },
       onError: (message) => {
         araPlayingRef.current = false
+        setSpeaking(false)
         setVoiceNote(message)
+      },
+      onBlocked: () => {
+        araPlayingRef.current = false
+        setSpeaking(false)
+        setNeedsTap(true)
       },
     })
   }, [])
@@ -143,6 +160,34 @@ export function AskSara() {
     stopSaraStream()
     setSpeaking(false)
     setStreamTalking(false)
+    setNeedsTap(false)
+  }
+
+  const testVoice = () => {
+    if (busy) return
+    if (mutedRef.current) {
+      mutedRef.current = false
+      setMuted(false)
+      setSaraMuted(false)
+    }
+    setVoiceNote(null)
+    setNeedsTap(false)
+    haltPlayback()
+    unlockSaraSpeech()
+    playAra(SARA_TEST_VOICE_LINE)
+  }
+
+  const hearFromTap = () => {
+    const played = playCachedSaraSpeech()
+    if (!played) unlockSaraSpeech()
+    setNeedsTap(false)
+    setVoiceNote(null)
+    if (played) {
+      araPlayingRef.current = true
+      return
+    }
+    const text = retryTextRef.current
+    if (text) playAra(text)
   }
 
   const speakReply = (text: string) => {
@@ -262,10 +307,35 @@ export function AskSara() {
           <p className="ask-sara-greeting px-5 pt-0.5 text-center text-sm font-semibold">
             {busy ? <ListeningLine /> : intro.sub}
           </p>
+          {voiceOnly ? (
+            <div className="px-5 pt-2 text-center">
+              <button
+                type="button"
+                data-sara-test-voice="true"
+                className="ask-sara-chip text-xs font-semibold disabled:opacity-40"
+                disabled={busy}
+                onClick={testVoice}
+              >
+                Test voice
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="ask-sara-mid flex min-h-0 flex-1 flex-col justify-end px-5 pb-2 pt-3">
-          {voiceNote ? (
+          {needsTap ? (
+            <div className="ask-sara-hear mb-2 px-3 py-2 text-center" data-sara-hear-fallback="true">
+              <button
+                type="button"
+                data-sara-tap-hear="true"
+                className="rounded-full bg-sage px-4 py-2 text-sm font-semibold text-white"
+                onClick={hearFromTap}
+              >
+                {SARA_TAP_TO_HEAR}
+              </button>
+              <p className="mt-1 text-xs font-semibold leading-snug">{SARA_SILENT_SWITCH_HINT}</p>
+            </div>
+          ) : voiceNote ? (
             <p className="ask-sara-note mb-2 text-center text-xs font-semibold leading-snug">{voiceNote}</p>
           ) : live && streamCapped ? (
             <p className="ask-sara-note mb-2 text-center text-xs font-semibold leading-snug">{SARA_STREAM_CAPPED_NOTE}</p>

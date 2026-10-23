@@ -26,11 +26,13 @@ export function TalkingPortrait({
   const phase = showStream ? 'stream' : talking ? 'speaking' : listening ? 'listening' : 'idle'
 
   useEffect(() => {
-    return subscribeSaraLevel((level) => {
+    return subscribeSaraLevel((level, audible) => {
       const root = rootRef.current
       if (!root) return
       const next = Math.max(0, Math.min(1, level))
       root.style.setProperty('--sara-level', next.toFixed(3))
+      if (audible) root.setAttribute('data-sara-audible', 'true')
+      else root.removeAttribute('data-sara-audible')
     })
   }, [])
 
