@@ -108,7 +108,11 @@ export function bladderDiaryPdfDoc(report: BladderDiaryReport): BladderDiaryPdfD
 }
 
 export function bladderDiaryPdfPlainText(doc: BladderDiaryPdfDoc): string {
-  const lines = [doc.brand, doc.site, doc.title, doc.status, doc.subtitle, `Name: ${doc.patientName}`, `Date of birth: ${doc.dateOfBirth}`, '']
+  const identity = [
+    ...(doc.patientName ? [`Name: ${doc.patientName}`] : []),
+    ...(doc.dateOfBirth ? [`Date of birth: ${doc.dateOfBirth}`] : []),
+  ]
+  const lines = [doc.brand, doc.site, doc.title, doc.status, doc.subtitle, ...identity, '']
   for (const day of doc.days) {
     lines.push(day.incomplete ? `${day.heading} (${day.incomplete})` : day.heading)
     for (const stat of day.stats) lines.push(`${stat.label}: ${stat.value}`)
@@ -305,8 +309,8 @@ export async function buildBladderDiaryPdf(
   writeWrapped(model.title, 20, 'bold', 4)
   writeWrapped(model.status, 11, 'bold', 2)
   writeWrapped(model.subtitle, 11, 'normal', 8)
-  writeWrapped(`Name: ${model.patientName}`, 12, 'bold', 1)
-  writeWrapped(`Date of birth: ${model.dateOfBirth}`, 12, 'normal', 12)
+  if (model.patientName) writeWrapped(`Name: ${model.patientName}`, 12, 'bold', model.dateOfBirth ? 1 : 12)
+  if (model.dateOfBirth) writeWrapped(`Date of birth: ${model.dateOfBirth}`, 12, 'normal', 12)
 
   if (model.emptyMessage && model.days.every((day) => day.stats.every((stat) => stat.value === 0))) {
     writeWrapped(model.emptyMessage, 11, 'normal', 8)

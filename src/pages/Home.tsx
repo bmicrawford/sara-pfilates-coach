@@ -21,8 +21,10 @@ import {
   markExerciseCueShown,
   shouldShowExerciseCue,
 } from '../lib/exercise'
+import { isDemoPass, reportForViewer } from '../lib/demoPass'
 import { addDiaryLog, finishActiveDiary, readDiaries, readLogs, startNewDiary, syncDiaryWindows } from '../lib/mockServer'
 import { patientFirstName, readPatient } from '../lib/patient'
+import { PROSPECT_ASK_GREETING, PROSPECT_HOME_NOTE } from '../lib/prospectCopy'
 import { markCompanionOpened } from '../lib/notifications'
 import {
   DRINK_OZ_DEFAULT,
@@ -54,14 +56,15 @@ export function Home({ session }: Props) {
   const [sheet, setSheet] = useState<SheetId>(null)
   const [logs, setLogs] = useState<LogEntry[]>(() => readLogs())
   const [diaries, setDiaries] = useState<Diary[]>(() => syncDiaryWindows())
-  const patient = readPatient()
+  const prospect = isDemoPass(session.redeemToken)
+  const patient = prospect ? null : readPatient()
   const [smsNote, setSmsNote] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [exerciseCue, setExerciseCue] = useState(() => shouldShowExerciseCue(readLogs()))
   const active = useMemo(() => activeDiary(diaries), [diaries])
   const activeReport = useMemo(
-    () => (active ? bladderDiaryReport(active, logs, { patient }) : null),
-    [active, logs, patient],
+    () => (active ? reportForViewer(bladderDiaryReport(active, logs, { patient }), prospect) : null),
+    [active, logs, patient, prospect],
   )
 
   useEffect(() => {
@@ -144,9 +147,16 @@ export function Home({ session }: Props) {
 
       <div className="mt-6">
         <SaraPortrait mood={mood} />
-        <p className="mt-1 text-center text-sm text-ink-mute">
-          {greeting()}, {patientFirstName(patient) ?? firstName(session.email)}.
-        </p>
+        {prospect ? (
+          <div className="mt-1 text-center">
+            <p className="text-sm text-ink">{PROSPECT_ASK_GREETING}</p>
+            <p className="mt-2 text-sm text-ink-mute">{PROSPECT_HOME_NOTE}</p>
+          </div>
+        ) : (
+          <p className="mt-1 text-center text-sm text-ink-mute">
+            {greeting()}, {patientFirstName(patient) ?? firstName(session.email)}.
+          </p>
+        )}
       </div>
 
       <div className="mt-6">

@@ -2,7 +2,10 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { TalkingPortrait } from '../components/TalkingPortrait'
 import { askSaraRemote, isSaraUnreachable } from '../lib/askSara'
-import { readChat, writeChat } from '../lib/mockServer'
+import { isDemoVoiceOnly } from '../lib/demoPass'
+import { readChat, readSession, writeChat } from '../lib/mockServer'
+import { askEmptyHint, askIntro } from '../lib/prospectCopy'
+import { isSaraBusy, SARA_PASS_REQUIRED_MESSAGE, SARA_UNKNOWN_PASS_MESSAGE } from '../lib/saraGate'
 import {
   bindSaraStreamVideo,
   connectSaraStream,
@@ -29,6 +32,7 @@ import { nowIso, uid } from '../lib/storage'
 import type { ChatMessage } from '../lib/types'
 
 export function AskSara() {
+  const voiceOnly = isDemoVoiceOnly(readSession()?.redeemToken)
   const [messages, setMessages] = useState<ChatMessage[]>(() => readChat())
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -82,6 +86,13 @@ export function AskSara() {
   }, [])
 
   useEffect(() => {
+    if (voiceOnly) {
+      releaseSaraStream()
+      return () => {
+        releaseSaraStream()
+        stopSaraSpeech()
+      }
+    }
     setSaraStreamCallbacks({
       onTalking: (talking) => {
         setStreamTalking(talking)
@@ -106,7 +117,7 @@ export function AskSara() {
       releaseSaraStream()
       stopSaraSpeech()
     }
-  }, [playAra])
+  }, [playAra, voiceOnly])
 
   const streaming = shouldShowSaraStream({ streamReady, speaking, streamTalking, videoLive })
   const live = speaking || streamTalking
@@ -122,6 +133,12 @@ export function AskSara() {
   }
 
   const speakReply = (text: string) => {
+    if (isSaraBusy(text)) return
+    if (voiceOnly) {
+      fallbackTextRef.current = null
+      playAra(text)
+      return
+    }
     fallbackTextRef.current = text
     araPlayingRef.current = false
     unlockSaraStream()
@@ -150,8 +167,10 @@ export function AskSara() {
     if (!text || busy) return
     haltPlayback()
     unlockSaraSpeech()
-    unlockSaraStream()
-    void connectSaraStream()
+    if (!voiceOnly) {
+      unlockSaraStream()
+      void connectSaraStream()
+    }
     const you: ChatMessage = { id: uid(), from: 'you', text, at: nowIso() }
     const prior = messages
     setMessages((cur) => [...cur, you])
@@ -165,6 +184,14 @@ export function AskSara() {
       return next
     })
     setBusy(false)
+    if (
+      isSaraBusy(reply) ||
+      reply === SARA_UNKNOWN_PASS_MESSAGE ||
+      reply === SARA_PASS_REQUIRED_MESSAGE
+    ) {
+      if (!voiceOnly) settleSaraStreamVoice('idle')
+      return
+    }
     if (isSaraUnreachable(reply)) {
       settleSaraStreamVoice('idle')
       setVoiceNote(
@@ -178,7 +205,7 @@ export function AskSara() {
   const lastSara = [...messages].reverse().find((m) => m.from === 'sara')
 
   const listening = busy || Boolean(draft.trim())
-  const greeting = live ? "I'm with you." : listening ? "I'm listening." : "Hey — it's Sara."
+  const intro = askIntro(voiceOnly, live, listening)
 
   return (
     <main className="ask-sara relative isolate h-dvh max-h-dvh overflow-hidden">
@@ -217,10 +244,10 @@ export function AskSara() {
             </button>
           </header>
           <p className="ask-sara-greeting ask-sara-greeting-lead px-5 text-center font-serif text-xl font-bold">
-            {greeting}
+            {intro.title}
           </p>
           <p className="ask-sara-greeting px-5 pt-0.5 text-center text-sm font-semibold">
-            {live ? 'Sara is talking.' : 'I’m listening — ask the real question.'}
+            {intro.sub}
           </p>
         </div>
 
@@ -233,10 +260,7 @@ export function AskSara() {
 
           <div className="ask-sara-panel min-h-0 space-y-3 overflow-y-auto overscroll-contain">
             {messages.length === 0 ? (
-              <p className="text-sm font-semibold leading-relaxed">
-                Try “how much water?”, “why did I leak when I sneezed?”, or “what are symptoms of a
-                UTI?”
-              </p>
+              <p className="text-sm font-semibold leading-relaxed">{askEmptyHint(voiceOnly)}</p>
             ) : null}
             {messages.map((m) => (
               <div
@@ -249,7 +273,10 @@ export function AskSara() {
                 {m.from === 'sara' &&
                 m.id === lastSara?.id &&
                 isVoiceReady() &&
-                !isSaraUnreachable(m.text) ? (
+                !isSaraUnreachable(m.text) &&
+                !isSaraBusy(m.text) &&
+                m.text !== SARA_UNKNOWN_PASS_MESSAGE &&
+                m.text !== SARA_PASS_REQUIRED_MESSAGE ? (
                   <button
                     type="button"
                     className="mt-2 block text-xs font-semibold"
@@ -259,8 +286,10 @@ export function AskSara() {
                         return
                       }
                       unlockSaraSpeech()
-                      unlockSaraStream()
-                      void connectSaraStream()
+                      if (!voiceOnly) {
+                        unlockSaraStream()
+                        void connectSaraStream()
+                      }
                       speakReply(m.text)
                     }}
                   >

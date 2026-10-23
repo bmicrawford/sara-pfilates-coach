@@ -8,7 +8,7 @@ export const DEMO_TOKEN = 'DEMO-SARA-001'
 export const PUBLIC_ORIGIN_DEFAULT = 'https://sara-pfilates.surge.sh'
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-const TOKEN_RE = /^SARA-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}){3}$/
+export const TOKEN_RE = /^SARA-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}){3}$/
 const BANNED_EXTERNAL_IDS = new Set(['undefined', 'null', 'none', 'nil', 'n/a', 'na', '0'])
 
 export function normalizeToken(token) {

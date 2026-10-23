@@ -1,4 +1,6 @@
+import { currentSaraPass } from './demoPass.ts'
 import { rewritePfilatesForSpeech } from './pfilatesSpeech.mjs'
+import { SARA_BUSY_MESSAGE, SARA_UNKNOWN_PASS_MESSAGE } from './saraGate.ts'
 
 const MUTE_KEY = 'sara.voiceMuted'
 
@@ -153,7 +155,7 @@ function visemePulse(elapsed: number, duration: number): number {
   return Math.min(1, envelope * syllable)
 }
 
-export async function fetchSaraSpeech(text: string): Promise<Blob | null> {
+export async function fetchSaraSpeech(text: string): Promise<Blob | null | 'busy' | 'denied'> {
   const clean = rewritePfilatesForSpeech(text.replace(/\s+/g, ' ').trim())
   if (!clean) return null
   const ctrl = new AbortController()
@@ -163,8 +165,10 @@ export async function fetchSaraSpeech(text: string): Promise<Blob | null> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: ctrl.signal,
-      body: JSON.stringify({ text: clean }),
+      body: JSON.stringify({ text: clean, pass: currentSaraPass() }),
     })
+    if (res.status === 429) return 'busy'
+    if (res.status === 401 || res.status === 403) return 'denied'
     const type = res.headers.get('content-type') || ''
     if (!res.ok || type.includes('json') || type.includes('text')) return null
     const blob = await res.blob()
@@ -202,6 +206,16 @@ export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<voi
 
   const blob = await fetchSaraSpeech(clean)
   if (gen !== e.generation) return
+  if (blob === 'busy') {
+    opts.onError?.(SARA_BUSY_MESSAGE)
+    opts.onEnd?.()
+    return
+  }
+  if (blob === 'denied') {
+    opts.onError?.(SARA_UNKNOWN_PASS_MESSAGE)
+    opts.onEnd?.()
+    return
+  }
   if (!blob) {
     opts.onError?.(SARA_VOICE_OFFLINE)
     opts.onEnd?.()

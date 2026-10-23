@@ -41,7 +41,7 @@ Do not babysit long builds. Prefer a short, fail-loud check:
 |---|---|---|
 | App build | `npm run build` | Typecheck + Vite succeed. **Fails** if `VITE_SARA_API_URL` is `*.trycloudflare.com`. |
 | Ask Sara connector | `npm run verify:ask-api -- <worker-url>` | `GET /health` is reachable and `tts` is `ara` (or equivalent). **Fails** on trycloudflare. |
-| Local smokes | `npm run smoke:replies && npm run smoke:ask && npm run smoke:ask-copy && npm run smoke:speech && npm run smoke:speak && npm run smoke:diary && npm run smoke:verify-api && npm run smoke:redeem` | No network secrets required. |
+| Local smokes | `npm run smoke:replies && npm run smoke:ask && npm run smoke:ask-copy && npm run smoke:speech && npm run smoke:speak && npm run smoke:diary && npm run smoke:exercise && npm run smoke:verify-api && npm run smoke:redeem && npm run smoke:install && npm run smoke:demo` | No network secrets required. |
 | Deploy | Human only | Worker secret + `wrangler deploy` + Surge rebuild with the Worker URL. |
 
 Default connector timeout: **~12s**. If `/health` cannot DNS or connect, the phone demo is still on a dead origin — do not “fix” it by baking another tunnel.
@@ -49,8 +49,9 @@ Default connector timeout: **~12s**. If `/health` cannot DNS or connect, the pho
 ## Sara product constraints
 
 - **Kajabi stays the course.** This app is the pocket companion (redeem, bind one phone, log the day, Ask Sara). Do not move lessons off Kajabi.
-- **Redeem passes are Worker tokens.** `POST /redeem/mint` is protected by the Worker secret `REDEEM_MINT_SECRET`. Tokens live in KV binding `REDEEM_TOKENS` as `{ token, email?, createdAt, usedAt?, externalId?, multiUse? }`. The phone validates a purchased pass with `POST /redeem` on the Ask Sara origin (`VITE_SARA_API_URL`). The same email may redeem again (new phone after `/move`); a different email cannot. A class pass is minted with `multiUse: true` and no email; many students can redeem it, and their emails stay on the phone (local `sara.session`) instead of on the shared record. `DEMO-SARA-001` stays a local QA pass and is not written to KV. Pass `externalId` (Kajabi transaction id, or a class id such as `class-cert-sac-2026-10-08`) so a retry returns the same `url`.
+- **Redeem passes are Worker tokens.** `POST /redeem/mint` is protected by the Worker secret `REDEEM_MINT_SECRET`. Tokens live in KV binding `REDEEM_TOKENS` as `{ token, email?, createdAt, usedAt?, externalId?, multiUse? }`. The phone validates a purchased pass with `POST /redeem` on the Ask Sara origin (`VITE_SARA_API_URL`). The same email may redeem again (new phone after `/move`); a different email cannot. A class pass is minted with `multiUse: true` and no email; many students can redeem it, and their emails stay on the phone (local `sara.session`) instead of on the shared record. `DEMO-SARA-001` stays a local QA pass and is not written to KV as a redeem record. It is also the public prospect link. Demo `/ask` and `/speak` are rate-limited with short-TTL keys prefixed `rl:demo:` in this same `REDEEM_TOKENS` namespace (no second namespace, no new secret). Pass `externalId` (Kajabi transaction id, or a class id such as `class-cert-sac-2026-10-08`) so a retry returns the same `url`.
 - **No outbound patient email from eng.** Identity is email-on-redeem only. This repo does not send mail, SMS campaigns, or clinician notifications. Zapier or Kajabi sends the minted `url`.
+- **Public demo pass is voice-only.** `DEMO-SARA-001` never mints a D-ID session. The client flag `isDemoVoiceOnly` (true only for that pass) skips SDK preload, `connect()`, and `speak()` on the Agents stream. The Worker refuses `POST /stream`, `POST /talk`, and `GET /talk` for that pass before any D-ID or TTS call, so a modified client cannot open a talking head. Paying and class passes keep the stream. Ara via `POST /speak` remains the demo voice. Limits and the pass check live in `server/demoGate.mjs`.
 - **D-ID talking-head is Agents Streams (WebRTC), not Talks mp4.** Worker `POST /stream` mints a short-lived Agents SDK `client_key` (`ttl_seconds` ~10 min) for `https://sara-pfilates.surge.sh` and `https://sara-pfilates-coach.surge.sh` (plus local Vite). Browser uses `@d-id/client-sdk` `createAgentManager` + `speak({ type: 'text', input })` with the Grok reply. Do **not** `connect()` on Ask Sara mount (Lite concurrent-session cap). Mint + WebRTC on Send / Play only; keep the session without gating speak() on decoded frames; fire `speak()` as soon as Grok text exists. Heard voice is D-ID stream audio only when speak has started **and** the `<video>` has visible playing frames — keep the element muted until then so late `play()` can decode, then unmute / enable audio tracks together; do **not** also play ara, and do **not** start ara while D-ID is still connecting or decoding. If connect/speak fails, is session-capped, `srcObject` never attaches, or a short budget elapses with no playable AV, fall back to xAI `ara` via `POST /speak` + still (or muted video if frames exist). SDP finalize `400 SessionError` (missing `session_id`) is not a dead session — re-attach after the SDK retry. Release on leave / unmount / `pagehide`. Do not call `chat()` (Grok is the brain via `POST /ask`). Never block on D-ID clip generation. Missing `DID_API_KEY` or `DID_AGENT_ID` → honest null credentials, ara still works. Do not restore the SVG mouth overlay. Do not put `DID_API_KEY` in the Vite bundle. CORS must keep both Surge hosts. Default still: `https://sara-pfilates.surge.sh/avatar/sara-default.png`. `403 Forbidden` / `Max user sessions reached` (or zero D-ID credits) is a dashboard credit/session-cap issue: do not retry connect/speak, do not recreate the agent, keep still + ara.
 - **Site-backed medical claims only.** Never invent clinical promises. Sara is a peer coach, not a clinician. Ask Sara's approved claims, the ten movement names, and Dr C's red-flag rules live only in `server/saraGuardrails.mjs` (composed into the system prompt in `server/askGrok.mjs`). PfilAtes research facts Sara may cite live only in `server/saraKnowledge.mjs` (sourced in `docs/pfilates-research.md`). Do not add conditions, statistics, cure claims, or step-by-step movement instructions beyond those two server files. Manual QA prompts are in `docs/sara-red-flag-qa.md`. Redeploy the Worker after changing them.
 - **Voice path is xAI neural TTS** (`ara`) via `POST /speak`. Do not treat OS `speechSynthesis` as the good path.
@@ -118,6 +119,23 @@ Ask Sara keeps working if these steps wait. `POST /redeem/mint` stays closed unt
 6. Rebuild Surge with the same Worker URL as `VITE_SARA_API_URL` so the phone can `POST /redeem`.
 
 `DEMO-SARA-001` remains the QA pass on the welcome screen. The Kajabi button uses the minted `url`.
+
+## Public prospect demo limits
+
+`DEMO-SARA-001` (`https://sara-pfilates.surge.sh/r/DEMO-SARA-001`) is the blast link for people who have not bought the course. One tree owns these constants in `server/demoGate.mjs`. Do not add a KV binding or a secret to change them. Redeploy the Worker after editing the numbers.
+
+| Constant | Value | Applies to |
+|---|---|---|
+| `askPerIpPerHour` | 20 | `POST /ask` on the demo pass, per IP |
+| `speakPerIpPerHour` | 20 | `POST /speak` on the demo pass, per IP |
+| `askPerIpPerDay` | 60 | `POST /ask` on the demo pass, per IP, UTC day |
+| `speakPerIpPerDay` | 60 | `POST /speak` on the demo pass, per IP, UTC day |
+| `globalAsksPerDay` | 3000 | all demo `/ask` traffic, UTC day |
+| `globalSpeaksPerDay` | 3000 | all demo `/speak` traffic, UTC day |
+
+Hour keys TTL `DEMO_HOUR_TTL_SECONDS` (2 hours). Day and global keys TTL `DEMO_DAY_TTL_SECONDS` (2 days). Over the limit: HTTP 429, `Retry-After`, JSON `message` and `reply` of `Sara is busy, please try again in a bit.` Paid and class passes are checked and then not counted. Unknown passes are rejected. Missing passes are rejected. Demo redeem does not ask for an email and does not store one on the server. Demo users are not asked for a name or date of birth. Do not log IPs, passes, or secrets.
+
+The demo system note in `SARA_DEMO_AUDIENCE` is appended after `server/saraGuardrails.mjs` and `server/saraKnowledge.mjs`. Do not edit those two files to change prospect wording, and do not put the audience note ahead of them.
 
 ## Secrets
 

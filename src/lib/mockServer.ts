@@ -6,6 +6,12 @@ import type { ChatMessage, DeviceBinding, Diary, LogEntry, Session } from './typ
 export const DEMO_TOKEN = 'DEMO-SARA-001'
 
 /**
+ * Local-only marker for a demo session. Not a person's email.
+ * Never send it to /ask, /speak, /talk, /stream, or /redeem.
+ */
+export const DEMO_DEVICE_EMAIL = 'prospect@demo.local'
+
+/**
  * QA pass stays in this browser. Purchased passes are minted on the Worker
  * (`POST /redeem/mint`) and checked with `POST /redeem` before this phone binds.
  * Kajabi keeps the course. The mint secret never lives in this file.
@@ -122,6 +128,11 @@ export async function redeemToken(token: string, email: string): Promise<RedeemR
     if (!remote.ok) return remote
   }
   return bindRedeemedToken(key, email)
+}
+
+/** Demo pass: no email prompt and no server redeem call. */
+export async function redeemDemoPass(): Promise<RedeemResult> {
+  return bindRedeemedToken(DEMO_TOKEN, DEMO_DEVICE_EMAIL)
 }
 
 function notifySession(): void {

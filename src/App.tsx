@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { isDemoPass } from './lib/demoPass'
 import { PATIENT_CHANGED_EVENT, patientProfileComplete, readPatient } from './lib/patient'
 import { readSession } from './lib/mockServer'
+import { promptsForNameOrDob } from './lib/prospectCopy'
 import type { Session } from './lib/types'
 import { AskSara } from './pages/AskSara'
 import { DiaryReport } from './pages/DiaryReport'
@@ -45,7 +47,7 @@ export default function App() {
             path="/ask"
             element={
               <NeedSession session={session}>
-                <NeedProfile>
+                <NeedProfile session={session}>
                   <AskSara />
                 </NeedProfile>
               </NeedSession>
@@ -55,7 +57,7 @@ export default function App() {
             path="/diary"
             element={
               <NeedSession session={session}>
-                <NeedProfile>
+                <NeedProfile session={session}>
                   <DiaryReport />
                 </NeedProfile>
               </NeedSession>
@@ -65,7 +67,7 @@ export default function App() {
             path="/exercise"
             element={
               <NeedSession session={session}>
-                <NeedProfile>
+                <NeedProfile session={session}>
                   <ExerciseLog />
                 </NeedProfile>
               </NeedSession>
@@ -75,7 +77,7 @@ export default function App() {
             path="/"
             element={
               session ? (
-                <NeedProfile>
+                <NeedProfile session={session}>
                   <Home session={session} />
                 </NeedProfile>
               ) : (
@@ -101,7 +103,7 @@ function NeedSession({
   return children
 }
 
-function NeedProfile({ children }: { children: ReactNode }) {
+function NeedProfile({ session, children }: { session: Session | null; children: ReactNode }) {
   const [patient, setPatient] = useState(() => readPatient())
 
   useEffect(() => {
@@ -114,6 +116,7 @@ function NeedProfile({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  if (!promptsForNameOrDob(isDemoPass(session?.redeemToken))) return children
   if (!patientProfileComplete(patient)) return <PatientOnboarding />
   return children
 }

@@ -2,12 +2,15 @@ import { FormEvent, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { SaraPortrait } from '../components/SaraPortrait'
 import { Field, inputClass } from '../components/Chip'
-import { DEMO_TOKEN, normalizeToken, redeemToken } from '../lib/mockServer'
+import { isDemoPass } from '../lib/demoPass'
+import { DEMO_TOKEN, normalizeToken, redeemDemoPass, redeemToken } from '../lib/mockServer'
+import { PROSPECT_REDEEM_NOTE, redeemAsksForEmail } from '../lib/prospectCopy'
 
 export function Redeem() {
   const { token = '' } = useParams()
   const navigate = useNavigate()
   const displayToken = useMemo(() => normalizeToken(token), [token])
+  const prospect = isDemoPass(displayToken)
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [bound, setBound] = useState(false)
@@ -18,13 +21,17 @@ export function Redeem() {
     if (busy) return
     setError(null)
     setBound(false)
-    if (!email.includes('@')) {
-      setError('Use the email from your Kajabi receipt.')
-      return
+    if (redeemAsksForEmail(prospect)) {
+      if (!email.includes('@')) {
+        setError('Use the email from your Kajabi receipt.')
+        return
+      }
     }
     setBusy(true)
     try {
-      const result = await redeemToken(displayToken || DEMO_TOKEN, email)
+      const result = prospect
+        ? await redeemDemoPass()
+        : await redeemToken(displayToken || DEMO_TOKEN, email)
       if (result.ok) {
         navigate('/', { replace: true })
         return
@@ -61,24 +68,27 @@ export function Redeem() {
         <SaraPortrait mood={bound ? 'neutral' : 'default'} />
       </div>
       <p className="mt-3 text-center text-ink-mute">
-        Email only — no password, no Kajabi login here. We’ll bind this phone so
-        Sara stays in one place.
+        {prospect
+          ? PROSPECT_REDEEM_NOTE
+          : 'Email only — no password, no Kajabi login here. We’ll bind this phone so Sara stays in one place.'}
       </p>
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
         <Field label="Redeem pass">
           <input className={inputClass} value={displayToken} readOnly />
         </Field>
-        <Field label="Email">
-          <input
-            className={inputClass}
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </Field>
+        {redeemAsksForEmail(prospect) ? (
+          <Field label="Email">
+            <input
+              className={inputClass}
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </Field>
+        ) : null}
         {error ? <p className="text-sm text-[#9a5b4a]">{error}</p> : null}
         {bound ? (
           <Link to="/move" className="block text-center text-sm font-medium text-sage-deep underline">
