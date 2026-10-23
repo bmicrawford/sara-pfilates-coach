@@ -20,6 +20,7 @@
  * the SDK retry; do not treat that flap as a dead session.
  */
 
+import { currentSaraPass } from './demoPass.ts'
 import { rewritePfilatesForSpeech } from './pfilatesSpeech.mjs'
 
 function apiBase(): string {
@@ -600,7 +601,7 @@ export async function fetchSaraStreamCreds(): Promise<SaraStreamCreds | null> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: ctrl.signal,
-      body: '{}',
+      body: JSON.stringify({ pass: currentSaraPass() }),
     })
     const data = (await res.json().catch(() => ({}))) as {
       agentId?: string | null

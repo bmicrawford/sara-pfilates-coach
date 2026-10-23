@@ -1,3 +1,5 @@
+import { currentSaraPass } from './demoPass.ts'
+import { messageForSaraStatus } from './saraGate.ts'
 import type { ChatMessage } from './types'
 
 export const SARA_OFFLINE =
@@ -26,9 +28,12 @@ export async function askSaraRemote(
       body: JSON.stringify({
         message,
         history: history.slice(-12).map((m) => ({ from: m.from, text: m.text })),
+        pass: currentSaraPass(),
       }),
     })
-    const data = (await res.json().catch(() => ({}))) as { reply?: string }
+    const data = (await res.json().catch(() => ({}))) as { reply?: string; message?: string; error?: string }
+    const gated = messageForSaraStatus(res.status, data)
+    if (gated) return gated
     const reply = data.reply?.trim()
     if (!res.ok || !reply) return SARA_OFFLINE
     return reply

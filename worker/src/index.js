@@ -1,19 +1,34 @@
-import { askSaraGrok, corsHeaders, jsonResponse, GROK_MODEL } from '../../server/askGrok.mjs'
+import { askSaraGrok, corsHeaders, jsonResponse, GROK_MODEL, SARA_OFFLINE } from '../../server/askGrok.mjs'
 import { dispatchRedeem, headerGetter, kvRedeemStore } from '../../server/redeem.mjs'
 import { speakSaraTts, SARA_VOICE } from '../../server/speakSara.mjs'
 import {
   talkSaraDid,
   getSaraTalk,
-  isTalkPath,
   talkIdFromUrl,
   talkStartResponse,
   talkPollResponse,
 } from '../../server/talkSara.mjs'
 import { mintSaraStreamKey, streamStartResponse } from '../../server/streamSara.mjs'
+import {
+  authorizePaidRequest,
+  clientIpFromHeaders,
+  denialExtraHeaders,
+  kvCounterStore,
+  paidEndpoint,
+  passFromParts,
+} from '../../server/demoGate.mjs'
 
 function talkJson(status, body, origin) {
   const out = jsonResponse(status, body, origin)
   return { ...out, headers: { ...out.headers, 'Cache-Control': 'no-store' } }
+}
+
+function respond(status, body, origin, extra = {}) {
+  const out = jsonResponse(status, body, origin)
+  return new Response(out.body, {
+    status: out.status,
+    headers: { ...out.headers, 'Cache-Control': 'no-store', ...extra },
+  })
 }
 
 export default {
@@ -39,29 +54,6 @@ export default {
         origin,
       )
       return new Response(out.body, { status: out.status, headers: out.headers })
-    }
-
-    if (request.method === 'GET' && isTalkPath(url.pathname)) {
-      const talked = await getSaraTalk({
-        id: talkIdFromUrl(url),
-        apiKey: env.DID_API_KEY,
-      })
-      const out = talkJson(200, talkPollResponse(talked), origin)
-      return new Response(out.body, { status: out.status, headers: out.headers })
-    }
-
-    if (request.method === 'POST' && url.pathname === '/stream') {
-      try {
-        const minted = await mintSaraStreamKey({
-          apiKey: env.DID_API_KEY,
-          agentId: env.DID_AGENT_ID,
-        })
-        const out = talkJson(200, streamStartResponse(minted), origin)
-        return new Response(out.body, { status: out.status, headers: out.headers })
-      } catch {
-        const out = talkJson(200, streamStartResponse({ ok: false, reason: 'stream_failed' }), origin)
-        return new Response(out.body, { status: out.status, headers: out.headers })
-      }
     }
 
     if (request.method === 'POST' && (url.pathname === '/redeem' || url.pathname === '/redeem/mint')) {
@@ -107,47 +99,93 @@ export default {
       }
     }
 
-    let body = {}
-    if (request.method === 'POST') {
-      try {
-        body = await request.json()
-      } catch {
-        body = {}
+    const endpoint = paidEndpoint(request.method, url.pathname)
+    if (endpoint) {
+      let body = {}
+      if (request.method === 'POST') {
+        try {
+          const parsed = await request.json()
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) body = parsed
+        } catch {
+          body = {}
+        }
       }
-    }
+      let decision
+      try {
+        decision = await authorizePaidRequest({
+          method: request.method,
+          pathname: url.pathname,
+          pass: passFromParts({
+            body,
+            header: request.headers.get('X-Sara-Pass'),
+            query: url.searchParams.get('pass'),
+          }),
+          redeemStore: kvRedeemStore(env.REDEEM_TOKENS),
+          counterStore: kvCounterStore(env.REDEEM_TOKENS),
+          ip: clientIpFromHeaders(request.headers),
+        })
+      } catch {
+        return respond(503, { ok: false, error: 'busy', message: SARA_OFFLINE, reply: SARA_OFFLINE }, origin)
+      }
+      if (!decision.allow) {
+        return respond(decision.status, decision.body, origin, denialExtraHeaders(decision))
+      }
 
-    if (request.method === 'POST' && url.pathname === '/ask') {
-      const result = await askSaraGrok({
-        message: body.message ?? body.text,
-        history: body.history,
-        apiKey: env.XAI_API_KEY,
-        model: env.XAI_MODEL || GROK_MODEL,
-      })
-      const out = jsonResponse(result.status, { reply: result.reply }, origin)
-      return new Response(out.body, { status: out.status, headers: out.headers })
-    }
-
-    if (request.method === 'POST' && url.pathname === '/speak') {
-      const result = await speakSaraTts({
-        text: body.text ?? body.message,
-        apiKey: env.XAI_API_KEY,
-        voice: env.XAI_TTS_VOICE || SARA_VOICE,
-      })
-      if (!result.ok) {
-        const out = jsonResponse(result.status, { error: result.error, voice: 'unavailable' }, origin)
+      if (endpoint === 'ask') {
+        const result = await askSaraGrok({
+          message: body.message ?? body.text,
+          history: body.history,
+          apiKey: env.XAI_API_KEY,
+          model: env.XAI_MODEL || GROK_MODEL,
+          audience: decision.pass.voiceOnly ? 'demo' : undefined,
+        })
+        const out = jsonResponse(result.status, { reply: result.reply }, origin)
         return new Response(out.body, { status: out.status, headers: out.headers })
       }
-      return new Response(result.audio, {
-        status: 200,
-        headers: {
-          'Content-Type': result.contentType,
-          'Cache-Control': 'no-store',
-          ...corsHeaders(origin),
-        },
-      })
-    }
 
-    if (request.method === 'POST' && url.pathname === '/talk') {
+      if (endpoint === 'speak') {
+        const result = await speakSaraTts({
+          text: body.text ?? body.message,
+          apiKey: env.XAI_API_KEY,
+          voice: env.XAI_TTS_VOICE || SARA_VOICE,
+        })
+        if (!result.ok) {
+          const out = jsonResponse(result.status, { error: result.error, voice: 'unavailable' }, origin)
+          return new Response(out.body, { status: out.status, headers: out.headers })
+        }
+        return new Response(result.audio, {
+          status: 200,
+          headers: {
+            'Content-Type': result.contentType,
+            'Cache-Control': 'no-store',
+            ...corsHeaders(origin),
+          },
+        })
+      }
+
+      if (endpoint === 'stream') {
+        try {
+          const minted = await mintSaraStreamKey({
+            apiKey: env.DID_API_KEY,
+            agentId: env.DID_AGENT_ID,
+          })
+          const out = talkJson(200, streamStartResponse(minted), origin)
+          return new Response(out.body, { status: out.status, headers: out.headers })
+        } catch {
+          const out = talkJson(200, streamStartResponse({ ok: false, reason: 'stream_failed' }), origin)
+          return new Response(out.body, { status: out.status, headers: out.headers })
+        }
+      }
+
+      if (request.method === 'GET') {
+        const talked = await getSaraTalk({
+          id: talkIdFromUrl(url),
+          apiKey: env.DID_API_KEY,
+        })
+        const out = talkJson(200, talkPollResponse(talked), origin)
+        return new Response(out.body, { status: out.status, headers: out.headers })
+      }
+
       if (!env.DID_API_KEY) {
         const out = talkJson(200, talkStartResponse({ ok: false, reason: 'missing_did_key' }), origin)
         return new Response(out.body, { status: out.status, headers: out.headers })

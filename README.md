@@ -72,7 +72,9 @@ Ask Sara is a fullscreen talking surface: the idle still and the live stream **c
 
 **Heard voice** is D-ID Agents stream audio when `speak()` has started **and** the WebRTC `<video>` has visible playing frames. Keep the element muted until that moment so late `play()` can decode, then unmute / enable audio tracks together so audio cannot lead the mouth — do **not** also play xAI `ara` (no double voice). Do not start ara while waiting for D-ID. If connect/speak fails, hits the Lite session cap, `srcObject` never attaches, or a short budget elapses with **no playable AV**, fall back to `POST /speak` ara + still (or muted video if frames exist without audio). Never wait on a D-ID mp4. Never skip ara after a frozen / empty video.
 
-**Motion** is D-ID **Agents Streams** (WebRTC) via `@d-id/client-sdk`. The Worker mints a short-lived `client_key` (`POST /stream`) for the allowed Surge origins. Ask Sara does **not** open WebRTC on mount (Lite’s concurrent stream cap is small; idle phone + laptop + Studio tabs exhaust it). Mint + `connect()` start on **Send / Play**, then `agentManager.speak({ type: 'text', input })` as soon as the Grok reply exists (do not wait for ara). Leaving the page (and `pagehide`) disconnects so idle slots are not held. Do not call `agentManager.chat()` — Grok stays the brain (`POST /ask`).
+The public demo pass `DEMO-SARA-001` does not open that stream. Demo visitors get the still portrait, the text reply, and ara TTS only. A modified client cannot mint a session: the Worker refuses `/stream` and `/talk` for that pass. Purchase and class passes keep D-ID.
+
+**Motion** for paying and class passes is D-ID **Agents Streams** (WebRTC) via `@d-id/client-sdk`. The Worker mints a short-lived `client_key` (`POST /stream`) for the allowed Surge origins. Ask Sara does **not** open WebRTC on mount (Lite’s concurrent stream cap is small; idle phone + laptop + Studio tabs exhaust it). Mint + `connect()` start on **Send / Play**, then `agentManager.speak({ type: 'text', input })` as soon as the Grok reply exists (do not wait for ara). Leaving the page (and `pagehide`) disconnects so idle slots are not held. Do not call `agentManager.chat()` — Grok stays the brain (`POST /ask`).
 
 Head motion needs **D-ID credits and a free stream slot**. Live `POST /agents/{id}/streams` `403 Forbidden` / `Max user sessions reached` is **not** retried (retries hold sessions and make the cap worse). Ara and the still portrait still work. Humans top up credits in the D-ID dashboard; do not recreate the agent or rotate Worker secrets for this error.
 
@@ -128,7 +130,7 @@ npx surge ./dist https://sara-pfilates.surge.sh
 
 The course stays on Kajabi. A purchase mints a unique pass on this same Worker. The buyer opens `https://sara-pfilates.surge.sh/r/{TOKEN}` on their phone and enters the same email. There is no Kajabi SSO and no lesson content in this app.
 
-`DEMO-SARA-001` stays a local QA pass (welcome screen and `/r/DEMO-SARA-001`). It is not stored in KV and does not need the mint secret.
+`DEMO-SARA-001` is the public prospect link and the local QA pass (welcome screen and `/r/DEMO-SARA-001`). It is not stored in KV as a redeem record and does not need the mint secret. Prospects are not asked for an email, name, or date of birth. Ask Sara on that pass is voice-only (still portrait plus ara) and rate-limited. See `server/demoGate.mjs`: 20 `/ask` and 20 `/speak` per IP per hour, 60 of each per IP per UTC day, and 3000 `/ask` plus 3000 `/speak` per UTC day across all demo traffic. Over the limit the Worker returns HTTP 429 with `Retry-After` and `Sara is busy, please try again in a bit.` Unknown passes are rejected. No new secret and no new KV binding — counters are short-TTL `rl:demo:` keys in `REDEEM_TOKENS`.
 
 | | |
 |---|---|
@@ -220,7 +222,7 @@ The Kajabi button uses the minted `url`. `DEMO-SARA-001` stays on the QA welcome
 ## What this prototype does
 
 - Welcome gate when there is no session, with a link to the demo redeem pass
-- Redeem at `/r/:token` — email + Continue. QA pass `DEMO-SARA-001` is local. A purchased pass is checked with the Worker (`POST /redeem`) before this phone binds.
+- Redeem at `/r/:token` — email + Continue for a purchased or class pass. The public demo pass `DEMO-SARA-001` continues without an email and is not asked for a name or date of birth. A purchased pass is checked with the Worker (`POST /redeem`) before this phone binds.
 - Device bind via `localStorage` plus a mock server token (one phone)
 - Stub move-to-new-phone at `/move`
 - First-open name + date of birth, saved on-device so the doctor report is labeled (asked once)
@@ -228,7 +230,7 @@ The Kajabi button uses the minted `url`. `DEMO-SARA-001` stays on the QA welcome
 - 3-day bladder diary report (`/diary`) and PDF — Day 1–3 totals from the first logged event, incomplete days marked
 - 4-week exercise log (`/exercise`) — duration and frequency of logged sessions; after Yes on the 4-week gate, blank days in that window are recorded as 5 min pelvic floor per patient confirmation (logged days keep their minutes); daily Home cue when today’s session is missing; completion PDF only after Yes
 - Bottom sheets for those forms
-- Ask Sara via Grok (`POST /ask` + short chat history). Heard voice is D-ID Agents stream audio when speak is ready; xAI neural TTS (`POST /speak`, voice `ara`) is the fallback. Realtime head motion is D-ID Agents Streams (WebRTC), not an offline mp4. Mute / Stop / Play stay in the UI. The still and stream fill the Ask Sara screen; the thread is a see-through overlay.
+- Ask Sara via Grok (`POST /ask` + short chat history). The phone sends its pass. Heard voice for a purchased or class pass is D-ID Agents stream audio when speak is ready; xAI neural TTS (`POST /speak`, voice `ara`) is the fallback. The demo pass never opens D-ID: still portrait plus ara only. Realtime head motion for paying passes is D-ID Agents Streams (WebRTC), not an offline mp4. Mute / Stop / Play stay in the UI. The still and stream fill the Ask Sara screen; the thread is a see-through overlay. A demo-pass 429 shows “Sara is busy, please try again in a bit.”
 - After a successful redeem, a Home Screen coach (on the name gate if that’s first, then Home): iPhone/iPad steps are Share → Add to Home Screen → Add. Android Chrome shows Install when `beforeinstallprompt` fires, and Chrome menu steps if it does not. Not now and a successful install stay in `localStorage`. An installed app (`display-mode: standalone` or iOS `navigator.standalone`) skips the coach. New phone clears that memory.
 
 ## TODO (later)

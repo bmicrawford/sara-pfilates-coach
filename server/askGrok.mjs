@@ -38,6 +38,23 @@ function systemContentForTurn(userMessage) {
   return `${SARA_SYSTEM}\n\n${lead}`
 }
 
+/**
+ * Public demo pass only. Appended after the unchanged system prompt, so
+ * guardrails and research stay first and any red-flag lead-in stays ahead
+ * of this note. Do not edit saraGuardrails.mjs or saraKnowledge.mjs here.
+ */
+export const SARA_DEMO_AUDIENCE = `Public demo audience: this person has not bought the course and has no diary history. Do not imply they already purchased, enrolled, or have logs. Do not ask for a name, date of birth, or email. Do not repeat personal data.
+
+You are an AI coach, not a doctor. The women's course is a $149 lifetime purchase. It stays on Kajabi; you sit alongside it and do not replace it. It takes 10 minutes a day. It was created by Dr. Bruce Crawford.
+
+Use only the approved claims and research facts already stated above. Do not add statistics, studies, or outcomes. The safety rules and any red-flag lead-in above still come first and are unchanged.`
+
+export function systemContentForAudience(userMessage, audience) {
+  const base = systemContentForTurn(userMessage)
+  if (audience !== 'demo') return base
+  return `${base}\n\n${SARA_DEMO_AUDIENCE}`
+}
+
 const ALLOWED_ORIGINS = new Set([
   'https://sara-pfilates.surge.sh',
   'https://sara-pfilates-coach.surge.sh',
@@ -68,8 +85,9 @@ function clip(text, max = 2000) {
   return String(text ?? '').trim().slice(0, max)
 }
 
-export function buildMessages(userMessage, history = []) {
-  const messages = [{ role: 'system', content: systemContentForTurn(userMessage) }]
+export function buildMessages(userMessage, history = [], options = {}) {
+  const audience = options && typeof options === 'object' ? options.audience : undefined
+  const messages = [{ role: 'system', content: systemContentForAudience(userMessage, audience) }]
   const recent = Array.isArray(history) ? history.slice(-12) : []
   for (const turn of recent) {
     const text = clip(turn?.text)
@@ -87,6 +105,7 @@ export async function askSaraGrok({
   apiKey,
   model = GROK_MODEL,
   fetchFn = fetch,
+  audience,
 } = {}) {
   const userMessage = clip(message)
   if (!userMessage) {
@@ -101,7 +120,7 @@ export async function askSaraGrok({
     stream: false,
     temperature: 0.6,
     max_tokens: 600,
-    messages: buildMessages(userMessage, history),
+    messages: buildMessages(userMessage, history, audience ? { audience } : {}),
   }
 
   let res
