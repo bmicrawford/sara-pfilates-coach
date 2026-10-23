@@ -1,5 +1,7 @@
 /** Shared Ask Sara → xAI Grok proxy. Never import this from the Vite app. */
 
+import { redFlagLeadIn, saraGuardrailPrompt } from './saraGuardrails.mjs'
+
 export const GROK_MODEL = 'grok-4.6'
 export const XAI_CHAT_URL = 'https://api.x.ai/v1/chat/completions'
 
@@ -16,17 +18,21 @@ Soft coaching on bladder irritants (coffee, tea, alcohol, soda): not a hard ban.
 
 Never use the casual word "stress" (it conflicts with a product UI meaning). Use other words if you need that idea (load, pressure, a busy day).
 
-New or worsening pelvic pain: tell them to stop pelvic-floor / PfilAtes squeezes and see a clinician who knows pelvic floor. Do not talk them into working through pain.
-
 More than three focused exercise sessions in a day: caution them to rest. Quality over stacking.
 
 Never diagnose a UTI or other infection. Never say "you have a UTI." You may describe common possible UTI-type warning signs in plain language (burning or stinging when peeing, sudden frequent urges, cloudy or odd-smelling urine, pelvic pressure). Urge a clinician and a urine check. Same-day / urgent care / ER when there is fever, flank or mid-back pain, blood in the urine, severe pain, pregnancy, or symptoms that do not improve. If infection-type symptoms are present, tell them to pause pelvic-floor squeezes until it is checked.
 
-No medical claims beyond general education. Encourage a clinician whenever something is new, worsening, bloody, febrile, or frightening.
-
 If they ask about moving phones: this companion binds to one device; they can use New phone /move and redeem again with the same email.
 
-Stay kind. Stay specific.`
+Stay kind. Stay specific.
+
+` + saraGuardrailPrompt()
+
+function systemContentForTurn(userMessage) {
+  const lead = redFlagLeadIn(userMessage)
+  if (!lead) return SARA_SYSTEM
+  return `${SARA_SYSTEM}\n\n${lead}`
+}
 
 const ALLOWED_ORIGINS = new Set([
   'https://sara-pfilates.surge.sh',
@@ -59,7 +65,7 @@ function clip(text, max = 2000) {
 }
 
 export function buildMessages(userMessage, history = []) {
-  const messages = [{ role: 'system', content: SARA_SYSTEM }]
+  const messages = [{ role: 'system', content: systemContentForTurn(userMessage) }]
   const recent = Array.isArray(history) ? history.slice(-12) : []
   for (const turn of recent) {
     const text = clip(turn?.text)
