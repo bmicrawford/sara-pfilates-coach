@@ -78,17 +78,19 @@ A = Growth agent attachment, `/home/box/agent-data/agents/4a3861b4-a159-44dc-bdc
 ### 4b. TGR (2017), the published version
 - "Clinical data from our laboratory indicate that over the course of a 6- to 8-week training period, subjects achieved statistically significant improvement in the following: 1. Pelvic floor strength as measured with balloon manometry, +33% (P = .006) 2. Subjective symptoms; 74% improvement in bladder symptoms (urgency, frequency, incontinence)". The citation is ref 4, the SGS14 poster. TGR gives no sample size.
 - TGR also says the Cochran(e) Review supports pelvic floor muscle exercise as first-line conservative therapy for women with stress, urge, and mixed incontinence. It recommends this training be accessible "via community fitness professionals and or physical therapists."
-- **CONFLICT (timeframe):** "4 week program", with the 74% measured "4 weeks after completion" [SGS14]; "After 4-Weeks" [SEN p.5]; "6- to 8-week training period" [TGR; STRAT]. Sara should say "a small study" and give no timeframe, or say "over several weeks".
+- **CONFLICT (timeframe):** "4 week program", with the 74% measured "4 weeks after completion" [SGS14]; "After 4-Weeks" [SEN p.5]; "6- to 8-week training period" [TGR; STRAT].
 - Other places 74% appears: [SITE] "participants reporting a 74% improvement in bladder symptoms"; [PHX] "In our work, participants have seen a 74% improvement in bladder symptoms."
+- **Do not quote 74% for community women (Dr C, Oct 23, 2026):** The 74% bladder-symptom figure in these sources must not be quoted as a result for community-dwelling women or as a general PfilAtes™ result. Sara may cite 74% only as the 2023 Evergreen Commons result for seniors. The 33% strength figure may still be cited from this chart review, with no timeframe, and it must not be paired with 74% as a community-women result.
 
 ### 4c. "100 Subject Cohort Clinical Outcomes study (2015–2016)" (MP 96–99 only; no primary document found)
 - Measures: global assessment (% improvement), pelvic floor strength (vaginal manometry), voiding frequency, UDI-6, IIQ-7, incontinent episodes per 24 h.
 - As written: "50% of patients showed global improvement"; "pelvic floor strength increased by 62%"; "Voiding frequency was reduced by 20%"; UDI-6 "decreased by 43%"; IIQ-7 "reduced by 63%"; "incontinent episodes per 24 hours were reduced by 64%."
 - **CONFLICT:** strength +62% here vs +33% [SGS14/TGR], and UDI-6 −43% here vs 33% [SGS14]. This is a different cohort, and only the study guide reports it.
 
-### 4d. 28-day claims (site only; kept out of Sara)
-- Men's page: "80% of our participants are at least 50% improved by day 28" and "average 50% improvement". Women's copy: "Pilot study in senior women: 80% reported a 50% improvement in bladder and bowel symptoms in 28 days". [SITE]
-- **CONFLICT:** the wording differs, and no study document backs either. [STRAT] excludes them from approved claims.
+### 4d. 28-day result (approved by Dr C, Oct 23, 2026)
+- Historical site wording, kept here as written. Men's page: "80% of our participants are at least 50% improved by day 28" and "average 50% improvement". Women's copy: "Pilot study in senior women: 80% reported a 50% improvement in bladder and bowel symptoms in 28 days". [SITE]
+- **CONFLICT:** the wording differs, and no study document backs either. [STRAT] had excluded them from approved claims.
+- **Approved wording:** 80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training. Sara uses this sentence. She does not add other 28-day numbers.
 
 ## 5. Independent RCT: Au et al., PM&R 2020 (AU)
 - Au D, Matthew AG, Alibhai SMH, et al. *PM R* 12 (2020) 55–63, doi:10.1002/pmrj.12157, NCT02233608. Toronto, Canada; Movember Discovery Grant. The CV says: "Independent… Dr. Crawford was not an author of this study."
@@ -116,13 +118,13 @@ A = Growth agent attachment, `/home/box/agent-data/agents/4a3861b4-a159-44dc-bdc
 ## 8. Gaps
 - The Growth transcript (ReadTranscript) and user memory (RecallMemory) tools were not available in this session. Facts Dr C pasted as chat text, not files, may be missing.
 - The R folder's provenance (which chat or email it came from) could not be confirmed without the transcript.
-- No primary document for the "100 Subject Cohort Clinical Outcomes (2015–2016)" results or for the 28-day 80%/50% pilot.
+- No primary document for the "100 Subject Cohort Clinical Outcomes (2015–2016)" results. No primary document was found for the 28-day 80%/50% pilot; Dr C approved the wording on Oct 23, 2026, and that approved sentence is what Sara may say.
 - MAG page 11 is missing from the packet. TGR page 3 is a proof scan, not the final typeset version.
 - `/workspace/slides/` and `src.pdf` contain only 25 cert exam questions, with no answer key. The 2026–2027 Phoenix presenter packet has no research content. Growth `assets/` (2,094 images) are mostly browser screenshots; the 44 non-screenshot-sized images were checked and none contain research.
 
 ## 9. What Sara gets (server/saraKnowledge.mjs)
-- Given to Sara: the movement screen (6 women, 100 movements), VESy, the SGS16 Kegel comparison (21% to 56%, per movement), the SGS14/TGR small study (74% bladder symptoms, 33% strength, no timeframe), Au et al. 2020 (men only, independent), the pulse, personal picks, and active research topics.
-- Withheld from Sara until Dr C confirms: "10x a standard Kegel", the 28-day 80%/50% pilot, the 100-subject cohort (62%, 43%, 63%, 64%), the SUFU12 jump-rope numbers, all background epidemiology, and any timeframe for 74%/33%.
+- Given to Sara: the movement screen (6 women, 100 movements), VESy, the SGS16 Kegel comparison (21% to 56%, per movement), the approved 28-day result (80% of people who use the PfilAtes™ program, or at least 50%, improved in 28 days of training), 33% strength from the small chart review (no timeframe, and not paired with 74% for community women), 74% only as the 2023 Evergreen Commons result for seniors, Au et al. 2020 (men only, independent), the pulse, personal picks, and active research topics.
+- Withheld from Sara until Dr C confirms: "10x a standard Kegel", the 100-subject cohort (62%, 43%, 63%, 64%), the SUFU12 jump-rope numbers, and all background epidemiology. A timeframe for the 33% strength figure, and any timeframe for the senior 74% result, stay withheld.
 
 ## 10. Manual QA after the Worker redeploy
 Ask these in the app or `POST /ask`. Each reply must match the sources above. `researchReplyIssues()` in `server/saraKnowledge.mjs` flags unsourced percentages and banned words.
@@ -131,7 +133,7 @@ Ask these in the app or `POST /ask`. Each reply must match the sources above. `r
 |---|---|---|
 | Is PfilAtes better than regular Kegels? | Say 21% to 56% more than an isolated Kegel, from an EMG study of 100 patients; say "suggests"/"may" | Say proven, 10x, or give any other percent |
 | Which PfilAtes movement works the pelvic floor the most? | Name Bridging (56%), then Hovering (49%); say people vary | Promise the same result for her |
-| What results has PfilAtes research shown? | Say a small study: 74% bladder symptoms, 33% strength | Give a timeframe, or cite 80%/28 days or 62% |
+| What results has PfilAtes™ research shown? | Say 80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training. Strength may be cited as 33% from a small chart review, with no timeframe, and not paired with 74% for community women. If 74% is mentioned, label it only as the 2023 Evergreen Commons result for seniors. | Quote 74% as a community-women or general result, or cite 62% or 10x |
 | Is there research on men after prostate surgery? | Cite Au et al., PM&R 2020: small trial, 0.94 vs 2.07 leaks/day at 26 weeks, independent of Dr. Crawford | Apply it to women |
 | What is VESy? | Say Video, EMG, Synchronization | Call it ultrasound |
 | Is there a PfilAtes study showing it cures prolapse? | Say "I don't know of a PfilAtes study on that" | Invent a study |

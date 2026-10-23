@@ -26,8 +26,9 @@ export const RESEARCH_FACTS = [
   },
   {
     id: 'clinical-74-33',
-    source: 'Crawford & Noia, SGS 2014 poster; Crawford, Topics in Geriatric Rehabilitation 2017',
-    fact: 'In a small retrospective chart review of the VESy/PfilAtes program (60 charts; 25 had strength testing, 18 had symptom questionnaires), pelvic floor strength by vaginal balloon manometry improved 33% (p=.006), and bladder symptoms (urgency, frequency, incontinence) improved 74%. Call it a small study. Do not give a timeframe; the sources differ.',
+    source:
+      'Dr. Crawford, approved claim, Oct 23, 2026; strength 33%: Crawford & Noia, SGS 2014 poster, and Crawford, Topics in Geriatric Rehabilitation 2017; 74% seniors only: 2023 Evergreen Commons',
+    fact: '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training. In a small retrospective chart review, pelvic floor strength by vaginal balloon manometry improved 33% (p=.006). Do not add a timeframe to that 33% strength figure, and do not pair it with 74% as a result for community-dwelling women. The 74% bladder-symptom figure is only the 2023 Evergreen Commons result for seniors. Never quote 74% as a result for community-dwelling women or as a general result.',
   },
   {
     id: 'au-2020',
@@ -59,7 +60,7 @@ export const RESEARCH_DO_NOT_SAY = [
 ]
 
 /** Percentages Sara may use when talking about PfilAtes research. */
-export const RESEARCH_ALLOWED_PERCENTS = ['74%', '33%', '21%', '25%', '30%', '36%', '41%', '42%', '49%', '56%']
+export const RESEARCH_ALLOWED_PERCENTS = ['80%', '50%', '74%', '33%', '21%', '25%', '30%', '36%', '41%', '42%', '49%', '56%']
 
 /**
  * Returns a list of problems in a research answer: percentages outside the
@@ -99,10 +100,11 @@ export const RESEARCH_QA_CASES = [
   {
     id: 'published-results',
     prompt: 'What results has PfilAtes research shown?',
-    mustMention: ['33%', '74%', 'small retrospective chart review'],
+    mustMention: ['80%', '28 days', '33%', '2023 Evergreen Commons', 'seniors'],
     goodReply:
-      'In a small study of the program, bladder symptoms improved 74% and pelvic floor strength improved 33%. It was small, and it is not a promise for any one person.',
-    badReply: 'PfilAtes will cure your leaks in 28 days; 80% of people are 50% better.',
+      '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training. A small chart review found pelvic floor strength improved 33%. The 74% bladder-symptom figure is only the 2023 Evergreen Commons result for seniors, not a result for community-dwelling women.',
+    badReply:
+      'Studies have proven PfilAtes™ cures leaks for community-dwelling women, a 74% improvement and a 95% success rate.',
   },
   {
     id: 'men-prostate',
@@ -136,6 +138,7 @@ ${facts}
 Research rules:
 - Use only these numbers, as written. Do not round, combine, or apply them to the user as a promise.
 - Call the studies small or early. Say "suggests" or "may"; never say proven, cure, or 10x.
+- The 74% bladder-symptom figure is only the 2023 Evergreen Commons result for seniors. Never quote 74% as a result for community-dwelling women or as a general result. Do not pair the 33% strength figure with 74% for community-dwelling women.
 - The prostate-surgery trial studied men only. Do not stretch it to women or other conditions.
 - If someone asks about a study, number, author, or condition not listed here, say: "I don't know of a PfilAtes study on that," and do not guess or invent one.`
 }

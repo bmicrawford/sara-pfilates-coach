@@ -11,6 +11,7 @@ import {
   saraGuardrailPrompt,
 } from './saraGuardrails.mjs'
 import {
+  RESEARCH_ALLOWED_PERCENTS,
   RESEARCH_FACTS,
   RESEARCH_QA_CASES,
   researchReplyIssues,
@@ -24,6 +25,24 @@ function assert(cond, msg) {
   } else {
     console.log('OK ', msg)
   }
+}
+
+/** 74% may appear only as the 2023 Evergreen Commons senior result, or in a ban on quoting it for community women. */
+function seventyFourProblems(text) {
+  const problems = []
+  for (const line of String(text).split(/\n+/)) {
+    for (const sentence of line.split(/(?<=[.!?])\s+/)) {
+      if (!sentence.includes('74%')) continue
+      const mentionsCommunity = /community(?:-|\s)dwelling women|community women/i.test(sentence)
+      const negated = /(?:never|do not|don't|must not|not be quoted|not quote|do not pair|not a result)/i.test(
+        sentence,
+      )
+      const seniorLabeled = /2023 Evergreen Commons/.test(sentence) && /senior/i.test(sentence)
+      if (mentionsCommunity && !negated) problems.push(sentence.trim())
+      else if (!seniorLabeled && !negated) problems.push(sentence.trim())
+    }
+  }
+  return problems
 }
 
 assert(GROK_MODEL === 'grok-4.6', 'model id is grok-4.6')
@@ -183,6 +202,26 @@ assert(
   buildMessages(painResearch)[0].content.includes('If a movement at any time causes pain, stop that movement.'),
   'pain + research question leads with the stop rule',
 )
+assert(RESEARCH_ALLOWED_PERCENTS.includes('80%') && RESEARCH_ALLOWED_PERCENTS.includes('50%'), '80% and 50% are allowed percents')
+assert(
+  /80% of people who use the PfilAtes™ program \(or at least 50%\) improved in 28 days of training/.test(knowledge),
+  '80% / 28 days result is in the research knowledge',
+)
+assert(
+  /80% of people who use the PfilAtes™ program \(or at least 50%\) improved in 28 days of training/.test(SARA_SYSTEM),
+  '80% / 28 days result is in the prompt',
+)
+assert(!SARA_SYSTEM.includes('showed 74% bladder symptom improvement'), 'old general 74% bladder claim is gone')
+const seventyFourPromptProblems = seventyFourProblems(SARA_SYSTEM)
+assert(
+  seventyFourPromptProblems.length === 0,
+  `prompt never presents 74% as a community-women result${seventyFourPromptProblems.length ? `: ${seventyFourPromptProblems[0]}` : ''}`,
+)
+const seventyFourKnowledgeProblems = seventyFourProblems(knowledge)
+assert(
+  seventyFourKnowledgeProblems.length === 0,
+  `knowledge never presents 74% as a community-women result${seventyFourKnowledgeProblems.length ? `: ${seventyFourKnowledgeProblems[0]}` : ''}`,
+)
 
 const built = buildMessages('how much water?', [
   { from: 'you', text: 'hi' },
@@ -205,7 +244,9 @@ const mocked = await askSaraGrok({
     assert(body.model === 'grok-4.6', 'sends grok-4.6')
     assert(body.messages[0].content.includes('Never diagnose'), 'sends Sara system prompt')
     assert(
-      body.messages[0].content.includes('74% bladder symptom improvement'),
+      body.messages[0].content.includes(
+        '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training',
+      ),
       'sends the approved-claims whitelist',
     )
     assert(

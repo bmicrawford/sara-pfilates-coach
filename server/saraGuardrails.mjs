@@ -7,7 +7,7 @@
  */
 
 export const APPROVED_CLAIMS = [
-  'PfilAtes showed 74% bladder symptom improvement.',
+  '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training.',
   'It takes 10 minutes a day.',
   "The women's course is a $149 lifetime purchase.",
   'It was created by Dr. Bruce Crawford.',
