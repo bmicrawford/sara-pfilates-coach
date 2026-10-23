@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { askSaraGrok, buildMessages, SARA_DEMO_AUDIENCE, SARA_SYSTEM } from './askGrok.mjs'
+import { askSaraGrok, buildMessages, SARA_DEMO_AUDIENCE, SARA_NO_RED_FLAG, SARA_SYSTEM } from './askGrok.mjs'
 import {
   DEMO_DAY_TTL_SECONDS,
   DEMO_HOUR_TTL_SECONDS,
@@ -176,8 +176,17 @@ const knowledge = saraKnowledgePrompt()
 assert(demoPrompt.startsWith(SARA_SYSTEM), 'demo prompt keeps the full system text first')
 assert(demoPrompt.indexOf(guard) < demoPrompt.indexOf(knowledge), 'guardrails stay ahead of research')
 assert(demoPrompt.indexOf(knowledge) < demoPrompt.indexOf(SARA_DEMO_AUDIENCE), 'demo audience is after research')
-assert(buildMessages('how much water?')[0].content === SARA_SYSTEM, 'paid turns do not get the demo audience')
+assert(
+  demoPrompt.indexOf(knowledge) < demoPrompt.indexOf(SARA_NO_RED_FLAG) &&
+    demoPrompt.indexOf(SARA_NO_RED_FLAG) < demoPrompt.indexOf(SARA_DEMO_AUDIENCE),
+  'no-trigger note stays after the guardrails and ahead of the demo audience',
+)
+assert(
+  buildMessages('how much water?')[0].content === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}`,
+  'paid ordinary turns do not get the demo audience',
+)
 const pain = buildMessages('The lunge hurts when I do it.', [], { audience: 'demo' })[0].content
+assert(!pain.includes(SARA_NO_RED_FLAG), 'a real pain turn does not get the no-trigger note')
 const leadAt = pain.indexOf('Red-flag lead-in')
 assert(leadAt > SARA_SYSTEM.length && leadAt < pain.indexOf(SARA_DEMO_AUDIENCE), 'red-flag lead-in stays ahead of the demo note')
 assert(/Never diagnose/.test(demoPrompt), 'demo prompt still forbids diagnosis')

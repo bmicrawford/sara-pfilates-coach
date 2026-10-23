@@ -204,7 +204,10 @@ export function redFlagLeadIn(message) {
   const hits = matchingRedFlags(message)
   if (!hits.length) return ''
   const lines = hits.map((rule) => `- ${rule.instruction}`).join('\n')
-  return `Red-flag lead-in: The latest user message matches an approved situation. Give each matching instruction first and clearly, in this wording, before any other coaching. Then continue kindly. Do not add other conditions or advice beyond these rules.\n${lines}`
+  const pregnancy = hits.some((rule) => rule.id === 'pregnancy')
+    ? '\nIf they are under 12 weeks, still begin with that exact pregnancy sentence, including the words "after 12 weeks gestational age". Do not tell them to stop Butterfly, Bridging, or Corkscrew yet.'
+    : ''
+  return `Red-flag lead-in: The latest user message matches an approved situation. Give each matching instruction first and clearly, in this wording, before any other coaching. Copy each sentence exactly. Then continue kindly. Do not add other conditions or advice beyond these rules.\n${lines}${pregnancy}`
 }
 
 export function saraGuardrailPrompt() {

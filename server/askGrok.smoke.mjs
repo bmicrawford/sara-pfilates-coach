@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { askSaraGrok, buildMessages, corsHeaders, SARA_OFFLINE, SARA_SYSTEM, GROK_MODEL } from './askGrok.mjs'
+import { askSaraGrok, buildMessages, corsHeaders, SARA_NO_RED_FLAG, SARA_OFFLINE, SARA_SYSTEM, SARA_TRIGGER_CHECKLIST, GROK_MODEL } from './askGrok.mjs'
 import {
   APPROVED_CLAIMS,
   ESSENTIAL_PFILATES_MOVEMENTS,
@@ -67,6 +67,16 @@ assert(
   SARA_SYSTEM.indexOf('2 to 4 short sentences') < SARA_SYSTEM.indexOf(saraGuardrailPrompt()),
   'voice style stays ahead of the guardrails',
 )
+assert(SARA_SYSTEM.includes(SARA_TRIGGER_CHECKLIST), 'system prompt includes the trigger checklist')
+assert(
+  SARA_SYSTEM.indexOf('Red-flag trigger checklist') < SARA_SYSTEM.indexOf(saraGuardrailPrompt()),
+  'trigger checklist stays ahead of the guardrail block',
+)
+assert(/Does not hurt/.test(SARA_TRIGGER_CHECKLIST), 'checklist excludes a movement that does not hurt')
+assert(/don't have osteoporosis/i.test(SARA_TRIGGER_CHECKLIST), 'checklist excludes denied osteoporosis')
+assert(/knee replacement/i.test(SARA_TRIGGER_CHECKLIST), 'checklist excludes a knee replacement')
+assert(/why did I leak/i.test(SARA_TRIGGER_CHECKLIST), 'checklist excludes a cause question about a leak')
+assert(/after 12 weeks gestational age/.test(SARA_TRIGGER_CHECKLIST), 'checklist keeps the pregnancy wording for early pregnancy')
 assert(SARA_SYSTEM.includes(saraGuardrailPrompt()), 'system prompt includes Dr C guardrails')
 assert(
   /do not invent statistics, studies, cure claims, or diagnoses/i.test(SARA_SYSTEM),
@@ -131,11 +141,19 @@ for (const sample of RED_FLAG_QA_CASES) {
   const lead = builtCase[0].content.slice(SARA_SYSTEM.length)
   assert(lead.includes('Red-flag lead-in'), `${sample.id} adds a red-flag lead-in`)
   assert(lead.includes(rule.instruction), `${sample.id} lead-in uses Dr C wording`)
+  assert(!lead.includes(SARA_NO_RED_FLAG), `${sample.id} does not get the no-trigger note`)
 }
+const earlyPregnancy = buildMessages("I'm 8 weeks pregnant. Can I do Corkscrew?")[0].content
+assert(
+  earlyPregnancy.includes('after 12 weeks gestational age') && /under 12 weeks/.test(earlyPregnancy),
+  'an 8-week pregnancy turn still requires the exact 12-week sentence',
+)
 for (const prompt of RED_FLAG_QA_NON_MATCHES) {
   assert(qaDoc.includes(prompt), `QA doc lists non-match: ${prompt}`)
   assert(matchingRedFlags(prompt).length === 0, `no red-flag match for: ${prompt}`)
-  assert(buildMessages(prompt)[0].content === SARA_SYSTEM, `no red-flag lead-in for: ${prompt}`)
+  const ordinary = buildMessages(prompt)[0].content
+  assert(ordinary === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}`, `no red-flag lead-in for: ${prompt}`)
+  assert(!ordinary.includes('Red-flag lead-in'), `non-trigger does not ask Sara to recite a rule: ${prompt}`)
 }
 
 assert(
@@ -211,7 +229,10 @@ for (const sample of RESEARCH_QA_CASES) {
   }
   assert(researchReplyIssues(sample.goodReply).length === 0, `${sample.id}: sourced reply passes`)
   assert(researchReplyIssues(sample.badReply).length > 0, `${sample.id}: overstated reply is caught`)
-  assert(buildMessages(sample.prompt)[0].content === SARA_SYSTEM, `${sample.id}: no red-flag lead-in`)
+  assert(
+    buildMessages(sample.prompt)[0].content === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}`,
+    `${sample.id}: no red-flag lead-in`,
+  )
 }
 const painResearch = "Bridging hurts, but the research says it's the strongest one. Should I keep going?"
 assert(
@@ -276,7 +297,10 @@ const built = buildMessages('how much water?', [
   { from: 'you', text: 'hi' },
   { from: 'sara', text: 'hey' },
 ])
-assert(built[0].role === 'system' && built[0].content === SARA_SYSTEM, 'system message first')
+assert(
+  built[0].role === 'system' && built[0].content === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}`,
+  'system message first, with the no-trigger note on an ordinary question',
+)
 assert(built.at(-1).content === 'how much water?', 'latest user message last')
 assert(built.some((m) => m.role === 'assistant'), 'history maps sara → assistant')
 

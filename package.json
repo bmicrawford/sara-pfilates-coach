@@ -23,6 +23,7 @@
     "smoke:voice-ui": "node scripts/voice-ui.smoke.mjs",
     "smoke:install": "node --experimental-strip-types src/lib/installCoach.smoke.ts",
     "qa:live": "node scripts/qa-live.mjs",
+    "smoke:qa-check": "node scripts/qa-live.mjs --self-test",
     "verify:ask-api": "node scripts/verify-sara-api.mjs"
   },
   "dependencies": {
