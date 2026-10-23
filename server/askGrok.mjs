@@ -1,6 +1,7 @@
 /** Shared Ask Sara → xAI Grok proxy. Never import this from the Vite app. */
 
 import { redFlagLeadIn, saraGuardrailPrompt } from './saraGuardrails.mjs'
+import { saraKnowledgePrompt } from './saraKnowledge.mjs'
 
 export const GROK_MODEL = 'grok-4.6'
 export const XAI_CHAT_URL = 'https://api.x.ai/v1/chat/completions'
@@ -26,7 +27,10 @@ If they ask about moving phones: this companion binds to one device; they can us
 
 Stay kind. Stay specific.
 
-` + saraGuardrailPrompt()
+` +
+  saraGuardrailPrompt() +
+  '\n\n' +
+  saraKnowledgePrompt()
 
 function systemContentForTurn(userMessage) {
   const lead = redFlagLeadIn(userMessage)

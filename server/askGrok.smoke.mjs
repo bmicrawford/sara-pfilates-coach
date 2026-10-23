@@ -10,6 +10,13 @@ import {
   matchingRedFlags,
   saraGuardrailPrompt,
 } from './saraGuardrails.mjs'
+import {
+  RESEARCH_ALLOWED_PERCENTS,
+  RESEARCH_FACTS,
+  RESEARCH_QA_CASES,
+  researchReplyIssues,
+  saraKnowledgePrompt,
+} from './saraKnowledge.mjs'
 
 function assert(cond, msg) {
   if (!cond) {
@@ -18,6 +25,24 @@ function assert(cond, msg) {
   } else {
     console.log('OK ', msg)
   }
+}
+
+/** 74% may appear only as the 2023 Evergreen Commons senior result, or in a ban on quoting it for community women. */
+function seventyFourProblems(text) {
+  const problems = []
+  for (const line of String(text).split(/\n+/)) {
+    for (const sentence of line.split(/(?<=[.!?])\s+/)) {
+      if (!sentence.includes('74%')) continue
+      const mentionsCommunity = /community(?:-|\s)dwelling women|community women/i.test(sentence)
+      const negated = /(?:never|do not|don't|must not|not be quoted|not quote|do not pair|not a result)/i.test(
+        sentence,
+      )
+      const seniorLabeled = /2023 Evergreen Commons/.test(sentence) && /senior/i.test(sentence)
+      if (mentionsCommunity && !negated) problems.push(sentence.trim())
+      else if (!seniorLabeled && !negated) problems.push(sentence.trim())
+    }
+  }
+  return problems
 }
 
 assert(GROK_MODEL === 'grok-4.6', 'model id is grok-4.6')
@@ -134,6 +159,70 @@ assert(
   'combined lead-in states pain before the pregnancy limit',
 )
 
+// PfilAtes research knowledge (docs/pfilates-research.md)
+const knowledge = saraKnowledgePrompt()
+assert(SARA_SYSTEM.includes(knowledge), 'system prompt includes PfilAtes research knowledge')
+assert(
+  SARA_SYSTEM.indexOf(saraGuardrailPrompt()) < SARA_SYSTEM.indexOf(knowledge),
+  'red-flag guardrails come before research knowledge',
+)
+assert(/Red-flag rules always come first/.test(knowledge), 'research block defers to red-flag rules')
+assert(/I don't know of a PfilAtes study on that/.test(knowledge), 'research block says "I don\'t know" for unknown studies')
+assert(/never say proven, cure, or 10x/i.test(knowledge), 'research block bans overstatement')
+assert(/plus the PfilAtes research facts/.test(SARA_SYSTEM), 'claims whitelist admits the research facts')
+assert(knowledge.length < 4500, `research block stays within budget (${knowledge.length} chars)`)
+for (const item of RESEARCH_FACTS) {
+  assert(knowledge.includes(item.fact), `research fact in prompt: ${item.id}`)
+  assert(item.source && knowledge.includes(item.source), `research fact cites a source: ${item.id}`)
+}
+const researchDoc = readFileSync(new URL('../docs/pfilates-research.md', import.meta.url), 'utf8')
+for (const [label, needle] of [
+  ['EMG range', '21% to +56%'],
+  ['Bridge 56%', '56% (15-82)'],
+  ['strength 33%', '33% (13.2 – 16.9 cm H2O, p=.006)'],
+  ['Au leaks', '2.07 vs 0.94'],
+  ['VESy expansion', 'Video, EMG, Synchronization'],
+]) {
+  assert(researchDoc.includes(needle), `research doc backs ${label}`)
+}
+for (const sample of RESEARCH_QA_CASES) {
+  for (const needle of sample.mustMention) {
+    assert(knowledge.includes(needle), `${sample.id}: prompt holds "${needle}"`)
+  }
+  assert(researchReplyIssues(sample.goodReply).length === 0, `${sample.id}: sourced reply passes`)
+  assert(researchReplyIssues(sample.badReply).length > 0, `${sample.id}: overstated reply is caught`)
+  assert(buildMessages(sample.prompt)[0].content === SARA_SYSTEM, `${sample.id}: no red-flag lead-in`)
+}
+const painResearch = "Bridging hurts, but the research says it's the strongest one. Should I keep going?"
+assert(
+  matchingRedFlags(painResearch).some((rule) => rule.id === 'movement-pain'),
+  'pain + research question still triggers the pain rule',
+)
+assert(
+  buildMessages(painResearch)[0].content.includes('If a movement at any time causes pain, stop that movement.'),
+  'pain + research question leads with the stop rule',
+)
+assert(RESEARCH_ALLOWED_PERCENTS.includes('80%') && RESEARCH_ALLOWED_PERCENTS.includes('50%'), '80% and 50% are allowed percents')
+assert(
+  /80% of people who use the PfilAtes™ program \(or at least 50%\) improved in 28 days of training/.test(knowledge),
+  '80% / 28 days result is in the research knowledge',
+)
+assert(
+  /80% of people who use the PfilAtes™ program \(or at least 50%\) improved in 28 days of training/.test(SARA_SYSTEM),
+  '80% / 28 days result is in the prompt',
+)
+assert(!SARA_SYSTEM.includes('showed 74% bladder symptom improvement'), 'old general 74% bladder claim is gone')
+const seventyFourPromptProblems = seventyFourProblems(SARA_SYSTEM)
+assert(
+  seventyFourPromptProblems.length === 0,
+  `prompt never presents 74% as a community-women result${seventyFourPromptProblems.length ? `: ${seventyFourPromptProblems[0]}` : ''}`,
+)
+const seventyFourKnowledgeProblems = seventyFourProblems(knowledge)
+assert(
+  seventyFourKnowledgeProblems.length === 0,
+  `knowledge never presents 74% as a community-women result${seventyFourKnowledgeProblems.length ? `: ${seventyFourKnowledgeProblems[0]}` : ''}`,
+)
+
 const built = buildMessages('how much water?', [
   { from: 'you', text: 'hi' },
   { from: 'sara', text: 'hey' },
@@ -155,7 +244,9 @@ const mocked = await askSaraGrok({
     assert(body.model === 'grok-4.6', 'sends grok-4.6')
     assert(body.messages[0].content.includes('Never diagnose'), 'sends Sara system prompt')
     assert(
-      body.messages[0].content.includes('74% bladder symptom improvement'),
+      body.messages[0].content.includes(
+        '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training',
+      ),
       'sends the approved-claims whitelist',
     )
     assert(
