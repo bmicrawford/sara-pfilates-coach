@@ -21,9 +21,11 @@ export const DEMO_VOICE_ONLY_MESSAGE = 'This demo keeps Sara’s portrait still 
 /** Configurable demo-pass cost limits. Change these constants, then redeploy the Worker. */
 export const DEMO_LIMITS = {
   askPerIpPerHour: 20,
-  speakPerIpPerHour: 20,
+  // Spoken replies use up to 3 /speak calls (see splitSpeakChunks). 60/hour
+  // and 150/day cover a full ask budget at that cap. Global daily cap stays.
+  speakPerIpPerHour: 60,
   askPerIpPerDay: 60,
-  speakPerIpPerDay: 60,
+  speakPerIpPerDay: 150,
   globalAsksPerDay: 3000,
   globalSpeaksPerDay: 3000,
 }

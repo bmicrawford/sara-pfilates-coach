@@ -1,12 +1,9 @@
 import { currentSaraPass } from './demoPass.ts'
 import { rewritePfilatesForSpeech } from './pfilatesSpeech.mjs'
 import { SARA_BUSY_MESSAGE, SARA_UNKNOWN_PASS_MESSAGE } from './saraGate.ts'
+import { splitSpeakChunks } from './speakChunks.mjs'
 
 const MUTE_KEY = 'sara.voiceMuted'
-
-/** Tiny silent WAV so iOS Safari unlocks playback from the Send tap. */
-const SILENT_WAV =
-  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
 
 export const SARA_VOICE_OFFLINE =
   "I couldn't reach my voice just now. Tap Play in a moment — I won't fake it from the phone speaker."
@@ -15,8 +12,16 @@ function apiBase(): string {
   return (import.meta.env.VITE_SARA_API_URL ?? '').replace(/\/$/, '')
 }
 
+type AudioContextCtor = typeof AudioContext
+
+function audioContextCtor(): AudioContextCtor | null {
+  if (typeof window === 'undefined') return null
+  const webkit = (window as unknown as { webkitAudioContext?: AudioContextCtor }).webkitAudioContext
+  return window.AudioContext || webkit || null
+}
+
 export function isVoiceReady(): boolean {
-  return typeof window !== 'undefined' && typeof Audio !== 'undefined'
+  return audioContextCtor() != null
 }
 
 /** @deprecated Use isVoiceReady — neural TTS is the path, not Web Speech. */
@@ -32,6 +37,32 @@ export function isSaraMuted(): boolean {
   }
 }
 
+type LevelListener = (level: number) => void
+
+type Player = {
+  ctx: AudioContext
+  analyser: AnalyserNode
+  hold: AudioBufferSourceNode | null
+  speech: Set<AudioBufferSourceNode>
+  generation: number
+  raf: number
+}
+
+let player: Player | null = null
+const levelListeners = new Set<LevelListener>()
+
+function emitLevel(level: number): void {
+  for (const listener of levelListeners) listener(level)
+}
+
+/** Portrait glow reads this. Does not re-render the chat thread. */
+export function subscribeSaraLevel(listener: LevelListener): () => void {
+  levelListeners.add(listener)
+  return () => {
+    levelListeners.delete(listener)
+  }
+}
+
 export function setSaraMuted(muted: boolean): void {
   try {
     localStorage.setItem(MUTE_KEY, muted ? '1' : '0')
@@ -41,99 +72,24 @@ export function setSaraMuted(muted: boolean): void {
   if (muted) stopSaraSpeech()
 }
 
-type Engine = {
-  audio: HTMLAudioElement
-  ctx: AudioContext | null
-  analyser: AnalyserNode | null
-  source: MediaElementAudioSourceNode | null
-  raf: number
-  objectUrl: string | null
-  generation: number
-}
-
-let engine: Engine | null = null
-
-function ensureEngine(): Engine {
-  if (engine) return engine
-  const audio = new Audio()
-  audio.preload = 'auto'
-  audio.setAttribute('playsinline', 'true')
-  audio.setAttribute('webkit-playsinline', 'true')
-  engine = {
-    audio,
-    ctx: null,
-    analyser: null,
-    source: null,
-    raf: 0,
-    objectUrl: null,
-    generation: 0,
-  }
-  return engine
-}
-
-function attachGraph(e: Engine): void {
-  if (e.ctx && e.source) return
-  const AC =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  if (!AC) return
-  const ctx = new AC()
+function ensurePlayer(): Player | null {
+  const Ctor = audioContextCtor()
+  if (!Ctor) return null
+  if (player) return player
+  const ctx = new Ctor()
   const analyser = ctx.createAnalyser()
   analyser.fftSize = 256
   analyser.smoothingTimeConstant = 0.62
-  const source = ctx.createMediaElementSource(e.audio)
-  source.connect(analyser)
   analyser.connect(ctx.destination)
-  e.ctx = ctx
-  e.analyser = analyser
-  e.source = source
-}
-
-function releaseObjectUrl(e: Engine): void {
-  if (e.objectUrl) {
-    URL.revokeObjectURL(e.objectUrl)
-    e.objectUrl = null
+  player = {
+    ctx,
+    analyser,
+    hold: null,
+    speech: new Set(),
+    generation: 0,
+    raf: 0,
   }
-}
-
-function stopLevels(e: Engine): void {
-  if (e.raf) {
-    cancelAnimationFrame(e.raf)
-    e.raf = 0
-  }
-}
-
-export function stopSaraSpeech(): void {
-  if (!engine) return
-  engine.generation += 1
-  stopLevels(engine)
-  try {
-    engine.audio.pause()
-    engine.audio.removeAttribute('src')
-  } catch {
-    /* ignore */
-  }
-  releaseObjectUrl(engine)
-}
-
-/** Call from a tap (Send / Play). iOS only unlocks audio inside a user gesture. */
-export function unlockSaraSpeech(): void {
-  if (!isVoiceReady()) return
-  const e = ensureEngine()
-  try {
-    attachGraph(e)
-    if (e.ctx?.state === 'suspended') void e.ctx.resume()
-    e.audio.muted = true
-    e.audio.src = SILENT_WAV
-    void e.audio.play().then(() => {
-      e.audio.pause()
-      e.audio.muted = false
-    }).catch(() => {
-      e.audio.muted = false
-    })
-  } catch {
-    /* ignore */
-  }
+  return player
 }
 
 function rmsLevel(analyser: AnalyserNode): number {
@@ -147,12 +103,60 @@ function rmsLevel(analyser: AnalyserNode): number {
   return Math.sqrt(sum / buf.length)
 }
 
-function visemePulse(elapsed: number, duration: number): number {
-  if (duration <= 0) return 0
-  const t = elapsed / duration
-  const envelope = t < 0.08 ? t / 0.08 : t > 0.9 ? Math.max(0, (1 - t) / 0.1) : 1
-  const syllable = 0.42 + 0.58 * Math.abs(Math.sin(elapsed * 11.2)) * (0.55 + 0.45 * Math.abs(Math.sin(elapsed * 4.1)))
-  return Math.min(1, envelope * syllable)
+function stopLevels(current: Player): void {
+  if (current.raf) {
+    cancelAnimationFrame(current.raf)
+    current.raf = 0
+  }
+}
+
+function stopSpeechSources(current: Player): void {
+  for (const source of current.speech) {
+    try {
+      source.onended = null
+      source.stop()
+    } catch {
+      /* already stopped */
+    }
+  }
+  current.speech.clear()
+}
+
+export function stopSaraSpeech(): void {
+  if (!player) return
+  player.generation += 1
+  stopLevels(player)
+  stopSpeechSources(player)
+  emitLevel(0)
+}
+
+/**
+ * Call from the Send / Play tap, before any await.
+ * iOS and Android only unlock audio inside that gesture. A muted clip that
+ * is paused after the tap re-locks playback, so the /ask round trip then
+ * plays silence. Resume the context and start a silent buffer here, and
+ * leave that buffer running so later speech buffers can start.
+ */
+export function unlockSaraSpeech(): void {
+  const current = ensurePlayer()
+  if (!current) return
+  try {
+    void current.ctx.resume()
+    if (!current.hold) {
+      const buffer = current.ctx.createBuffer(1, current.ctx.sampleRate, current.ctx.sampleRate)
+      const source = current.ctx.createBufferSource()
+      source.buffer = buffer
+      source.loop = true
+      const gain = current.ctx.createGain()
+      gain.gain.value = 0
+      source.connect(gain)
+      gain.connect(current.ctx.destination)
+      source.start()
+      current.hold = source
+    }
+  } catch {
+    /* a later Play tap can try again */
+  }
 }
 
 export async function fetchSaraSpeech(text: string): Promise<Blob | null | 'busy' | 'denied'> {
@@ -181,6 +185,11 @@ export async function fetchSaraSpeech(text: string): Promise<Blob | null | 'busy
   }
 }
 
+async function decodeAudio(ctx: AudioContext, blob: Blob): Promise<AudioBuffer> {
+  const bytes = await blob.arrayBuffer()
+  return ctx.decodeAudioData(bytes.slice(0))
+}
+
 type SpeakOpts = {
   onStart?: () => void
   onEnd?: () => void
@@ -188,88 +197,129 @@ type SpeakOpts = {
   onError?: (message: string) => void
 }
 
+function startLevels(current: Player, gen: number, opts: SpeakOpts): void {
+  const tick = () => {
+    if (!player || gen !== player.generation) {
+      emitLevel(0)
+      opts.onLevel?.(0)
+      return
+    }
+    const level = Math.min(1, rmsLevel(current.analyser) * 7.2)
+    emitLevel(level)
+    opts.onLevel?.(level)
+    current.raf = requestAnimationFrame(tick)
+  }
+  current.raf = requestAnimationFrame(tick)
+}
+
 export async function speakSara(text: string, opts: SpeakOpts = {}): Promise<void> {
   if (!isVoiceReady() || isSaraMuted()) {
     opts.onEnd?.()
     return
   }
-  const clean = rewritePfilatesForSpeech(text.replace(/\s+/g, ' ').trim())
-  if (!clean) {
+  const chunks = splitSpeakChunks(text)
+  if (!chunks.length) {
     opts.onEnd?.()
     return
   }
 
-  const e = ensureEngine()
-  e.generation += 1
-  const gen = e.generation
-  stopLevels(e)
-
-  const blob = await fetchSaraSpeech(clean)
-  if (gen !== e.generation) return
-  if (blob === 'busy') {
-    opts.onError?.(SARA_BUSY_MESSAGE)
+  const current = ensurePlayer()
+  if (!current) {
     opts.onEnd?.()
     return
   }
-  if (blob === 'denied') {
-    opts.onError?.(SARA_UNKNOWN_PASS_MESSAGE)
-    opts.onEnd?.()
-    return
-  }
-  if (!blob) {
-    opts.onError?.(SARA_VOICE_OFFLINE)
-    opts.onEnd?.()
-    return
-  }
+  current.generation += 1
+  const gen = current.generation
+  stopLevels(current)
+  stopSpeechSources(current)
 
-  try {
-    attachGraph(e)
-    if (e.ctx?.state === 'suspended') await e.ctx.resume()
-  } catch {
-    /* play without analyser */
-  }
-
-  releaseObjectUrl(e)
-  const url = URL.createObjectURL(blob)
-  e.objectUrl = url
-  e.audio.muted = false
-  e.audio.src = url
-
-  const startedAt = performance.now()
-
-  const tick = () => {
-    if (gen !== e.generation) {
-      opts.onLevel?.(0)
-      return
-    }
-    const duration = e.audio.duration && Number.isFinite(e.audio.duration) ? e.audio.duration : 0
-    const elapsed = (performance.now() - startedAt) / 1000
-    let level = visemePulse(elapsed, duration || Math.max(elapsed + 0.4, 1.2))
-    if (e.analyser) {
-      const rms = rmsLevel(e.analyser)
-      if (rms > 0.012) level = Math.min(1, rms * 7.2)
-    }
-    opts.onLevel?.(level)
-    e.raf = requestAnimationFrame(tick)
-  }
+  const jobs = chunks.map((chunk) => fetchSaraSpeech(chunk))
+  let scheduled = 0
+  let finished = 0
+  let started = false
+  let scheduling = true
+  let nextTime = 0
+  let closed = false
 
   const finish = () => {
-    if (gen !== e.generation) return
-    stopLevels(e)
+    if (closed || gen !== current.generation) return
+    closed = true
+    stopLevels(current)
+    emitLevel(0)
     opts.onLevel?.(0)
     opts.onEnd?.()
   }
 
-  e.audio.onended = finish
-  e.audio.onerror = finish
-
-  try {
-    await e.audio.play()
-    if (gen !== e.generation) return
-    opts.onStart?.()
-    e.raf = requestAnimationFrame(tick)
-  } catch {
-    opts.onError?.(SARA_VOICE_OFFLINE)
-    finish()
+  const fail = (message: string) => {
+    scheduling = false
+    opts.onError?.(message)
+    if (!started || finished >= scheduled) finish()
   }
+
+  for (let i = 0; i < jobs.length; i += 1) {
+    if (gen !== current.generation) return
+    const blob = await jobs[i]
+    if (gen !== current.generation) return
+    if (blob === 'busy') {
+      fail(SARA_BUSY_MESSAGE)
+      return
+    }
+    if (blob === 'denied') {
+      fail(SARA_UNKNOWN_PASS_MESSAGE)
+      return
+    }
+    if (!blob) {
+      fail(SARA_VOICE_OFFLINE)
+      return
+    }
+
+    let audioBuf: AudioBuffer
+    try {
+      audioBuf = await decodeAudio(current.ctx, blob)
+    } catch {
+      fail(SARA_VOICE_OFFLINE)
+      return
+    }
+    if (gen !== current.generation) return
+
+    try {
+      if (current.ctx.state === 'suspended') await current.ctx.resume()
+    } catch {
+      /* play anyway if the context is already running */
+    }
+    if (current.ctx.state === 'suspended') {
+      fail(SARA_VOICE_OFFLINE)
+      return
+    }
+
+    const source = current.ctx.createBufferSource()
+    source.buffer = audioBuf
+    source.connect(current.analyser)
+    const now = current.ctx.currentTime
+    const when = started ? Math.max(nextTime, now + 0.01) : now + 0.02
+    try {
+      source.start(when)
+    } catch {
+      fail(SARA_VOICE_OFFLINE)
+      return
+    }
+    nextTime = when + (Number.isFinite(audioBuf.duration) ? audioBuf.duration : 0)
+    scheduled += 1
+    current.speech.add(source)
+    source.onended = () => {
+      current.speech.delete(source)
+      if (gen !== current.generation) return
+      finished += 1
+      if (!scheduling && finished >= scheduled) finish()
+    }
+    if (!started) {
+      started = true
+      opts.onStart?.()
+      startLevels(current, gen, opts)
+    }
+  }
+
+  scheduling = false
+  if (gen !== current.generation) return
+  if (!started || finished >= scheduled) finish()
 }
