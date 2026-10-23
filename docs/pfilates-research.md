@@ -28,12 +28,12 @@ A = Growth agent attachment, `/home/box/agent-data/agents/4a3861b4-a159-44dc-bdc
 
 ## 1. Origin: the 2008–2009 movement screen (SUFU11, TGR)
 - SUFU11 methods: "Between September 2008 and September 2009 real time surface EMG data was collected from the pelvic floor of 6 multiparous women ages (40–47) during performance of 100 different mat Pilates, Yoga, and personal training movements." Each movement was videotaped and synchronized to EMG to find the point of peak pelvic floor engagement. Movements were rated on "multiples of baseline resting EMG".
-- SUFU11 results, mean multiples of baseline (resting) EMG, with the point of peak engagement: Side laying straight leg circles 21.6 (forward sweep 45° above horizontal); Side laying bent knee lifts 26.1 (top of leg lift); Bridging 26.1 (top of bridge, gluteals engaged); Corkscrew 17 (hips flexed, legs over body); Lunges 41.4 (deepest point in the lunge); Squats 18 (deepest point in the squat); Cat into cow 15.7 (full cat pose); Butterfly 24.9 (knees together, feet pressed together); All 4s side leg lift 21.3 (top of the lift); Hovering 28 (top of the movement during pelvic curl).
+- SUFU11 results, mean multiples of baseline (resting) EMG, with the point of peak engagement: Side laying straight leg circles 21.6 (forward sweep 45° above horizontal); Side laying bent knee lifts 26.1 (top of leg lift); Bridging 26.1 (top of bridge, gluteals engaged); Corkscrew 17 (hips flexed, legs over body); Lunges 41.4 (deepest point in the lunge); Squats 18 (deepest point in the squat); Cat into cow 15.7 (full cat pose); Butterfly 24.9 (knees together, feet pressed together); All Fours Side Leg Lift 21.3 (top of the lift); Hovering 28 (top of the movement during pelvic curl).
 - SUFU11 conclusion: "Certain plyometric movements induce effective co-recruitment of the pelvic floor musculature. These 10 movements are considered to be the most effective pelvic floor engagers from the large number of movements studied."
 - TGR: "In 2008, we began a series of experiments… Six multiparous women aged 40 to 47 years performed 100 mat Pilates, Yoga, and personal training movements using the VESy system." Ten were selected because they were "Most suitable for the public at large", "Provided an array of postures", and "Represented templates for functional movement."
 - **CONFLICT (number of movements):** 100 movements [SUFU11; TGR] vs "One hundred and twenty" [SEN p.4] vs "over 120" [MAG; SITE].
 - **CONFLICT (start year):** experiments began in 2008 [TGR; SEN] vs "In 2009 we created a program of functional movement… called Pfilates." [MAG]. These may be different milestones.
-- **Caution:** [SEN p.3] says PfilAtes increases pelvic floor activity "by up to 10x a standard Kegel." SUFU11 multiples are against resting baseline, not a Kegel. The Kegel comparisons (SGS16) are +21% to +56%. No source supports "10x a Kegel". Sara must not use it.
+- **Confirmed (Dr C, Oct 23, 2026):** [SEN p.3] says PfilAtes increases pelvic floor activity "by up to 10x a standard Kegel." SUFU11 multiples are against resting baseline, not a Kegel. The Kegel comparisons (SGS16) are +21% to +56%. Dr C confirmed the claim: PfilAtes™ movements can activate the pelvic floor up to 10 times more than a standard Kegel. Sara may say that, and she may say "10x" only as "up to 10x a standard Kegel." She must not drop "up to", say proven, or use another multiple.
 
 ## 2. VESy method
 - VESy = "Video, EMG, Synchronization" [TGR], a "modification of gait analysis for evaluation of the pelvic floor" [TGR]. Surface EMG channels: pelvic floor, gluteals, abdominals, lower extremity adductors [TGR Figure; MP 77; VC]. MyoResearch XP software [MP 80]. SUFU12 used Noraxon wireless sensors.
@@ -57,14 +57,14 @@ A = Growth agent attachment, `/home/box/agent-data/agents/4a3861b4-a159-44dc-bdc
 | 6 | Bridge | 56% (15-82) | |
 | 7 | Corkscrew | 21% (-50-57) | |
 | 8 | Hovering | 49% (-12-80) | |
-| 9 | All 4s Bent Knee Lift | 30% (-22-71) | **CONFLICT:** MP 91 says "-21% to 71%" |
+| 9 | All Fours Side Leg Lift | 30% (-22-71) | **CONFLICT:** MP 91 says "-21% to 71%" |
 | 10 | Cat Into Cow | 41% (-5-73) | |
 
 - "Each of the ten movements produced a mean stastically significant increase in PF activity than traditional (stationary) Kegel exercises." Conclusion: specialized movements with voluntary PF contractions "may provide greater motor unit recruitment than traditional Kegel exercises. Individuals vary as to the degree of enhanced engagement with any given movement." [SGS16]
 - Five essential (highest-recruiting) movements: Bridge, Hovering, Lunge, Cat into Cow, Butterfly. [MP 93]
 - MP 81 adds the site: "Nevada Center for Pelvic Floor Medicine". The abstract says "Center for Pelvic Floor Medicine, Reno, NV".
 - **CONFLICT (authors):** the SGS16 abstract lists "B. S. Crawford" alone. The CV and MP 82 list "Crawford B, Noia C".
-- **CONFLICT (movement 9 name):** "All 4s Bent Knee Lift" [SGS16; MP] vs "All 4s side leg lift" [SUFU11], which is also the name in PR #42 guardrails ("All-4s side leg lift"). TGR says "All fours bent knee lift". [PW] says "ALL 4'S". Dr C should confirm the canonical name.
+- **Confirmed name (Dr C, Oct 23, 2026):** movement 9 is All Fours Side Leg Lift. Sara uses that name only. The hip-replacement avoid list is still movements 3, 4, 5, and 9.
 
 ## 4. Clinical outcomes
 ### 4a. 4-week VESy/Pfilates chart review, the source of 74% and 33% (SGS14)
@@ -123,17 +123,18 @@ A = Growth agent attachment, `/home/box/agent-data/agents/4a3861b4-a159-44dc-bdc
 - `/workspace/slides/` and `src.pdf` contain only 25 cert exam questions, with no answer key. The 2026–2027 Phoenix presenter packet has no research content. Growth `assets/` (2,094 images) are mostly browser screenshots; the 44 non-screenshot-sized images were checked and none contain research.
 
 ## 9. What Sara gets (server/saraKnowledge.mjs)
-- Given to Sara: the movement screen (6 women, 100 movements), VESy, the SGS16 Kegel comparison (21% to 56%, per movement), the approved 28-day result (80% of people who use the PfilAtes™ program, or at least 50%, improved in 28 days of training), 33% strength from the small chart review (no timeframe, and not paired with 74% for community women), 74% only as the 2023 Evergreen Commons result for seniors, Au et al. 2020 (men only, independent), the pulse, personal picks, and active research topics.
-- Withheld from Sara until Dr C confirms: "10x a standard Kegel", the 100-subject cohort (62%, 43%, 63%, 64%), the SUFU12 jump-rope numbers, and all background epidemiology. A timeframe for the 33% strength figure, and any timeframe for the senior 74% result, stay withheld.
+- Given to Sara: the movement screen (6 women, 100 movements), VESy, the SGS16 Kegel comparison (21% to 56%, per movement, movement 9 named All Fours Side Leg Lift), the confirmed claim that PfilAtes™ movements can activate the pelvic floor up to 10 times more than a standard Kegel (say "10x" only as "up to 10x a standard Kegel"), the approved 28-day result (80% of people who use the PfilAtes™ program, or at least 50%, improved in 28 days of training), 33% strength from the small chart review (no timeframe, and not paired with 74% for community women), 74% only as the 2023 Evergreen Commons result for seniors, Au et al. 2020 (men only, independent), the pulse, personal picks, and active research topics.
+- Withheld from Sara until Dr C confirms: the 100-subject cohort (62%, 43%, 63%, 64%), the SUFU12 jump-rope numbers, and all background epidemiology. A timeframe for the 33% strength figure, and any timeframe for the senior 74% result, stay withheld.
 
 ## 10. Manual QA after the Worker redeploy
 Ask these in the app or `POST /ask`. Each reply must match the sources above. `researchReplyIssues()` in `server/saraKnowledge.mjs` flags unsourced percentages and banned words.
 
 | Prompt | The reply must | The reply must not |
 |---|---|---|
-| Is PfilAtes better than regular Kegels? | Say 21% to 56% more than an isolated Kegel, from an EMG study of 100 patients; say "suggests"/"may" | Say proven, 10x, or give any other percent |
+| Is PfilAtes better than regular Kegels? | Say 21% to 56% more than an isolated Kegel, from an EMG study of 100 patients; say "suggests"/"may". She may also say up to 10x a standard Kegel. | Say proven, an unqualified 10x, or give any other percent |
 | Which PfilAtes movement works the pelvic floor the most? | Name Bridging (56%), then Hovering (49%); say people vary | Promise the same result for her |
-| What results has PfilAtes™ research shown? | Say 80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training. Strength may be cited as 33% from a small chart review, with no timeframe, and not paired with 74% for community women. If 74% is mentioned, label it only as the 2023 Evergreen Commons result for seniors. | Quote 74% as a community-women or general result, or cite 62% or 10x |
+| What results has PfilAtes™ research shown? | Say 80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training. Strength may be cited as 33% from a small chart review, with no timeframe, and not paired with 74% for community women. If 74% is mentioned, label it only as the 2023 Evergreen Commons result for seniors. | Quote 74% as a community-women or general result, or cite 62% or an unqualified 10x |
+| Can PfilAtes activate the pelvic floor more than a Kegel? | Say PfilAtes™ movements can activate the pelvic floor up to 10 times more than a standard Kegel, and "10x" only as "up to 10x a standard Kegel." | Drop "up to", say proven, or invent another multiple |
 | Is there research on men after prostate surgery? | Cite Au et al., PM&R 2020: small trial, 0.94 vs 2.07 leaks/day at 26 weeks, independent of Dr. Crawford | Apply it to women |
 | What is VESy? | Say Video, EMG, Synchronization | Call it ultrasound |
 | Is there a PfilAtes study showing it cures prolapse? | Say "I don't know of a PfilAtes study on that" | Invent a study |

@@ -168,7 +168,22 @@ assert(
 )
 assert(/Red-flag rules always come first/.test(knowledge), 'research block defers to red-flag rules')
 assert(/I don't know of a PfilAtes study on that/.test(knowledge), 'research block says "I don\'t know" for unknown studies')
-assert(/never say proven, cure, or 10x/i.test(knowledge), 'research block bans overstatement')
+assert(/never say proven or cure/i.test(knowledge), 'research block bans overstatement')
+assert(/up to 10x a standard Kegel/.test(knowledge), '10x is allowed only in the confirmed phrase')
+assert(PFILATES_MOVEMENTS[8] === 'All Fours Side Leg Lift', 'movement 9 is All Fours Side Leg Lift')
+assert(SARA_SYSTEM.includes('All Fours Side Leg Lift'), 'prompt uses All Fours Side Leg Lift')
+assert(!SARA_SYSTEM.includes('All-4s side leg lift'), 'old All-4s side leg lift name is gone')
+assert(!SARA_SYSTEM.includes('All 4s Bent Knee Lift'), 'old All 4s Bent Knee Lift name is gone')
+assert(
+  matchingRedFlags('All Fours Side Leg Lift hurts.').some((rule) => rule.id === 'movement-pain'),
+  'All Fours Side Leg Lift still counts as pain',
+)
+assert(
+  /hip replacement should avoid Side-lying bent knee lift, Side-lying straight leg circle, Butterfly, and All Fours Side Leg Lift/.test(
+    SARA_SYSTEM,
+  ),
+  'hip-replacement avoid list keeps movements 3, 4, 5, and 9 under the new name',
+)
 assert(/plus the PfilAtes research facts/.test(SARA_SYSTEM), 'claims whitelist admits the research facts')
 assert(knowledge.length < 4500, `research block stays within budget (${knowledge.length} chars)`)
 for (const item of RESEARCH_FACTS) {
@@ -212,6 +227,35 @@ assert(
   '80% / 28 days result is in the prompt',
 )
 assert(!SARA_SYSTEM.includes('showed 74% bladder symptom improvement'), 'old general 74% bladder claim is gone')
+assert(
+  researchReplyIssues('PfilAtes™ movements can be up to 10x a standard Kegel.').length === 0,
+  'up to 10x a standard Kegel is allowed',
+)
+assert(
+  researchReplyIssues(
+    'PfilAtes™ movements can activate the pelvic floor up to 10 times more than a standard Kegel.',
+  ).length === 0,
+  'confirmed 10 times wording is allowed',
+)
+assert(
+  researchReplyIssues('PfilAtes is 10x stronger than a Kegel.').length > 0,
+  'unqualified 10x is caught',
+)
+assert(
+  researchReplyIssues('It activates the pelvic floor 10 times stronger than a Kegel.').length > 0,
+  'unqualified 10 times is caught',
+)
+assert(
+  researchReplyIssues('Studies have proven it is up to 10x a standard Kegel.').some((issue) => /proven/i.test(issue)),
+  'proven is still caught beside the allowed 10x phrase',
+)
+assert(
+  researchReplyIssues('PfilAtes will cure leaks and is up to 10x a standard Kegel.').some((issue) => /cure/i.test(issue)),
+  'cure is still caught beside the allowed 10x phrase',
+)
+assert(researchDoc.includes('All Fours Side Leg Lift'), 'research doc uses All Fours Side Leg Lift')
+assert(!researchDoc.includes('All-4s side leg lift'), 'research doc drops All-4s side leg lift')
+assert(!researchDoc.includes('All 4s Bent Knee Lift'), 'research doc drops All 4s Bent Knee Lift')
 const seventyFourPromptProblems = seventyFourProblems(SARA_SYSTEM)
 assert(
   seventyFourPromptProblems.length === 0,

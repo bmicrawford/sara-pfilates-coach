@@ -8,6 +8,7 @@
 
 export const APPROVED_CLAIMS = [
   '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training.',
+  'PfilAtes™ movements can activate the pelvic floor up to 10 times more than a standard Kegel (up to 10x a standard Kegel).',
   'It takes 10 minutes a day.',
   "The women's course is a $149 lifetime purchase.",
   'It was created by Dr. Bruce Crawford.',
@@ -22,7 +23,7 @@ export const PFILATES_MOVEMENTS = [
   'Bridging',
   'Corkscrew',
   'Hovering',
-  'All-4s side leg lift',
+  'All Fours Side Leg Lift',
   'Cat-Cow',
 ]
 
@@ -38,7 +39,7 @@ const HIP_REPLACEMENT_AVOID = [
   'Side-lying bent knee lift',
   'Side-lying straight leg circle',
   'Butterfly',
-  'All-4s side leg lift',
+  'All Fours Side Leg Lift',
 ]
 
 const PREGNANCY_AVOID_AFTER_12_WEEKS = ['Butterfly', 'Bridging', 'Corkscrew']
