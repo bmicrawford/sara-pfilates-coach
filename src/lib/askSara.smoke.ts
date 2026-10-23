@@ -383,15 +383,17 @@ assert(/playAra/.test(askSrc), 'ara fallback is idempotent so return+callback ca
 assert(/settleSaraStreamVoice/.test(askSrc), 'unreachable Grok remutes a pending stream unlock')
 assert(/setSaraStreamUserMuted/.test(askSrc), 'Ask Sara forwards mute so D-ID audio respects Mute')
 assert(/setSaraStreamUserMuted/.test(streamSrc), 'stream module tracks user mute without importing speakSara')
-assert(!/warmSaraStream/.test(askSrc), 'Ask Sara does not pre-warm a D-ID session on mount')
+assert(/createDemoWarmController/.test(askSrc), 'demo Ask Sara warms one D-ID session when the screen opens')
 assert(/preloadSaraStream\(\)/.test(askSrc), 'Ask Sara may preload the SDK on mount without opening WebRTC')
 assert(/connectSaraStream\(\)/.test(askSrc), 'Send starts mint + WebRTC in the same gesture as unlock')
 {
   const mountEffect = askSrc.match(/setSaraStreamCallbacks\([\s\S]*?stopSaraSpeech\(\)/)?.[0] || ''
   assert(Boolean(mountEffect), 'Ask Sara mount effect is present')
-  assert(!/connectSaraStream|warmSaraStream/.test(mountEffect), 'mount effect does not open a D-ID session')
-  assert(/preloadSaraStream\(\)/.test(mountEffect), 'mount effect only preloads the SDK')
+  assert(/if \(voiceOnly\) \{[\s\S]*?\.mount\(\)/.test(mountEffect), 'only the demo pass warms D-ID on open')
+  assert(!/connectSaraStream/.test((mountEffect.split('if (voiceOnly)')[0] ?? '')), 'paid mount does not open a D-ID session')
+  assert(/preloadSaraStream\(\)/.test(mountEffect), 'mount effect still preloads the SDK')
   assert(/releaseSaraStream/.test(mountEffect), 'unmount releases the D-ID session')
+  assert(/unmount\(\)/.test(mountEffect), 'unmount uses the strict-mode delayed close')
 }
 assert(/SARA_STREAM_CAPPED_NOTE/.test(askSrc), 'Ask Sara surfaces session-cap status while ara talks')
 assert(/releaseSaraStream/.test(askSrc), 'Ask Sara releases the D-ID session on leave')

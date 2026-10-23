@@ -5,9 +5,9 @@ import { askIntro, askEmptyHint, homeIntro, PROSPECT_ASK_GREETING, PROSPECT_HOME
 import { isDemoPass, isDemoVoiceOnly } from './demoPass.ts'
 import {
   DEMO_DID_FRAME_BUDGET_MS,
-  DEMO_DID_SYNC_MS,
   didWebRtcSilencedBySilentSwitch,
   planDemoVoice,
+  SARA_DEMO_SILENT_HINT,
 } from './demoVoicePlan.ts'
 import { DEMO_DEVICE_EMAIL, DEMO_TOKEN, redeemDemoPass } from './mockServer.ts'
 import { isSaraBusy, messageForSaraStatus, SARA_BUSY_MESSAGE, SARA_UNKNOWN_PASS_MESSAGE } from './saraGate.ts'
@@ -83,7 +83,7 @@ assert(
 assert(messageForSaraStatus(200, { reply: 'Hello' }) === null, 'a normal reply is not treated as a gate')
 
 assert(DEMO_DID_FRAME_BUDGET_MS === 3000, 'demo lip-sync budget is 3 seconds')
-assert(DEMO_DID_SYNC_MS === 500, 'muted D-ID video only stays if ara starts within 500ms')
+assert(SARA_DEMO_SILENT_HINT === 'No sound? Turn off the Silent switch.', 'iPhone demo hint names the Silent switch')
 assert(didWebRtcSilencedBySilentSwitch('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'), 'iPhone WebRTC is treated as silenced by the Silent switch')
 assert(
   didWebRtcSilencedBySilentSwitch('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'MacIntel', 5),
@@ -91,58 +91,36 @@ assert(
 )
 assert(!didWebRtcSilencedBySilentSwitch('Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0.0.0'), 'desktop WebRTC is not treated as silenced')
 
-const basePlan = {
+const cold = {
   araStarted: false,
   didFailed: false,
   budgetExceeded: false,
   speechFramesLive: false,
   chunkReady: false,
-  framesReadyAt: null,
-  chunkReadyAt: null,
-  now: 10_000,
-  iosSilentSwitch: false,
+  streamWarm: false,
 }
-assert(planDemoVoice(basePlan) === 'wait', 'demo waits while neither ara nor D-ID frames are ready')
+const warm = { ...cold, streamWarm: true }
+assert(planDemoVoice(cold) === 'wait', 'a cold demo waits for the ara chunk and does not wait on D-ID')
 assert(
-  planDemoVoice({ ...basePlan, chunkReady: true, chunkReadyAt: 10_000 }) === 'ara',
-  'first ara chunk plays immediately when D-ID frames are not live',
+  planDemoVoice({ ...cold, chunkReady: true }) === 'ara',
+  'while D-ID is still connecting, the first ara chunk plays immediately',
 )
 assert(
-  planDemoVoice({ ...basePlan, budgetExceeded: true }) === 'ara',
-  'the 3s budget falls back to ara when frames never arrive',
+  planDemoVoice({ ...cold, speechFramesLive: true, chunkReady: true }) === 'ara',
+  'a turn that started cold does not switch to D-ID mid-sentence',
 )
-assert(planDemoVoice({ ...basePlan, didFailed: true, speechFramesLive: true, framesReadyAt: 9000 }) === 'ara', 'any D-ID failure falls back to ara')
-assert(planDemoVoice({ ...basePlan, araStarted: true, speechFramesLive: true }) === 'ara', 'demo does not switch to D-ID mid-sentence')
+assert(planDemoVoice({ ...cold, budgetExceeded: true }) === 'ara', 'a cold turn falls back when the chunk budget passes')
+assert(planDemoVoice({ ...warm, chunkReady: true }) === 'wait', 'a warm session does not start ara just because the chunk is ready')
 assert(
-  planDemoVoice({ ...basePlan, speechFramesLive: true, framesReadyAt: 9000 }) === 'did-audio',
-  'desktop uses D-ID audio when speech frames are live before ara',
-)
-assert(
-  planDemoVoice({
-    ...basePlan,
-    iosSilentSwitch: true,
-    speechFramesLive: true,
-    chunkReady: true,
-    framesReadyAt: 10_000,
-    chunkReadyAt: 10_400,
-  }) === 'did-visual-ara',
-  'iPhone keeps ara and uses muted D-ID video when they start together',
+  planDemoVoice({ ...warm, speechFramesLive: true, chunkReady: true }) === 'did-audio',
+  'a warm session uses D-ID audio and video, including on iPhone',
 )
 assert(
-  planDemoVoice({
-    ...basePlan,
-    iosSilentSwitch: true,
-    speechFramesLive: true,
-    chunkReady: true,
-    framesReadyAt: 8_000,
-    chunkReadyAt: 10_000,
-  }) === 'ara',
-  'iPhone prefers ara when the D-ID mouth is already ahead',
+  planDemoVoice({ ...warm, budgetExceeded: true, chunkReady: true }) === 'ara',
+  'a warm session starts ara only after 3s with no speech frames',
 )
-assert(
-  planDemoVoice({ ...basePlan, iosSilentSwitch: true, speechFramesLive: true, framesReadyAt: 9_500 }) === 'wait',
-  'iPhone waits for the ara chunk when frames just became live',
-)
+assert(planDemoVoice({ ...warm, didFailed: true, speechFramesLive: true }) === 'ara', 'a D-ID speak failure falls back to ara')
+assert(planDemoVoice({ ...warm, araStarted: true, speechFramesLive: true }) === 'ara', 'demo does not switch voices mid-sentence')
 
 const memory = new Map<string, string>()
 ;(globalThis as { localStorage?: Storage }).localStorage = {
@@ -195,15 +173,21 @@ assert(/if \(voiceOnly\)/.test(askSrc) && /speakDemoReply\(text\)/.test(askSrc),
 assert(/playAra\(text\)/.test(askSrc), 'paid replies still fall back to ara')
 assert(/connectSaraStream\(\)/.test(askSrc), 'Send starts D-ID for the demo pass too')
 assert(/DEMO_DID_FRAME_BUDGET_MS/.test(askSrc) && /planDemoVoice/.test(askSrc), 'demo lip-sync uses the 3s planner')
+assert(/streamWarm/.test(askSrc), 'the 3s budget applies only when the demo session is already warm')
 assert(/dropHeldSaraSpeech/.test(askSrc) && /releaseHeldSaraSpeech/.test(askSrc), 'demo plays one voice, never both')
-assert(/did-visual-ara/.test(askSrc) && /settleSaraStreamVoice\('ara'\)/.test(askSrc), 'iPhone can keep muted video or hide a desynced stream')
+assert(/SARA_DEMO_SILENT_HINT/.test(askSrc), 'iPhone demo shows the Silent switch hint')
+assert(/get\('debug'\) === '1'/.test(askSrc) && /data-sara-stream-debug/.test(askSrc), 'stream debug is only rendered for ?debug=1')
+assert(/settleSaraStreamVoice\('ara'\)/.test(askSrc), 'ara fallback hides a desynced D-ID stream')
 assert(/live && streamCapped && !voiceOnly/.test(askSrc), 'demo D-ID fallback does not show the session-cap note')
 {
-  const mount = askSrc.match(/setSaraStreamCallbacks\([\s\S]*?preloadSaraStream\(\)/)?.[0] ?? ''
+  const mount = askSrc.match(/setSaraStreamCallbacks\([\s\S]*?stopSaraSpeech\(\)/)?.[0] ?? ''
   assert(/preloadSaraStream\(\)/.test(mount), 'demo mount preloads the SDK')
-  assert(!/connectSaraStream/.test(mount), 'demo mount does not open a D-ID session')
-  assert(!/if \(voiceOnly\) \{\s*releaseSaraStream/.test(askSrc), 'demo mount does not skip SDK preload')
+  assert(/if \(voiceOnly\) \{[\s\S]*?\.mount\(\)/.test(mount), 'demo mount warms one D-ID session')
+  assert(!/connectSaraStream/.test(mount.split('if (voiceOnly)')[0] ?? ''), 'paid mount does not open D-ID')
+  assert(/releaseSaraStream/.test(mount), 'leaving the screen releases the session')
+  assert(/pageHide/.test(mount), 'page hide closes the demo session')
 }
+assert(/demoWarmEpoch/.test(askSrc) && /epoch !== demoWarmEpoch/.test(askSrc), 'a stale screen close does not drop the next visit’s D-ID session')
 assert(/isSaraBusy\(reply\)/.test(askSrc), 'a 429 reply does not start playback')
 assert(/pass: currentSaraPass\(\)/.test(askClient), 'Ask Sara sends the pass, not an email')
 assert(!askClient.includes(DEMO_DEVICE_EMAIL), 'ask client does not send the demo placeholder')

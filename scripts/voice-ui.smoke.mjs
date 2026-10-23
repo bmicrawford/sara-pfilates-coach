@@ -4,7 +4,8 @@
  * round trip, one HTMLAudioElement is unlocked inside the Send tap,
  * speech is fetched in parallel and swapped on ended, the glow shows
  * only while that element is playing, and a rejected play() shows
- * Tap to hear Sara. The demo path does not open D-ID.
+ * Tap to hear Sara. The demo path warms POST /stream when Ask Sara opens;
+ * this mock returns 429 did_unavailable, so the visit stays on ara with no error.
  *
  *   npm run build && npm run smoke:voice-ui
  */
@@ -524,6 +525,27 @@ try {
   })()`)
   assert(reduced.faceAnim === 'none', `reduced motion stops the portrait sway (${reduced.faceAnim})`)
   assert(reduced.dotAnim === 'none', `reduced motion stops the listening dots (${reduced.dotAnim})`)
+  assert(
+    !(await evaluate(`Boolean(document.querySelector('[data-sara-stream-debug]'))`)),
+    'stream debug stays hidden without ?debug=1',
+  )
+
+  await send('Emulation.setUserAgentOverride', {
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+    platform: 'iPhone',
+  })
+  await send('Page.navigate', { url: `${origin}/ask?debug=1` })
+  const debugReady = await waitFor(
+    evaluate,
+    `/stream (idle|connecting|live|failed)/.test(document.querySelector('[data-sara-stream-debug]')?.textContent || '') && document.querySelector('[data-sara-silent-hint]')?.textContent?.includes('Silent switch')`,
+    3000,
+  )
+  assert(debugReady, 'iPhone demo with ?debug=1 shows the Silent switch hint and the stream line')
+  const debugLine = await evaluate(`document.querySelector('[data-sara-stream-debug]')?.textContent || ''`)
+  assert(/stream failed/.test(String(debugLine)), `a 429 warm shows stream failed (${debugLine})`)
+  assert(/voice —/.test(String(debugLine)), `voice path stays unset until a reply (${debugLine})`)
+  await shot(send, join(ARTIFACTS, 'sara-debug-iphone.png'))
 
   if (process.exitCode) throw new Error('voice-ui checks failed')
   console.log('voice-ui smoke passed')

@@ -3,9 +3,13 @@
  * means the trial/session cap (or zero credits) — do not retry connect/speak; keep still + ara.
  *
  * Do not connect() on Ask Sara mount. Lite’s concurrent stream cap is small; idle
- * tabs (phone + laptop PWA + Studio) exhaust it and freeze the still. Mint + WebRTC
- * start on Send / Play, in parallel with Grok. Keep the session after connect
- * so the next speak() does not re-pay WebRTC; release on leave / unmount / pagehide.
+ * tabs (phone + laptop PWA + Studio) exhaust it and freeze the still. Paid and
+ * class passes mint + WebRTC on Send / Play, in parallel with Grok. The demo
+ * pass is the exception: Ask Sara warms one muted session when that screen
+ * opens and reuses it (demoStreamWarm). This module still does not connect
+ * from preload. Keep the session after connect so the next speak() does not
+ * re-pay WebRTC; release on leave / unmount / pagehide. The demo Worker lease
+ * is not renewed — it expires on its TTL.
  * speak() fires as soon as Grok text exists — do not wait for ara, and do
  * not start ara while D-ID is still connecting or decoding. Heard voice is
  * D-ID stream audio only when speak has started AND the <video> has visible
@@ -105,8 +109,10 @@ let deadMode = false
 let sessionCapped = false
 let foregroundBound = false
 let lifecycleBound = false
-/** True after Send / Play asks for a session. Idle mount does not set this. */
+/** True while this tab wants the WebRTC session kept. Demo warm sets it on open. */
 let streamWanted = false
+/** Last connect() returned false (cap, 429, or no credentials). */
+let connectFailed = false
 let releaseTimer: number | null = null
 const playTimers = new Set<number>()
 const listeners: StreamCallbacks = {}
@@ -553,6 +559,32 @@ export function preloadSaraStream(): void {
   void loadSdk()
 }
 
+export type SaraStreamPhase = 'idle' | 'connecting' | 'live' | 'failed'
+
+/** idle / connecting / live / failed. Live means the WebRTC session exists, not that frames are painted. */
+export function saraStreamPhase(): SaraStreamPhase {
+  if (sessionCapped || connectFailed) return 'failed'
+  if (hasLiveManager()) return 'live'
+  if (connectPromise) return 'connecting'
+  return 'idle'
+}
+
+/** Cancel a pending unmount close. Does not mint or open a second session. */
+export function keepSaraStream(): void {
+  streamWanted = true
+  cancelRelease()
+}
+
+/**
+ * Close the current D-ID session now (SDK disconnect).
+ * Does not renew the Worker lease — that key expires on its TTL.
+ */
+export function retireDemoStream(): void {
+  streamWanted = false
+  connectFailed = false
+  dropLiveSession()
+}
+
 /** Debounced disconnect for React unmount. StrictMode remount cancels this and reuses the session. */
 export function releaseSaraStream(): void {
   streamWanted = false
@@ -711,6 +743,7 @@ function speakLooksDead(result: unknown): boolean {
 
 export async function connectSaraStream(): Promise<boolean> {
   streamWanted = true
+  connectFailed = false
   cancelRelease()
   bindSessionLifecycle()
   patchDidSessionFetch()
@@ -882,6 +915,7 @@ export async function connectSaraStream(): Promise<boolean> {
   const ok = await connectPromise
   connectPromise = null
   if (!ok && session === sessionGen) {
+    connectFailed = true
     dropManager()
     fallBackToStill('stream unavailable — still stays visible')
   }
