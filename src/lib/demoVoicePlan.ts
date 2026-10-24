@@ -1,13 +1,13 @@
 import { isIosUserAgent } from './installCoach.ts'
 
-/** Hard max wait for D-ID speech frames on the demo pass. Not a delay if ara is ready sooner. */
+/**
+ * After a warmed session speaks, wait this long for speech frames.
+ * A session that is still connecting does not use this wait — ara starts
+ * as soon as its first chunk is ready.
+ */
 export const DEMO_DID_FRAME_BUDGET_MS = 3000
 
-/**
- * On iPhone, a muted D-ID video can sit with ara only when both start together.
- * D-ID's own TTS is not ara, so a mouth that is already ahead is hidden.
- */
-export const DEMO_DID_SYNC_MS = 500
+export const SARA_DEMO_SILENT_HINT = 'No sound? Turn off the Silent switch.'
 
 export type DemoVoiceChoice = 'wait' | 'did-audio' | 'did-visual-ara' | 'ara'
 
@@ -31,21 +31,16 @@ export function planDemoVoice(opts: {
   budgetExceeded: boolean
   speechFramesLive: boolean
   chunkReady: boolean
-  framesReadyAt: number | null
-  chunkReadyAt: number | null
-  now: number
-  iosSilentSwitch: boolean
+  /** WebRTC session already up. Frames still arrive on speak(). */
+  streamWarm: boolean
 }): DemoVoiceChoice {
   if (opts.araStarted) return 'ara'
-  if (opts.didFailed) return 'ara'
-  if (opts.chunkReady && !opts.speechFramesLive) return 'ara'
-  if (!opts.speechFramesLive) {
-    return opts.budgetExceeded ? 'ara' : 'wait'
+  if (!opts.streamWarm) {
+    if (opts.chunkReady || opts.didFailed || opts.budgetExceeded) return 'ara'
+    return 'wait'
   }
-  if (!opts.iosSilentSwitch) return 'did-audio'
-  if (!opts.chunkReady) return opts.budgetExceeded ? 'ara' : 'wait'
-  const framesAt = opts.framesReadyAt ?? opts.now
-  const chunkAt = opts.chunkReadyAt ?? opts.now
-  if (Math.abs(chunkAt - framesAt) <= DEMO_DID_SYNC_MS) return 'did-visual-ara'
-  return 'ara'
+  if (opts.didFailed) return 'ara'
+  if (opts.speechFramesLive) return 'did-audio'
+  if (opts.budgetExceeded) return 'ara'
+  return 'wait'
 }
