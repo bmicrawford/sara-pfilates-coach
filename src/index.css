@@ -88,6 +88,31 @@ select {
 
 .sara-stream-video {
   border-radius: inherit;
+  opacity: 1;
+  z-index: 0;
+}
+
+/* Frames sit above the still. opacity:0 on the PNG is not enough on iOS. */
+.sara-stream-visible {
+  z-index: 12;
+  opacity: 1;
+}
+
+.sara-see {
+  position: absolute;
+  z-index: 40;
+  left: 50%;
+  top: 36%;
+  transform: translate(-50%, -50%);
+  min-width: 16rem;
+  padding: 1rem 1.5rem;
+  border-radius: 999px;
+  background: #7c8b70;
+  color: #fff;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.2;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
 
 .sara-portrait-face {

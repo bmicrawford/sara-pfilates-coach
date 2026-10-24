@@ -384,8 +384,8 @@ assert(
 )
 const indexHtml = readFileSync(new URL('../../index.html', import.meta.url), 'utf8')
 assert(
-  /sara\.session/.test(indexHtml) && /location\.replace\('\/'\)/.test(indexHtml),
-  'reloading a redeem link skips the email form when sara.session is saved',
+  /sara\.session/.test(indexHtml) && /location\.replace\(dest\)/.test(indexHtml) && /sara\.debug/.test(indexHtml),
+  'reloading a redeem link skips the email form when sara.session is saved and keeps ?debug=1',
 )
 
 const diaryPage = readFileSync(new URL('../pages/DiaryReport.tsx', import.meta.url), 'utf8')

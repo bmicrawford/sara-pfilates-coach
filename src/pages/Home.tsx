@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../components/BottomSheet'
 import { Chip, Field, inputClass } from '../components/Chip'
 import { InstallCoach } from '../components/InstallCoach'
@@ -26,6 +26,8 @@ import { addDiaryLog, finishActiveDiary, readDiaries, readLogs, startNewDiary, s
 import { patientFirstName, readPatient } from '../lib/patient'
 import { PROSPECT_ASK_GREETING, PROSPECT_HOME_NOTE } from '../lib/prospectCopy'
 import { markCompanionOpened } from '../lib/notifications'
+import { saraDebugOn } from '../lib/saraDebug'
+import { gestureUnlockSaraStream } from '../lib/saraStream'
 import {
   DRINK_OZ_DEFAULT,
   drinkEventVolume,
@@ -52,6 +54,7 @@ type Props = {
 }
 
 export function Home({ session }: Props) {
+  const navigate = useNavigate()
   const [mood, setMood] = useState<Mood>('default')
   const [sheet, setSheet] = useState<SheetId>(null)
   const [logs, setLogs] = useState<LogEntry[]>(() => readLogs())
@@ -218,6 +221,12 @@ export function Home({ session }: Props) {
       <Link
         to="/ask"
         className="mt-5 block rounded-2xl bg-sage py-4 text-center font-semibold text-white shadow-card"
+        onClick={(event) => {
+          gestureUnlockSaraStream()
+          if (!saraDebugOn(window.location.search)) return
+          event.preventDefault()
+          navigate('/ask?debug=1')
+        }}
       >
         Ask Sara
       </Link>

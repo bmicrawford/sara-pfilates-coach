@@ -10,17 +10,23 @@ import {
   planDemoVoice,
   SARA_DEMO_SILENT_HINT,
 } from '../lib/demoVoicePlan'
+import { saraDebugOn } from '../lib/saraDebug'
+import { IOS_WEBRTC_BUDGET_MS, SARA_SEE_LABEL } from '../lib/saraStreamGesture'
 import { readChat, readSession, writeChat } from '../lib/mockServer'
 import { askEmptyHint, askIntro } from '../lib/prospectCopy'
 import { isSaraBusy, SARA_PASS_REQUIRED_MESSAGE, SARA_UNKNOWN_PASS_MESSAGE } from '../lib/saraGate'
 import {
   bindSaraStreamVideo,
   connectSaraStream,
+  gestureUnlockSaraStream,
   isSaraStreamSpeechLive,
   keepSaraStream,
+  noteStreamFallback,
   preloadSaraStream,
   releaseSaraStream,
   retireDemoStream,
+  saraStreamDebugFacts,
+  saraStreamHasFrames,
   saraStreamPhase,
   SARA_STREAM_CAPPED_NOTE,
   setSaraStreamCallbacks,
@@ -94,13 +100,18 @@ export function AskSara() {
   const demoStreamFailedRef = useRef(false)
   const demoEvaluateRef = useRef<(() => void) | null>(null)
   const demoForceAraRef = useRef(false)
-  const demoPathRef = useRef<'did-audio' | 'ara' | null>(null)
+  const demoUnmuteFailedRef = useRef(false)
+  const demoUnmutedRef = useRef(false)
+  const iosGaveUpRef = useRef(false)
+  const demoPathRef = useRef<'did-audio' | 'did-visual-ara' | 'ara' | null>(null)
   const demoWarmRef = useRef<DemoWarmController | null>(null)
   const [warmSnap, setWarmSnap] = useState<DemoWarmSnapshot | null>(null)
-  const [debugVoice, setDebugVoice] = useState<'did-audio' | 'ara' | null>(null)
+  const [debugVoice, setDebugVoice] = useState<'did-audio' | 'did-visual-ara' | 'ara' | null>(null)
+  const [needsSee, setNeedsSee] = useState(false)
+  const [debugFacts, setDebugFacts] = useState(() => saraStreamDebugFacts())
   const showDebug = useState(() => {
     if (typeof window === 'undefined') return false
-    return new URLSearchParams(window.location.search).get('debug') === '1'
+    return new URLSearchParams(window.location.search).get('debug') === '1' || saraDebugOn(window.location.search)
   })[0]
   const iosPhone = didWebRtcSilencedBySilentSwitch(
     typeof navigator === 'undefined' ? '' : navigator.userAgent,
@@ -182,6 +193,13 @@ export function AskSara() {
         const text = fallbackTextRef.current
         if (text) playAra(text)
       },
+      onSeeSara: (blocked) => setNeedsSee(blocked),
+      onStreamAudible: (ok) => {
+        demoUnmutedRef.current = ok
+        demoUnmuteFailedRef.current = !ok
+        if (!ok) noteStreamFallback('unmute')
+        demoEvaluateRef.current?.()
+      },
     })
     preloadSaraStream()
     if (voiceOnly) {
@@ -203,7 +221,18 @@ export function AskSara() {
       if (voiceOnly) demoWarmRef.current?.pageHide()
     }
     window.addEventListener('pagehide', onPageHide)
+    let iosTimer = 0
+    if (voiceOnly && iosPhone) {
+      iosTimer = window.setTimeout(() => {
+        if (saraStreamPhase() === 'live') return
+        iosGaveUpRef.current = true
+        noteStreamFallback('ios-15s')
+        demoEvaluateRef.current?.()
+        setDebugFacts(saraStreamDebugFacts())
+      }, IOS_WEBRTC_BUDGET_MS)
+    }
     return () => {
+      if (iosTimer) window.clearTimeout(iosTimer)
       window.removeEventListener('pagehide', onPageHide)
       demoTicket.current += 1
       if (demoPoll.current) window.clearInterval(demoPoll.current)
@@ -214,7 +243,22 @@ export function AskSara() {
       releaseSaraStream()
       stopSaraSpeech()
     }
-  }, [playAra, voiceOnly])
+  }, [playAra, voiceOnly, iosPhone])
+
+  useEffect(() => {
+    if (warmSnap?.phase === 'live' && iosGaveUpRef.current) {
+      iosGaveUpRef.current = false
+      noteStreamFallback('late-live')
+    }
+  }, [warmSnap?.phase])
+
+  useEffect(() => {
+    if (!showDebug) return
+    const pull = () => setDebugFacts(saraStreamDebugFacts())
+    pull()
+    const timer = window.setInterval(pull, 400)
+    return () => window.clearInterval(timer)
+  }, [showDebug])
 
   const streaming =
     shouldShowSaraStream({ streamReady, speaking, streamTalking, videoLive }) && !concealStream
@@ -283,8 +327,10 @@ export function AskSara() {
     araPlayingRef.current = false
     demoStreamFailedRef.current = false
     setConcealStream(false)
-    const streamWarm = !demoForceAraRef.current && saraStreamPhase() === 'live'
+    const streamWarm = !demoForceAraRef.current && !iosGaveUpRef.current && saraStreamPhase() === 'live'
     demoForceAraRef.current = false
+    demoUnmuteFailedRef.current = false
+    demoUnmutedRef.current = false
     setSaraStreamKeepMuted(false)
     const startedAt = Date.now()
     let committed = false
@@ -294,6 +340,7 @@ export function AskSara() {
       committed = true
       clearDemoPoll()
       if (choice === 'did-audio') {
+        noteStreamFallback('—')
         setConcealStream(false)
         setSaraStreamKeepMuted(false)
         dropHeldSaraSpeech()
@@ -309,11 +356,19 @@ export function AskSara() {
         setSaraStreamKeepMuted(true)
         settleSaraStreamVoice('visual')
         streamVoiceRef.current = false
+        demoPathRef.current = 'did-visual-ara'
+        setDebugVoice('did-visual-ara')
+        if (!demoUnmuteFailedRef.current && !iosGaveUpRef.current) noteStreamFallback('visual')
         araPlayingRef.current = true
         releaseHeldSaraSpeech()
         return
       }
       setConcealStream(true)
+      const prior = saraStreamDebugFacts().fallback
+      const specific = prior.startsWith('play-') || prior === 'ice-failed' || prior === 'unmute' || prior === 'no-track' || prior === 'no-session'
+      if (iosGaveUpRef.current) noteStreamFallback('ios-15s')
+      else if (!specific && !streamWarm) noteStreamFallback('cold')
+      else if (!specific) noteStreamFallback('budget')
       settleSaraStreamVoice('ara')
       streamVoiceRef.current = false
       demoPathRef.current = 'ara'
@@ -329,11 +384,14 @@ export function AskSara() {
       const chunkReady = saraSpeechChunkReady()
       const choice = planDemoVoice({
         araStarted: false,
-        didFailed: demoStreamFailedRef.current,
+        didFailed: demoStreamFailedRef.current || iosGaveUpRef.current,
         budgetExceeded: now - startedAt >= DEMO_DID_FRAME_BUDGET_MS,
         speechFramesLive,
         chunkReady,
-        streamWarm,
+        streamWarm: streamWarm && !iosGaveUpRef.current,
+        unmuted: demoUnmutedRef.current,
+        unmuteBlocked: demoUnmuteFailedRef.current,
+        framesVisible: saraStreamHasFrames(),
       })
       if (choice !== 'wait') finish(choice)
     }
@@ -458,6 +516,11 @@ export function AskSara() {
       </div>
 
       <div className="ask-sara-overlay relative z-10 flex h-full min-h-0 flex-col">
+        {needsSee ? (
+          <button type="button" className="sara-see" data-sara-see="true" onClick={() => gestureUnlockSaraStream()}>
+            {SARA_SEE_LABEL}
+          </button>
+        ) : null}
         <div className="ask-sara-chrome shrink-0 pb-6">
           <header className="flex items-center justify-between px-5 pb-2 safe-top">
             <Link to="/" className="ask-sara-chip text-sm font-semibold">
@@ -498,7 +561,11 @@ export function AskSara() {
                 warmSnap?.openedAt != null && warmSnap.liveAt != null
                   ? `${warmSnap.liveAt - warmSnap.openedAt}ms`
                   : '—'
-              } · voice ${debugVoice ?? '—'}`}
+              } · voice ${debugVoice ?? '—'} · play ${debugFacts.play} · muted ${
+                debugFacts.muted == null ? '—' : debugFacts.muted ? '1' : '0'
+              } · w ${debugFacts.videoWidth} · rs ${debugFacts.readyState} · ice ${debugFacts.ice} · track ${
+                debugFacts.track ? 'yes' : 'no'
+              } · fallback ${debugFacts.fallback}`}
             </p>
           ) : null}
           {voiceOnly ? (
@@ -564,6 +631,13 @@ export function AskSara() {
                       }
                       unlockSaraSpeech()
                       unlockSaraStream()
+                      if (voiceOnly && saraStreamPhase() !== 'live') {
+                        const ice = saraStreamDebugFacts().ice
+                        noteStreamFallback(iosGaveUpRef.current ? 'ios-15s' : ice === 'failed' ? 'ice-failed' : 'no-session')
+                      } else if (voiceOnly && !saraStreamDebugFacts().track) {
+                        const ice = saraStreamDebugFacts().ice
+                        noteStreamFallback(ice === 'failed' ? 'ice-failed' : 'no-track')
+                      }
                       noteDemoSend()
                       if (!voiceOnly) void connectSaraStream()
                       speakReply(m.text)

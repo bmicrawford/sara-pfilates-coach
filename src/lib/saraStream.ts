@@ -26,6 +26,7 @@
 
 import { currentSaraPass } from './demoPass.ts'
 import { rewritePfilatesForSpeech } from './pfilatesSpeech.mjs'
+import { beginMutedGesturePlay, playErrorName, unmuteInPlace } from './saraStreamGesture.ts'
 
 function apiBase(): string {
   return (import.meta.env.VITE_SARA_API_URL ?? '').replace(/\/$/, '')
@@ -55,6 +56,10 @@ type StreamCallbacks = {
   onStatus?: (status: SaraStreamStatus) => void
   /** Fired when a previously-heard D-ID path dies and ara must take over. */
   onVoiceFallback?: () => void
+  /** Muted play() from a tap was rejected. The face needs Tap to see Sara. */
+  onSeeSara?: (blocked: boolean) => void
+  /** In-place unmute succeeded (true) or the video must stay a muted visual (false). */
+  onStreamAudible?: (ok: boolean) => void
 }
 
 /** Quiet UI line when D-ID is at the session/credit cap. Ara still plays. */
@@ -124,6 +129,19 @@ let fallbackLocked = false
  * live frames stay a muted visual and ara on the media element is the voice.
  */
 let keepStreamMuted = false
+/** Last video.play() outcome for ?debug=1. `played` or a DOMException name. */
+let playLabel = '—'
+/** ICE / peer connection state from the Agents SDK. */
+let iceState = '—'
+/** A media track has arrived on the WebRTC stream. */
+let trackReceived = false
+/** Why this visit left D-ID audio. Shown on the debug line. */
+let fallbackReason = '—'
+/** Ask Sara was opened or Send was tapped before the <video> mounted. */
+let gestureArmed = false
+/** The user asked the video to play. Background autoplay failures stay quiet. */
+let userAskedToSee = false
+let seeBlocked = false
 /** Speak START / a real speak result — not enough to unmute without frames. */
 let speakingStarted = false
 /** Ask Sara mute preference — kept here so this module does not import speakSara. */
@@ -202,7 +220,7 @@ function gateAudioTracks(enabled: boolean) {
 
 function applyHeardMute(video: HTMLVideoElement) {
   const videoLive = isSaraVideoLive(video)
-  const audible = !streamVideoShouldBeMuted({ voicePath, userMuted, videoLive })
+  const audible = !streamVideoShouldBeMuted({ voicePath, userMuted, videoLive }) && !video.paused
   // Disable tracks first so a pending path cannot leak audio before frames.
   gateAudioTracks(audible)
   if (audible) {
@@ -214,10 +232,110 @@ function applyHeardMute(video: HTMLVideoElement) {
   }
   // Keep muted until did+frames. Unmuted play() after async connect is blocked
   // by autoplay rules, so the <video> never decodes and srcObject looks dead.
+  // A paused element stays muted: iOS rejects play() once muted is false.
   video.volume = 0
   video.muted = true
   video.defaultMuted = true
   video.setAttribute('muted', '')
+}
+
+export type SaraStreamDebugFacts = {
+  play: string
+  muted: boolean | null
+  videoWidth: number
+  readyState: number
+  ice: string
+  track: boolean
+  fallback: string
+}
+
+export function saraStreamHasFrames(): boolean {
+  return isSaraVideoLive(videoEl)
+}
+
+export function saraStreamDebugFacts(): SaraStreamDebugFacts {
+  const video = videoEl
+  return {
+    play: playLabel,
+    muted: video ? video.muted : null,
+    videoWidth: video?.videoWidth ?? 0,
+    readyState: video?.readyState ?? 0,
+    ice: iceState,
+    track: trackReceived,
+    fallback: fallbackReason,
+  }
+}
+
+export function noteStreamFallback(reason: string): void {
+  fallbackReason = reason || '—'
+  logStream('fallback', `${fallbackReason} ${JSON.stringify(saraStreamDebugFacts())}`)
+}
+
+function logFacts(event: string) {
+  logStream(event, saraStreamDebugFacts())
+}
+
+function markSee(blocked: boolean) {
+  if (seeBlocked === blocked) {
+    if (blocked) listeners.onSeeSara?.(true)
+    return
+  }
+  seeBlocked = blocked
+  listeners.onSeeSara?.(blocked)
+}
+
+function noteTracks(stream: MediaStream | null | undefined) {
+  if (!stream || typeof stream.getTracks !== 'function') return
+  const tracks = stream.getTracks()
+  if (!tracks.length) return
+  if (!trackReceived) logStream('track', tracks.map((track) => track.kind).join(',') || 'yes')
+  trackReceived = true
+}
+
+function rememberPlayError(error: unknown, fromGesture: boolean) {
+  playLabel = playErrorName(error)
+  logStream('video.play rejected', playLabel)
+  if (fromGesture || userAskedToSee || elementHoldsStream()) {
+    noteStreamFallback(`play-${playLabel}`)
+    markSee(true)
+  }
+  logFacts('play')
+}
+
+function rememberPlayOk() {
+  playLabel = 'played'
+  markSee(false)
+  logFacts('play')
+}
+
+/** Muted play() from a tap. Does not unmute. Arms the next mount if the node is missing. */
+export function gestureUnlockSaraStream(): void {
+  userAskedToSee = true
+  if (!videoEl) {
+    gestureArmed = true
+    logStream('gesture armed — stream video is not mounted yet')
+    return
+  }
+  gestureArmed = false
+  playMutedFromUser(videoEl)
+}
+
+function playMutedFromUser(video: HTMLVideoElement) {
+  let pending: Promise<void> | void
+  try {
+    pending = beginMutedGesturePlay(video)
+  } catch (error) {
+    rememberPlayError(error, true)
+    return
+  }
+  if (pending && typeof pending.then === 'function') {
+    void pending.then(
+      () => rememberPlayOk(),
+      (error: unknown) => rememberPlayError(error, true),
+    )
+    return
+  }
+  rememberPlayOk()
 }
 
 function rememberStreamSession(info: { stream_id?: string; session_id?: string }) {
@@ -286,6 +404,7 @@ function isSessionIdError(error: unknown): boolean {
 }
 
 function bindLateTracks(stream: MediaStream) {
+  noteTracks(stream)
   if (lateTrackStreams.has(stream)) return
   lateTrackStreams.add(stream)
   const refresh = () => {
@@ -344,8 +463,9 @@ function maybePromoteHeard() {
     return
   }
   setVoicePath('did')
-  if (videoEl) {
-    applyHeardMute(videoEl)
+  if (videoEl && !videoEl.paused && unmuteInPlace(videoEl)) {
+    listeners.onStreamAudible?.(true)
+  } else if (videoEl) {
     schedulePlay(videoEl)
   }
   listeners.onTalking?.(true)
@@ -450,10 +570,46 @@ function schedulePlay(video: HTMLVideoElement) {
   primeVideo(video)
   const kick = () => {
     if (videoEl !== video) return
-    applyHeardMute(video)
-    video.playsInline = true
-    const play = video.play()
-    if (play && typeof play.catch === 'function') void play.catch(() => {})
+    const wantAudible = !streamVideoShouldBeMuted({
+      voicePath,
+      userMuted,
+      videoLive: isSaraVideoLive(video),
+    })
+    if (!video.paused && video.videoWidth > 0) {
+      if (wantAudible && video.muted) {
+        if (unmuteInPlace(video)) listeners.onStreamAudible?.(true)
+        else {
+          noteStreamFallback('unmute')
+          if (voicePath === 'did') setVoicePath('visual')
+          listeners.onStreamAudible?.(false)
+        }
+      }
+      return
+    }
+    let pending: Promise<void> | void
+    try {
+      // Always play muted. Unmute only after the element is already playing.
+      pending = beginMutedGesturePlay(video)
+    } catch (error) {
+      rememberPlayError(error, false)
+      return
+    }
+    const afterPlay = () => {
+      rememberPlayOk()
+      if (!wantAudible || videoEl !== video) return
+      if (unmuteInPlace(video)) {
+        listeners.onStreamAudible?.(true)
+        return
+      }
+      noteStreamFallback('unmute')
+      if (voicePath === 'did') setVoicePath('visual')
+      listeners.onStreamAudible?.(false)
+    }
+    if (pending && typeof pending.then === 'function') {
+      void pending.then(afterPlay, (error: unknown) => rememberPlayError(error, false))
+      return
+    }
+    afterPlay()
   }
   clearPlayTimers()
   kick()
@@ -540,6 +696,8 @@ function dropLiveSession() {
   cancelRelease()
   stopSaraStream()
   dropManager()
+  trackReceived = false
+  iceState = '—'
   attachSrcObject(null)
 }
 
@@ -606,6 +764,10 @@ export function bindSaraStreamVideo(el: HTMLVideoElement | null) {
   bindAvCues(el)
   if (el) {
     attachSrcObject(srcObject)
+    if (gestureArmed) {
+      gestureArmed = false
+      playMutedFromUser(el)
+    }
     return
   }
   // Video node gone (StrictMode remount, leave page) — do not leave streamReady
@@ -618,7 +780,13 @@ export function bindSaraStreamVideo(el: HTMLVideoElement | null) {
  */
 export function unlockSaraStream(): void {
   if (voicePath === 'idle') setVoicePath('pending')
-  if (!videoEl) return
+  if (!videoEl) {
+    gestureArmed = true
+    userAskedToSee = true
+    return
+  }
+  // Same turn as Send / Play / Test voice. Muted, before any await.
+  playMutedFromUser(videoEl)
   bindAvCues(videoEl)
   primeVideo(videoEl)
   if (srcObject && videoEl.srcObject !== srcObject) {
@@ -646,6 +814,9 @@ export function setSaraStreamCallbacks(next: StreamCallbacks) {
   listeners.onReady = next.onReady
   listeners.onStatus = next.onStatus
   listeners.onVoiceFallback = next.onVoiceFallback
+  listeners.onSeeSara = next.onSeeSara
+  listeners.onStreamAudible = next.onStreamAudible
+  if (next.onSeeSara) next.onSeeSara(seeBlocked)
   if (next.onReady) next.onReady(streamReady)
   if (next.onStatus && sessionCapped) next.onStatus('session_capped')
 }
@@ -789,6 +960,7 @@ export async function connectSaraStream(): Promise<boolean> {
             // the SDP finalize 400 → retry 200 flap. Keep a usable srcObject.
             const tracks = typeof value?.getTracks === 'function' ? value.getTracks() : []
             if (value && tracks.length) {
+              noteTracks(value)
               attachSrcObject(value)
               if (elementHoldsStream() && !sessionCapped) listeners.onStatus?.('live')
               return value
@@ -829,6 +1001,9 @@ export async function connectSaraStream(): Promise<boolean> {
           },
           onConnectionStateChange(state: string) {
             const s = String(state).toLowerCase()
+            iceState = s === 'fail' ? 'failed' : s
+            logFacts('ice')
+            if (s === 'failed' || s === 'fail') noteStreamFallback('ice-failed')
             if (s === 'connected') {
               if (srcObject) attachSrcObject(srcObject)
               else logStream('peer connected — waiting for srcObject')

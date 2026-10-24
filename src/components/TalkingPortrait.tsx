@@ -89,7 +89,9 @@ export function TalkingPortrait({
       <div className="sara-glow" aria-hidden />
       <video
         ref={setVideoNode}
-        className="sara-stream-video absolute inset-0 z-0 h-full w-full object-cover object-[center_22%]"
+        className={`sara-stream-video absolute inset-0 h-full w-full object-cover object-[center_22%] ${
+          showStream ? 'sara-stream-visible' : 'z-0'
+        }`}
         poster={STILL}
         playsInline
         muted

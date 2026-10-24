@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { isDemoPass } from './lib/demoPass'
+import { captureSaraDebug } from './lib/saraDebug'
 import { PATIENT_CHANGED_EVENT, patientProfileComplete, readPatient } from './lib/patient'
 import { readSession } from './lib/mockServer'
 import { promptsForNameOrDob } from './lib/prospectCopy'
@@ -17,6 +18,10 @@ import { Welcome } from './pages/Welcome'
 export default function App() {
   const location = useLocation()
   const [session, setSession] = useState<Session | null>(() => readSession())
+
+  useEffect(() => {
+    captureSaraDebug(location.search)
+  }, [location.search])
 
   useEffect(() => {
     const sync = () => setSession(readSession())
