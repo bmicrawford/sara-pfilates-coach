@@ -1,10 +1,11 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { SaraPortrait } from '../components/SaraPortrait'
 import { Field, inputClass } from '../components/Chip'
 import { isDemoPass } from '../lib/demoPass'
 import { DEMO_TOKEN, normalizeToken, redeemDemoPass, redeemToken } from '../lib/mockServer'
 import { PROSPECT_REDEEM_NOTE, redeemAsksForEmail } from '../lib/prospectCopy'
+import { captureSaraDebug, withSaraDebug } from '../lib/saraDebug'
 
 export function Redeem() {
   const { token = '' } = useParams()
@@ -15,6 +16,10 @@ export function Redeem() {
   const [error, setError] = useState<string | null>(null)
   const [bound, setBound] = useState(false)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    captureSaraDebug(window.location.search)
+  }, [])
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -33,7 +38,7 @@ export function Redeem() {
         ? await redeemDemoPass()
         : await redeemToken(displayToken || DEMO_TOKEN, email)
       if (result.ok) {
-        navigate('/', { replace: true })
+        navigate(withSaraDebug('/'), { replace: true })
         return
       }
       if (result.reason === 'unknown-token') {

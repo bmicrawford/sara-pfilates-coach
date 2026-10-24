@@ -119,7 +119,10 @@ assert(
   planDemoVoice({ ...warm, budgetExceeded: true, chunkReady: true }) === 'ara',
   'a warm session starts ara only after 3s with no speech frames',
 )
-assert(planDemoVoice({ ...warm, didFailed: true, speechFramesLive: true }) === 'ara', 'a D-ID speak failure falls back to ara')
+assert(
+  planDemoVoice({ ...warm, didFailed: true, speechFramesLive: true }) === 'did-visual-ara',
+  'a D-ID speak failure with frames keeps muted video and plays ara',
+)
 assert(planDemoVoice({ ...warm, araStarted: true, speechFramesLive: true }) === 'ara', 'demo does not switch voices mid-sentence')
 
 const memory = new Map<string, string>()
@@ -176,7 +179,10 @@ assert(/DEMO_DID_FRAME_BUDGET_MS/.test(askSrc) && /planDemoVoice/.test(askSrc), 
 assert(/streamWarm/.test(askSrc), 'the 3s budget applies only when the demo session is already warm')
 assert(/dropHeldSaraSpeech/.test(askSrc) && /releaseHeldSaraSpeech/.test(askSrc), 'demo plays one voice, never both')
 assert(/SARA_DEMO_SILENT_HINT/.test(askSrc), 'iPhone demo shows the Silent switch hint')
-assert(/get\('debug'\) === '1'/.test(askSrc) && /data-sara-stream-debug/.test(askSrc), 'stream debug is only rendered for ?debug=1')
+assert(/get\('debug'\) === '1'/.test(askSrc) && /saraDebugOn\(/.test(askSrc) && /data-sara-stream-debug/.test(askSrc), 'stream debug is only rendered for ?debug=1')
+assert(/ice \$\{/.test(askSrc) && /track \$\{/.test(askSrc) && /fallback \$\{/.test(askSrc), 'debug shows ice, track, and fallback')
+assert(/SARA_SEE_LABEL/.test(askSrc) && /data-sara-see/.test(askSrc), 'a rejected video play shows Tap to see Sara on her face')
+assert(/IOS_WEBRTC_BUDGET_MS/.test(askSrc) && /ios-15s/.test(askSrc), 'iOS gives WebRTC 15s to go live, then falls back')
 assert(/settleSaraStreamVoice\('ara'\)/.test(askSrc), 'ara fallback hides a desynced D-ID stream')
 assert(/live && streamCapped && !voiceOnly/.test(askSrc), 'demo D-ID fallback does not show the session-cap note')
 {

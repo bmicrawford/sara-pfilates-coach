@@ -33,14 +33,24 @@ export function planDemoVoice(opts: {
   chunkReady: boolean
   /** WebRTC session already up. Frames still arrive on speak(). */
   streamWarm: boolean
+  /** muted=false stuck on an element that was already playing. Defaults to yes. */
+  unmuted?: boolean
+  /** Gesture play() or in-place unmute failed. Keep the picture, use ara. */
+  unmuteBlocked?: boolean
+  /** Decoded frames exist even when they are not the heard speech path. */
+  framesVisible?: boolean
 }): DemoVoiceChoice {
+  const unmuted = opts.unmuted !== false
+  const unmuteBlocked = opts.unmuteBlocked === true
+  const framesVisible = opts.framesVisible === true || opts.speechFramesLive
   if (opts.araStarted) return 'ara'
   if (!opts.streamWarm) {
     if (opts.chunkReady || opts.didFailed || opts.budgetExceeded) return 'ara'
     return 'wait'
   }
+  if (opts.speechFramesLive && unmuted && !unmuteBlocked && !opts.didFailed) return 'did-audio'
+  if (framesVisible && (unmuteBlocked || opts.didFailed || (opts.budgetExceeded && !unmuted))) return 'did-visual-ara'
   if (opts.didFailed) return 'ara'
-  if (opts.speechFramesLive) return 'did-audio'
   if (opts.budgetExceeded) return 'ara'
   return 'wait'
 }
