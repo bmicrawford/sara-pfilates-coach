@@ -280,6 +280,98 @@ const form = await purchase(store, {
 })
 assert(form.status === 200 && form.body.reason === 'event' && store.emails.size === 1, 'a form submission event does not grant')
 
+const ui = memoryEntitlementStore()
+const payWomen = await purchase(ui, paymentSucceeded({
+  event: 'payment.succeeded',
+  offer: { id: 2147989270, title: 'PfilAtes for Women', type: 'one-time' },
+  member: { email: 'pay.women@example.com', name: 'Pay Women' },
+  payment_transaction: { id: 88001 },
+}))
+const payMen = await purchase(ui, paymentSucceeded({
+  event: 'payment.succeeded',
+  offer: { id: 2149556914, title: 'PfilAtes for Men', type: 'one-time' },
+  member: { email: 'pay.men@example.com', name: 'Pay Men' },
+  payment_transaction: { id: 88002 },
+}))
+const payOther = await purchase(ui, paymentSucceeded({
+  event: 'payment.succeeded',
+  offer: { id: 11111, title: 'Other offer', type: 'one-time' },
+  member: { email: 'pay.other@example.com', name: 'Pay Other' },
+  payment_transaction: { id: 88003 },
+}))
+assert(payWomen.status === 201 && payWomen.body.granted === true, 'payment.succeeded grants the women’s offer 2147989270')
+assert(payMen.status === 201 && payMen.body.granted === true, 'payment.succeeded grants the men’s offer 2149556914')
+assert(
+  payOther.status === 200 && payOther.body.ignored === true && payOther.body.reason === 'offer',
+  'payment.succeeded ignores an offer outside the allowlist',
+)
+
+function orderCreated(offerId, email, { event = 'order.created', orderId, paymentId }) {
+  return {
+    event,
+    order: {
+      id: orderId,
+      source: 'cart',
+      order_items: [{ type: 'Offer', id: offerId, title: 'Course', quantity: 1, total_amount: 14900 }],
+    },
+    member: { id: 42, email, name: 'Cart Buyer', first_name: 'Cart', last_name: 'Buyer' },
+    payment_transaction: { id: paymentId, created_at: '2026-10-25T12:00:00Z', amount_paid: 14900 },
+  }
+}
+const orderWomen = await purchase(ui, orderCreated(2147989270, 'order.women@example.com', { orderId: 77001, paymentId: 88011 }))
+const orderMen = await purchase(ui, orderCreated(2149556914, 'order.men@example.com', { orderId: 77002, paymentId: 88012 }))
+const orderOther = await purchase(ui, orderCreated(11111, 'order.other@example.com', { orderId: 77003, paymentId: 88013 }))
+assert(orderWomen.status === 201 && orderWomen.body.granted === true, 'order.created grants the women’s offer 2147989270')
+assert(orderMen.status === 201 && orderMen.body.granted === true, 'order.created grants the men’s offer 2149556914')
+assert(
+  orderOther.status === 200 && orderOther.body.ignored === true && orderOther.body.reason === 'offer',
+  'order.created ignores an offer outside the allowlist',
+)
+const nestedName = await purchase(
+  ui,
+  orderCreated(2147989270, 'nested.name@example.com', {
+    event: { name: 'order.created' },
+    orderId: 77021,
+    paymentId: 88021,
+  }),
+)
+assert(nestedName.status === 201 && nestedName.body.granted === true, 'a nested event name order.created still grants')
+const nestedDeeper = await purchase(
+  ui,
+  orderCreated(2149556914, 'nested.deeper@example.com', {
+    event: { name: { name: 'order.created' } },
+    orderId: 77022,
+    paymentId: 88022,
+  }),
+)
+assert(nestedDeeper.status === 201, 'a nested event object is read without throwing')
+const typed = paymentSucceeded({
+  offer: { id: 2147989270, title: 'PfilAtes for Women', type: 'one-time' },
+  member: { email: 'typed.event@example.com', name: 'Typed' },
+  payment_transaction: { id: 88023 },
+})
+typed.type = 'payment.succeeded'
+const typedGrant = await purchase(ui, typed)
+assert(typedGrant.status === 201, 'body.type payment.succeeded grants when event is absent')
+const opaque = await purchase(
+  ui,
+  orderCreated(2147989270, 'opaque.event@example.com', {
+    event: { label: 'not-a-name' },
+    orderId: 77024,
+    paymentId: 88024,
+  }),
+)
+assert(opaque.status === 201 && opaque.body.reason !== 'event', 'an unreadable event object is not stringified into [object Object]')
+const namedForm = await purchase(
+  ui,
+  orderCreated(2147989270, 'named.form@example.com', {
+    event: { name: 'form.submission' },
+    orderId: 77025,
+    paymentId: 88025,
+  }),
+)
+assert(namedForm.status === 200 && namedForm.body.reason === 'event', 'a nested form.submission name does not grant')
+
 const reversed = memoryEntitlementStore()
 const cartFirst = await purchase(reversed, cartPurchase({ event: 'Cart Purchase', member: { email: 'cart.first@example.com' } }))
 const paySecond = await purchase(reversed, paymentSucceeded({ member: { email: 'cart.first@example.com' }, event: 'payment.succeeded' }), {

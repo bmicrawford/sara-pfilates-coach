@@ -1,0 +1,32 @@
+Subject: Your PfilAtes™ plan for life
+Preview: Four months in. Here's how to keep it going.
+Delay/trigger: Sequence 'PfilAtes™ for Women – Onboarding' email 13. Delay after previous: 30 days (Day 120).
+Tag action on links: None (no tagging links; plain URLs only).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+This is the last email in your onboarding series, but your access doesn't end. You have lifetime access to PfilAtes™ for Women.
+
+Your plan from here:
+- Every day: 10 minutes. 5 in the morning, 5 in the evening, with your best 2–3 movements.
+- Every session: the power is in the pulse. Small range at the hold point, a percussive open-mouth "HA," and a voluntary squeeze.
+- Every few months: re-take your Movement Selection Worksheet and do a 3-day Bladder Diary to check your progress.
+- Anytime: log in at https://www.pfilates.com/login to re-watch any lesson.
+
+One last favor: If PfilAtes™ has helped you, please tell one woman about it this week. https://www.pfilates.com/womens-course
+
+You can always reply to this email with questions, even after the series ends. My team and I read every message.
+
+Thank you for trusting me with something so personal. Keep going.
+
+Quick answers
+- Will I keep getting emails? You'll stay on our list for occasional updates. You can unsubscribe at any time.
+- Can I share my login? Please don't. Send friends to the course page instead.
+- Want a coach? There's a Certified Teachers list on https://www.pfilates.com.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

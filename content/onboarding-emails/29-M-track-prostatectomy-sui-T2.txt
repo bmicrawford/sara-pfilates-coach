@@ -1,0 +1,21 @@
+Subject: Building a steady routine after prostate surgery
+Preview: Small, regular sessions you can keep up.
+Delay/trigger: Sequence 'Men concern track: prostatectomy-sui' email T2. Delay 17 days after T1 (~Day 23).
+Tag action on links: None (no tagging links).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Three weeks in, keep going. Steady daily practice matters more than any single session.
+
+- Make it part of your day: link your 5 + 5 to something you already do daily, like your morning coffee or brushing your teeth, so it becomes automatic.
+- Track it: keep a simple note of leaks and pad use each week in your exercise log, so you and your surgeon or urologist can see how things are changing.
+- Protect your 5 + 5, and keep every pulse sharp: small range, a sharp "HA," and a squeeze, all at once.
+
+Questions? Just hit reply. My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

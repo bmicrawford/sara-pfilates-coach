@@ -3,6 +3,7 @@
 import { stripLeadingGreeting } from '../src/lib/saraGreeting.mjs'
 import { redFlagLeadIn, saraGuardrailPrompt } from './saraGuardrails.mjs'
 import { saraKnowledgePrompt } from './saraKnowledge.mjs'
+import { onboardingPromptForTurn } from './onboardingEmails.mjs'
 
 export const GROK_MODEL = 'grok-4.20-0309-non-reasoning'
 export const XAI_CHAT_URL = 'https://api.x.ai/v1/chat/completions'
@@ -68,7 +69,9 @@ export const SARA_DEMO_AUDIENCE = `Public demo audience: this person has not bou
 
 You are an AI coach, not a doctor. The women's course is a $149 lifetime purchase. It stays on Kajabi; you sit alongside it and do not replace it. It takes 10 minutes a day. It was created by Dr. Bruce Crawford.
 
-Use only the approved claims and research facts already stated above. Do not add statistics, studies, or outcomes. The safety rules and any red-flag lead-in above still come first and are unchanged.`
+Use only the approved claims and research facts already stated above. Do not add statistics, studies, or outcomes. The safety rules and any red-flag lead-in above still come first and are unchanged.
+
+Buyers get a Kajabi onboarding email sequence. This person has not received those emails. You may describe what buyers get. Do not say an email already arrived, "your Day 8 email", or "in your email".`
 
 export function systemContentForAudience(userMessage, audience) {
   const base = systemContentForTurn(userMessage)
@@ -119,6 +122,8 @@ export function isFirstSaraTurn(history, options = {}) {
 export function buildMessages(userMessage, history = [], options = {}) {
   const opts = options && typeof options === 'object' ? options : {}
   let content = systemContentForAudience(userMessage, opts.audience)
+  const onboarding = onboardingPromptForTurn(userMessage, { audience: opts.audience })
+  if (onboarding) content = `${content}\n\n${onboarding}`
   if (!isFirstSaraTurn(history, opts)) content = `${content}\n\n${SARA_NO_REPEAT_GREETING}`
   const messages = [{ role: 'system', content }]
   const recent = Array.isArray(history) ? history.slice(-12) : []

@@ -1,0 +1,49 @@
+Subject: 2 quick questions (+ the power is in the pulse)
+Preview: One click tells us what to send you. Then the most important part of every movement.
+Delay/trigger: Sequence 'PfilAtes™ for Women – Onboarding' email 2. Delay after previous: 2 days (Day 2).
+Tag action on links: Each concern link: When clicked → Add tag (oab→pf-w-concern-oab, sui→pf-w-concern-sui, prolapse→pf-w-concern-prolapse, bowel→pf-w-concern-bowel, other→pf-w-concern-other). Each tag → Subscribe to that concern-track sequence. Referral form: When form submitted → saves custom field 'Referred by' (no tag).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Two quick questions first. They take 20 seconds and help me send you tips that fit your situation.
+
+1. What's your MAIN concern? (one click)
+
+Frequent urination and/or difficulty making it to the bathroom in time → https://www.pfilates.com/thanks-got-it?a=w-oab
+Leakage with physical activity (coughing, sneezing, lifting, exercise) → https://www.pfilates.com/thanks-got-it?a=w-sui
+A feeling of pressure, heaviness or bulging in the vagina → https://www.pfilates.com/thanks-got-it?a=w-prolapse
+Trouble controlling gas or stool → https://www.pfilates.com/thanks-got-it?a=w-bowel
+Not sure / something else → https://www.pfilates.com/thanks-got-it?a=w-other
+
+2. Who referred you to PfilAtes™? After you click above, a short form asks who sent you (a friend, your doctor, a certified teacher, social media…).
+
+Your answers stay private and only help us support you. We never share or sell them.
+
+---
+
+Now, the most important part of every movement: the pulse. The power is in the pulse.
+
+Every PfilAtes™ movement has a hold point. That's the position where your pelvic floor reaches its peak passive activation. When you reach it, you add the pulse, which has three parts that happen at the same moment:
+
+1. A small range of motion around the hold point. Make small, controlled pulses right at the hold point. Don't go back through the full movement each time.
+2. A percussive breath. Make a short, forceful exhale with your mouth open, like Heather's "HA!" in the video. This engages your transversus abdominis, the deep corset muscle around your middle, at the exact moment of the pulse.
+3. A voluntary pelvic floor contraction. Squeeze and lift your pelvic floor on purpose, as you practiced on the towel.
+
+Small pulse + "HA" + squeeze, all together. Do the full movement first, then hold and pulse. To see it again, open Learn the Movements → Movement Selection Video and watch the Squat.
+
+Haven't filled out your Movement Selection Worksheet yet? Do it today. It's Step 5 in my welcome email.
+
+Questions? Just hit reply. My team and I read every message.
+
+Quick answers
+- Where's the pulse demo? In the Movement Selection Video, during the Squat (early in the video).
+- I have more than one concern. Click the one that bothers you most. You can always reply and tell us more.
+- Which movements should I pick? Your best 2–3 from the worksheet. If unsure, start with Lunge, Bridge, Hovering, Cat Cow or Butterfly.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.
+Pregnant? Get clearance from your OB or midwife before you start. After 12 weeks of pregnancy, avoid any PfilAtes™ movements that involve lying on your back (Butterfly, Bridge, Corkscrew).

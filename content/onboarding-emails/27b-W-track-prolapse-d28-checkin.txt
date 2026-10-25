@@ -1,0 +1,35 @@
+Subject: Day 28: your prolapse check-in (just tap)
+Preview: Same six questions, about 2 minutes.
+Delay/trigger: Sequence 'Women concern track: prolapse', NEW email. Timed for ~Day 28 after purchase.
+Tag action on links: each button → Add tag w-pop-d28-{L}{v} (e.g. w-pop-d28-A2). Lands on thanks-got-it. 24 links.
+From: Dr. Bruce Crawford | PfilAtes™ | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+You're four weeks in. Here are the same six check-in questions you answered at the start. Tap the answer that fits best for the last 7 days.
+
+In the last 7 days, I have had...
+1. A pressure or "dropping" feeling in my vagina
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-A0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-A1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-A2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-A3
+2. A heavy or dragging feeling low in my belly or back
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-B0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-B1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-B2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-B3
+3. Discomfort that builds up when I stand or as the day goes on
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-C0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-C1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-C2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-C3
+4. Trouble starting my urine, or feeling my bladder did not fully empty
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-D0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-D1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-D2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-D3
+5. A feeling that my bowel did not fully empty
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-E0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-E1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-E2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-E3
+6. A fullness or soft bulge that I can notice
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-F0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-F1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-F2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d28-F3
+
+Compare with how you felt when you started. A lower answer over time is the goal, but everyone is different and results are not promised.
+
+When to check in with your doctor: please talk with your doctor, nurse or pelvic health clinician if you notice a bulge you can see or feel outside the vaginal opening, pain, any bleeding, not being able to pass urine, or symptoms that are getting worse.
+
+Questions? Just hit reply. My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor. This check-in is a personal tracking tool, not a diagnosis.

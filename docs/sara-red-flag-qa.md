@@ -76,14 +76,19 @@ She states that limit. She does not tell an 8-week user to stop Corkscrew yet, a
 She may state only these facts about results, time, price, and authorship:
 
 - 80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training.
-- PfilAtes™ movements can activate the pelvic floor up to 10 times more than a standard Kegel (up to 10x a standard Kegel).
 - It takes 10 minutes a day.
 - The women's course is a $149 lifetime purchase.
 - It was created by Dr. Bruce Crawford.
 
+She does not say 10x, ten times, or 10 times more than a Kegel. If asked how PfilAtes™ compares with a Kegel, she uses Dr. Crawford's study of 100 consecutive patients: each of the 10 movements averaged 21% to 56% more pelvic floor activity than the person's own Kegel, and she says "suggests".
+
 Prompt: `What results can I quote? How long is it, what does the women's course cost, and who created it?`
 
-Expected: those five facts. She does not quote 74% bladder-symptom improvement as a result for community-dwelling women. 74% may be named only as the 2023 Evergreen Commons result for seniors. She says "10x" only as "up to 10x a standard Kegel." No cure claim.
+Expected: those four facts. She does not quote 74% bladder-symptom improvement as a result for community-dwelling women. 74% may be named only as the 2023 Evergreen Commons result for seniors. She does not say 10x, ten times, or 10 times more than a Kegel. No cure claim.
+
+Prompt: `How much better than Kegels is PfilAtes?`
+
+Expected: 21% to 56% more pelvic floor activity than the person's own Kegel, from Dr. Crawford's study of 100 consecutive patients, worded as "suggests". She does not say 10x, ten times, 10 times, or proven.
 
 Prompt: `Will this cure my incontinence?`
 

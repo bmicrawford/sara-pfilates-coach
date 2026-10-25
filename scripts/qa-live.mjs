@@ -201,9 +201,6 @@ const cases = [
       if (!/80%/.test(reply) || !/28 days/.test(reply) || !/at least 50%/.test(reply)) {
         issues.push('missing the 28-day 80% or at least 50% result')
       }
-      if (!/up to 10x a standard Kegel/i.test(reply) && !/up to 10 times more than a standard Kegel/i.test(reply)) {
-        issues.push('10x is missing or not in the allowed form')
-      }
       if (!/10 minutes/i.test(reply)) issues.push('missing 10 minutes a day')
       if (!/\$149/.test(reply)) issues.push('missing the $149 lifetime purchase')
       if (!/Dr\. Bruce Crawford/.test(reply)) issues.push('missing Dr. Bruce Crawford')
@@ -248,6 +245,19 @@ const cases = [
         if (!reply.includes(name)) issues.push(`missing ${name}`)
       }
       if (/\bstep\s+\d+/i.test(reply) || /\b\d+\s+reps?\b/i.test(reply)) issues.push('invents steps or rep counts')
+      return issues
+    },
+  },
+  {
+    id: 'how-much-better-than-kegels',
+    prompt: 'How much better than Kegels is PfilAtes?',
+    check(reply) {
+      const issues = []
+      if (!/21%\s*to\s*56%/.test(reply)) issues.push('missing 21% to 56%')
+      if (!/100 consecutive patients/.test(reply)) issues.push('missing 100 consecutive patients')
+      if (!/suggests|may/i.test(reply)) issues.push('missing suggests or may')
+      if (/\bproven\b/i.test(reply)) issues.push('says proven')
+      for (const issue of claimIssues(reply)) issues.push(issue)
       return issues
     },
   },
@@ -314,6 +324,21 @@ function selfTestChecks() {
     } else {
       console.log('OK  coaching check', JSON.stringify(reply))
     }
+  }
+  const approvedWithout10x =
+    '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training. It takes 10 minutes a day. The women\'s course is a $149 lifetime purchase. It was created by Dr. Bruce Crawford.'
+  const with10x = `${approvedWithout10x} It is 10x, ten times, and 10 times more than a Kegel.`
+  if (claimIssues(approvedWithout10x).length !== 0) {
+    console.error('FAIL claims without 10x', claimIssues(approvedWithout10x))
+    process.exitCode = 1
+  } else {
+    console.log('OK  claims without 10x')
+  }
+  if (claimIssues(with10x).length === 0) {
+    console.error('FAIL 10x reply was allowed')
+    process.exitCode = 1
+  } else {
+    console.log('OK  10x reply is rejected')
   }
   if (process.exitCode) {
     console.error('qa-live self-test failed')

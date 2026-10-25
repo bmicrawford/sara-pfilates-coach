@@ -1,0 +1,62 @@
+Subject: Welcome to PfilAtes™: start here (5 steps)
+Preview: Log in, print one page, and pick your 2–3 movements.
+Delay/trigger: Sequence 'PfilAtes™ for Men – Onboarding' email 1. Delay after previous: 0 days (Day 0). Trigger: purchase of PfilAtes™ for Men offer (Automation: subscribe to sequence + add tag pf-men).
+Tag action on links: None (no tagging links; plain URLs only).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Welcome to PfilAtes™ for Men. Thank you for taking this step for your pelvic health. The whole practice takes 10 minutes a day: 5 in the morning and 5 in the evening.
+
+These 5 steps will get you set up today.
+
+STEP 1: Log in
+- Look for the account email that arrived when you purchased. It was sent from our course platform, Kajabi. Use it to set your password, and check your spam or promotions folder if you can't find it.
+- Go to https://www.pfilates.com/login and sign in with the email you purchased with, plus your password.
+- If you forget your password, use the password-reset link on that login page.
+- After you sign in, click the men's PfilAtes™ course in your library.
+
+STEP 2: Print your downloads (do this first)
+- Open the first module, Course Introduction, and click the lesson Outline and Objectives.
+- Scroll down below the lesson to the Downloads section. Click each file to open or save it. The same files are also attached to the Movement Selection Video lesson.
+- Your downloads: the PfilAtes™ Movement Guide, C-10 Symptom Questionnaire, Bladder Diary, exercise log, and Movement Selection Worksheet.
+- Printing is easiest from a computer. On a phone, open the file, then use Share → Print.
+- Before you start practicing, fill out the C-10 Symptom Questionnaire and the Bladder Diary. They're your "before" picture.
+
+STEP 3: Watch the lecture
+- Go to the module Dr. Crawford's Presentation and click the lesson Presentation (about 35 minutes).
+- Press play. You can pause at any point and pick up where you left off later.
+
+STEP 4: Do the movement video, with your worksheet in hand
+- Go to the module Learn the Movements and click the lesson Movement Selection Video (about 49 minutes). Heather walks you through all 10 movements, including cues written for men.
+- Have these nearby: comfortable clothes, a rolled-up hand towel, a small squishy ball or cushion, a stable chair, your printed Movement Selection Worksheet, and a pen.
+
+STEP 5: Fill out the Movement Selection Worksheet ← the most important step
+After each movement, circle your answers on the worksheet:
+1. Did it cause pain? If yes, cross it off.
+2. Could you do it every day? If no, cross it off.
+3. How strongly did you feel your pelvic floor work? (0 = none, 1 = mild, 2 = moderate, 3 = strong)
+
+From the movements that are left, choose your best 2–3, meaning the ones with the highest scores. If two are tied, or you're not sure, pick from the essentials: Lunge, Bridge, Hovering, Cat Cow or Butterfly.
+
+Then practice those 5 minutes in the morning and 5 minutes in the evening, every day, and check off each session in your exercise log.
+
+Your first-week plan: Today, log in, print, and watch the lecture. Tomorrow, do the movement video and fill out your worksheet. Then begin your 5 + 5.
+
+Questions? Just hit reply. My team and I read every message.
+
+Quick answers
+- Where are the videos? After you log in, open the course. The lecture is under Dr. Crawford's Presentation. The movements are under Learn the Movements → Movement Selection Video.
+- I can't find a download. Open Outline and Objectives (first module) or Movement Selection Video and scroll down to Downloads. Still stuck? Reply and we'll send it.
+- How long until I see results? Give it a full 4 weeks of daily practice. Your exercise log has you repeat the bladder diary on Days 25–28 so you can measure your own change.
+- What if I miss a day? Just do your next session. Don't try to double up.
+- Which movements should I pick? Your best 2–3 from the worksheet: no pain, doable every day, highest score. If you're unsure, start with Lunge, Bridge, Hovering, Cat Cow or Butterfly.
+- More questions? The FAQs lesson in the first module has more answers.
+
+Welcome aboard,
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.
