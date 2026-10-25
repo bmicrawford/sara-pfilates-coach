@@ -28,6 +28,11 @@ export type DemoWarmHooks = {
   close?: () => void
   keep?: () => void
   onChange?: (snap: DemoWarmSnapshot) => void
+  /**
+   * Called when connect() returns false. True means the next Send may open
+   * one new session. False (the default) keeps a cap / Worker denial sticky.
+   */
+  retryFailure?: () => boolean
 }
 
 type CloseReason = 'strict' | 'idle' | 'hide'
@@ -47,6 +52,8 @@ export function createDemoWarmController(hooks: DemoWarmHooks = {}) {
   let closeReason: CloseReason | null = null
   let lazyAra = false
   let connectGen = 0
+  /** A failed warm that was not a session cap or Worker denial. */
+  let failedRetryable = false
 
   function snapshot(): DemoWarmSnapshot {
     return { phase, openedAt, liveAt, connects, closes, held }
@@ -112,6 +119,7 @@ export function createDemoWarmController(hooks: DemoWarmHooks = {}) {
         return
       }
       phase = 'failed'
+      failedRetryable = hooks.retryFailure?.() === true
       if (held > 0) {
         held -= 1
         closes += 1
@@ -119,6 +127,15 @@ export function createDemoWarmController(hooks: DemoWarmHooks = {}) {
       }
       emit()
     })
+  }
+
+  /** A retryable failure is not sticky for the rest of the visit. */
+  function reopenIfFailed(): boolean {
+    if (phase !== 'failed' || !failedRetryable) return false
+    failedRetryable = false
+    phase = 'idle'
+    beginConnect()
+    return true
   }
 
   return {
@@ -167,9 +184,24 @@ export function createDemoWarmController(hooks: DemoWarmHooks = {}) {
       const araThisTurn = lazyAra
       lazyAra = false
       if (closeReason === 'idle') clearTimer()
+      if (reopenIfFailed()) return { araThisTurn }
       if (phase === 'idle') beginConnect()
       else hooks.keep?.()
       return { araThisTurn }
+    },
+    /**
+     * Tap to see Sara. Reconnect when the warm phase is not live, including
+     * a retryable failure. A cap / Worker denial stays failed.
+     */
+    reconnectIfNeeded() {
+      if (phase === 'live' || phase === 'connecting') {
+        hooks.keep?.()
+        emit()
+        return
+      }
+      if (reopenIfFailed()) return
+      if (phase === 'idle') beginConnect()
+      else hooks.keep?.()
     },
   }
 }

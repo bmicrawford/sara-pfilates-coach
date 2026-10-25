@@ -182,7 +182,7 @@ assert(/SARA_DEMO_SILENT_HINT/.test(askSrc), 'iPhone demo shows the Silent switc
 assert(/get\('debug'\) === '1'/.test(askSrc) && /saraDebugOn\(/.test(askSrc) && /data-sara-stream-debug/.test(askSrc), 'stream debug is only rendered for ?debug=1')
 assert(/ice \$\{/.test(askSrc) && /track \$\{/.test(askSrc) && /fallback \$\{/.test(askSrc), 'debug shows ice, track, and fallback')
 assert(/SARA_SEE_LABEL/.test(askSrc) && /data-sara-see/.test(askSrc), 'a rejected video play shows Tap to see Sara on her face')
-assert(/IOS_WEBRTC_BUDGET_MS/.test(askSrc) && /ios-15s/.test(askSrc), 'iOS gives WebRTC 15s to go live, then falls back')
+assert(/IOS_WEBRTC_BUDGET_MS/.test(askSrc) && /ios-25s/.test(askSrc), 'iOS gives WebRTC 25s to go live, then falls back')
 assert(/settleSaraStreamVoice\('ara'\)/.test(askSrc), 'ara fallback hides a desynced D-ID stream')
 assert(/live && streamCapped && !voiceOnly/.test(askSrc), 'demo D-ID fallback does not show the session-cap note')
 {

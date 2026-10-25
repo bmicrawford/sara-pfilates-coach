@@ -6,8 +6,11 @@
 
 export const SARA_SEE_LABEL = 'Tap to see Sara'
 
-/** Warm connect is ~11s when it works. Past this, iOS is not going to get a session. */
-export const IOS_WEBRTC_BUDGET_MS = 15_000
+/**
+ * Headless iPhone-UA warm connect is ~13s. A 15s give-up fired inside that
+ * noise on a real phone and left the still up for the rest of the visit.
+ */
+export const IOS_WEBRTC_BUDGET_MS = 25_000
 
 export type GestureVideo = {
   muted: boolean
@@ -58,4 +61,28 @@ export function playErrorName(error: unknown): string {
   if (name) return name
   const message = (error as { message?: string } | null)?.message
   return message ? message.slice(0, 40) : 'Error'
+}
+
+export type PlayRejection = {
+  name: string
+  /** A newer play() superseded this one. Not a user-gesture block. */
+  benignAbort: boolean
+  /** Only NotAllowedError asks for Tap to see Sara. */
+  showSeeOverlay: boolean
+  /** Null for AbortError so the debug line does not stick on play-AbortError. */
+  fallback: string | null
+}
+
+/** AbortError is a cancelled play(), not a reason to cover Sara with the still. */
+export function classifyPlayRejection(error: unknown): PlayRejection {
+  const name = playErrorName(error)
+  if (name === 'AbortError') {
+    return { name, benignAbort: true, showSeeOverlay: false, fallback: null }
+  }
+  return {
+    name,
+    benignAbort: false,
+    showSeeOverlay: name === 'NotAllowedError',
+    fallback: `play-${name}`,
+  }
 }

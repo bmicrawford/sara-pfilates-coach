@@ -64,6 +64,9 @@ export function TalkingPortrait({
     video.addEventListener('playing', kick)
     video.addEventListener('playing', reportLive)
     video.addEventListener('loadeddata', reportLive)
+    // iOS can report videoWidth 0 at 'playing'. resize / timeupdate see the frame.
+    video.addEventListener('resize', reportLive)
+    video.addEventListener('timeupdate', reportLive)
     video.addEventListener('emptied', reportDead)
     video.addEventListener('error', reportDead)
     return () => {
@@ -73,6 +76,8 @@ export function TalkingPortrait({
       video.removeEventListener('playing', kick)
       video.removeEventListener('playing', reportLive)
       video.removeEventListener('loadeddata', reportLive)
+      video.removeEventListener('resize', reportLive)
+      video.removeEventListener('timeupdate', reportLive)
       video.removeEventListener('emptied', reportDead)
       video.removeEventListener('error', reportDead)
     }
