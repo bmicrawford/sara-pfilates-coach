@@ -1,5 +1,6 @@
 import { askSaraGrok, corsHeaders, jsonResponse, GROK_MODEL, SARA_OFFLINE } from '../../server/askGrok.mjs'
 import { dispatchRedeem, headerGetter, kvRedeemStore } from '../../server/redeem.mjs'
+import { dispatchKajabi, kvEntitlementStore, rawQueryParam } from '../../server/kajabiPurchase.mjs'
 import { speakSaraTts, SARA_VOICE } from '../../server/speakSara.mjs'
 import {
   talkSaraDid,
@@ -97,6 +98,43 @@ export default {
           status: out.status,
           headers: { ...out.headers, 'Cache-Control': 'no-store' },
         })
+      }
+    }
+
+    if (url.pathname.startsWith('/kajabi/')) {
+      let rawBody = ''
+      try {
+        rawBody = await request.text()
+      } catch {
+        rawBody = ''
+      }
+      try {
+        const entitlements = kvEntitlementStore(env.REDEEM_TOKENS)
+        const result = await dispatchKajabi(url.pathname, request.method, {
+          store: entitlements,
+          entitlementStore: entitlements,
+          redeemStore: kvRedeemStore(env.REDEEM_TOKENS),
+          counterStore: kvCounterStore(env.REDEEM_TOKENS),
+          secret: String(env.REDEEM_MINT_SECRET || '').trim(),
+          expectedKey: String(env.KAJABI_WEBHOOK_KEY || '').trim(),
+          presentedKey: rawQueryParam(url.search, 'key'),
+          offerIds: env.KAJABI_SARA_OFFER_IDS,
+          getHeader: headerGetter(request.headers),
+          rawBody,
+          publicOrigin: env.SARA_PUBLIC_ORIGIN,
+          ip: clientIpFromHeaders(request.headers),
+          now: new Date().toISOString(),
+          nowMs: Date.now(),
+        })
+        if (!result) {
+          const out = jsonResponse(404, { reply: 'Not found' }, origin)
+          return new Response(out.body, { status: out.status, headers: out.headers })
+        }
+        return respond(result.status, result.body, origin, {
+          ...(result.retryAfter ? { 'Retry-After': String(result.retryAfter) } : {}),
+        })
+      } catch {
+        return respond(503, { ok: false, error: 'kajabi_failed' }, origin)
       }
     }
 

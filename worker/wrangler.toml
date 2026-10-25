@@ -27,3 +27,8 @@ id = "6465ceb88c4b4fdfbc9cf0374588181d"
 # Mint auth for Kajabi/Zapier. Generate with: openssl rand -hex 32
 #   printf '%s' "$REDEEM_MINT_SECRET" | npx wrangler secret put REDEEM_MINT_SECRET
 # Never VITE_REDEEM_MINT_SECRET. Never commit the value.
+# Purchase webhook query secret (hex, so the URL keeps every character). Generate with: openssl rand -hex 32
+#   printf '%s' "$KAJABI_WEBHOOK_KEY" | npx wrangler secret put KAJABI_WEBHOOK_KEY
+# Comma-separated offer ids that should receive Sara. Deploy-time. Do not commit the live choice.
+# Known $149 offers: 2147989270 women's, 2149556914 men's.
+#   printf '%s' "$KAJABI_SARA_OFFER_IDS" | npx wrangler secret put KAJABI_SARA_OFFER_IDS
