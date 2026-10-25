@@ -11,9 +11,12 @@
  *
  * Payload shapes:
  * - Payment Succeeded: offer + member + payment_transaction.
+ *   The webhook UI labels this event payment.succeeded.
  *   https://help.kajabi.com/en/articles/17175722-webhook-and-api-changes-with-multiple-order-bumps
  *   offer.id may be a comma-separated list when one charge covers several offers.
  * - Cart Purchase: order.order_items[].id (the offer), member, payment_transaction.
+ *   The webhook UI labels this event order.created. Older samples use cart.purchase.
+ *   order_paid and purchase_created are not in the published samples here, so they are not accepted.
  *   https://help.kajabi.com/en/articles/17175721-outbound-webhook-data-reference
  * - Setup (no signature header; endpoint URL is the only field):
  *   https://help.kajabi.com/hc/en-us/articles/360037245374-How-to-Use-Webhooks-on-Kajabi
@@ -33,7 +36,7 @@ export const KAJABI_OPEN_WINDOW_MS = 10 * 60 * 1000
 export const KAJABI_EMAIL_PREFIX = 'kajabi:email:'
 export const KAJABI_ORDER_PREFIX = 'kajabi:order:'
 
-const ACCEPTED_EVENTS = new Set(['', 'payment_succeeded', 'cart_purchase', 'cart_purchased'])
+const ACCEPTED_EVENTS = new Set(['', 'payment_succeeded', 'cart_purchase', 'cart_purchased', 'order_created'])
 const MAX_ORDER_KEYS = 8
 
 export function rawQueryParam(search, name) {
@@ -93,9 +96,31 @@ export function normalizeOrderKey(value) {
   return id
 }
 
+function eventLabel(value, depth = 0) {
+  if (depth > 3 || value == null) return ''
+  if (typeof value === 'string' || typeof value === 'number') return String(value)
+  const record = asObject(value)
+  if (!record) return ''
+  for (const key of ['name', 'type', 'event', 'id']) {
+    const next = record[key]
+    if (typeof next === 'string' || typeof next === 'number') return String(next)
+  }
+  for (const key of ['name', 'type', 'event']) {
+    const nested = eventLabel(record[key], depth + 1)
+    if (nested) return nested
+  }
+  return ''
+}
+
 function normalizeEvent(body) {
-  const raw = body?.event ?? body?.Event ?? ''
-  return String(raw).trim().toLowerCase().replace(/[\s.-]+/g, '_')
+  const record = asObject(body) || {}
+  for (const candidate of [record.event, record.Event, record.type, record.Type]) {
+    if (candidate == null || candidate === '') continue
+    const label = eventLabel(candidate)
+    if (!label) continue
+    return label.trim().toLowerCase().replace(/[\s.-]+/g, '_')
+  }
+  return ''
 }
 
 function asObject(value) {
