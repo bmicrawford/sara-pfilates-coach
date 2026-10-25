@@ -1,0 +1,30 @@
+Subject: Time to re-take your Movement Selection Worksheet
+Preview: Your best movements may have changed. Here's a 15-minute refresh.
+Delay/trigger: Sequence 'PfilAtes™ for Women – Onboarding' email 10. Delay after previous: 17 days (Day 45).
+Tag action on links: None (no tagging links; plain URLs only).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Six weeks in, your body isn't where it was on day one. Movements that scored a 1 back then might score a 3 now. That makes this a good time to re-take your Movement Selection Worksheet.
+
+How to do it (about 15 minutes):
+1. Print a fresh worksheet from Outline and Objectives → Downloads.
+2. Replay the Movement Selection Video (Learn the Movements). You can skip around to the movements you want to test.
+3. Score each movement again: pain? could you do it every day? sensation 0–3?
+4. Pick your new best 2–3 and carry on with 5 minutes in the morning and 5 in the evening.
+
+Remember to pulse at every hold point: small range + "HA" + squeeze.
+
+Did your top movements change? Reply and tell me. My team and I read every message.
+
+Quick answers
+- My scores didn't change. Is that bad? No. Keep doing what's working.
+- Can I rotate movements? Yes. Pick from your top-scoring, pain-free list.
+- Pregnant now? Check with your OB or midwife first. After 12 weeks, avoid any PfilAtes™ movements that involve lying on your back (Butterfly, Bridge, Corkscrew).
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

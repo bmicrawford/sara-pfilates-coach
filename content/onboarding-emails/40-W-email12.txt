@@ -1,0 +1,55 @@
+Subject: 90 days: keep the gains
+Preview: A 3-month self-check and a quick refresher.
+Delay/trigger: Sequence 'PfilAtes™ for Women – Onboarding' email 12. Delay after previous: 30 days (Day 90).
+Tag action on links: C-10 buttons → add tag w-c10-m3-q{n}-{score} (41 links).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Three months of PfilAtes™. First, your 3-month check-in (2 minutes, just tap). Same 10 questions as Day 0 and Day 28, so you can see whether your gains are holding.
+
+How big a problem is your bladder?
+1. How much of a problem is having to urinate too often?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q1-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q1-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q1-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q1-3
+2. How much of a problem is having to urinate during the night?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q2-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q2-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q2-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q2-3
+3. How much of a problem is having to rush to the bathroom to avoid leaking?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q3-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q3-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q3-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q3-3
+4. How much of a problem is urine leakage related to coughing, sneezing, laughing, or exercise?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q4-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q4-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q4-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q4-3
+5. How many pads do you use daily?
+   [0] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q5-0  [1] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q5-1  [2] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q5-2  [3] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q5-3  [4 or more] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q5-4
+
+How does your bladder problem affect your day-to-day activities?
+6. Does your bladder problem affect your ability to perform normal household chores?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q6-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q6-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q6-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q6-3
+7. Does your bladder problem affect your ability to exercise?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q7-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q7-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q7-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q7-3
+8. Does your bladder problem affect your ability to do things you enjoy?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q8-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q8-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q8-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q8-3
+9. Does/would your bladder problem affect your ability to work?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q9-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q9-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q9-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q9-3
+10. How likely are you to avoid leaving the house because of your bladder problem?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q10-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q10-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q10-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-m3-q10-3
+
+Then a short check for this milestone:
+
+1. Fill out a fresh 3-day Bladder Diary and compare it, and today's C-10 answers, with your first ones and your Day-28 ones.
+2. Re-watch one lesson. Try Understanding The Pelvic Floor & The PfilAtes™ Principles. It lands differently once you've been practicing.
+3. Audit your pulse with the 4 questions: Full movement first? Small pulse? Percussive "HA"? Voluntary squeeze?
+4. Still on 10 minutes a day? If not, go back to 5 + 5 starting tomorrow.
+
+Reply and tell me how you're doing at 3 months. My team and I read every message.
+
+Share it: If PfilAtes™ has made a difference for you, the kindest thing you can do is pass it on: https://www.pfilates.com/womens-course
+
+Quick answers
+- Do I still need to do it every day? The course is designed around 10 minutes a day.
+- Can I change my movements? Yes. Re-take the worksheet whenever you like.
+- Where's the Evaluation? In the Course Wrap-Up module. We'd love your feedback.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor. This check-in is a personal tracking tool, not a diagnosis.

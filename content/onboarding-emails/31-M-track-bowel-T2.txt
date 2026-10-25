@@ -1,0 +1,21 @@
+Subject: Bowel control: keep going, and when to check in
+Preview: A few habits, and when to see your doctor.
+Delay/trigger: Sequence 'Men concern track: bowel' email T2. Delay 17 days after T1 (~Day 23).
+Tag action on links: None (no tagging links).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Three weeks in, keep going. Bowel control often takes a little longer to change than bladder control.
+
+- Regular meals, fluids and fiber as your clinician advises can support regular, comfortable bowel movements.
+- See your doctor for any new change in bowel habits, bleeding, or accidents that are getting worse.
+- Keep your 5 + 5 going and your pulse sharp.
+
+Questions? Just hit reply. My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

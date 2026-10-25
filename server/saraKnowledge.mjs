@@ -1,3 +1,5 @@
+import { KEGEL_10X_BAN, KEGEL_COMPARISON } from './saraGuardrails.mjs'
+
 /**
  * PfilAtes research that Ask Sara may cite, from Dr. Bruce Crawford's
  * supplied papers and abstracts. Full sourced summary: docs/pfilates-research.md.
@@ -23,11 +25,6 @@ export const RESEARCH_FACTS = [
     id: 'emg-vs-kegel',
     source: 'Crawford, SGS 2016 abstract "Pelvic Floor Muscle Motor Unit Recruitment: Kegels vs Specialized Movement"',
     fact: 'In 100 consecutive patients (January 2014 to May 2015), each of the 10 movements averaged 21% to 56% more pelvic floor activity than the person\'s own isolated Kegel (p<0.001). Averages: Bridging 56%, Hovering 49%, Lunge 42%, Cat-Cow 41%, Butterfly 36%, Squat 30%, All Fours Side Leg Lift 30%, Side-lying bent knee lift 25%, Side-lying straight leg circle 25%, Corkscrew 21%. Individuals varied, and some people got less than their Kegel on some movements. Say this suggests movement may recruit more; never say proven.',
-  },
-  {
-    id: 'up-to-10x',
-    source: 'Dr. Crawford, confirmed Oct 23, 2026; EMG study SGS 2016',
-    fact: 'PfilAtes™ movements can activate the pelvic floor up to 10 times more than a standard Kegel (up to 10x a standard Kegel).',
   },
   {
     id: 'clinical-74-33',
@@ -63,9 +60,6 @@ export const RESEARCH_DO_NOT_SAY = [
   'cure',
 ]
 
-const ALLOWED_10X_PHRASE = /up to 10x a standard kegel/gi
-const ALLOWED_10_TIMES_PHRASE = /up to 10 times more than a standard kegel/gi
-
 /** Percentages Sara may use when talking about PfilAtes research. */
 export const RESEARCH_ALLOWED_PERCENTS = ['80%', '50%', '74%', '33%', '21%', '25%', '30%', '36%', '41%', '42%', '49%', '56%']
 
@@ -84,9 +78,9 @@ export function researchReplyIssues(reply) {
     const re = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i')
     if (re.test(text)) issues.push(`banned phrase "${phrase}"`)
   }
-  const stripped = text.replace(ALLOWED_10X_PHRASE, '').replace(ALLOWED_10_TIMES_PHRASE, '')
-  if (/\b10x\b/i.test(stripped)) issues.push('10x outside "up to 10x a standard Kegel"')
-  if (/\b10\s+times\b/i.test(stripped)) issues.push('unqualified "10 times"')
+  if (/\b10x\b/i.test(text) || /\b10\s*×/.test(text) || /\b10\s+x\b/i.test(text)) issues.push('says 10x')
+  if (/\bten times\b/i.test(text)) issues.push('says ten times')
+  if (/\b10\s+times\b/i.test(text)) issues.push('says 10 times')
   return issues
 }
 
@@ -100,12 +94,12 @@ export const RESEARCH_QA_CASES = [
     badReply: 'Studies have proven PfilAtes is 10x stronger than a Kegel and works for 95% of women.',
   },
   {
-    id: 'up-to-10x',
-    prompt: 'Can PfilAtes activate the pelvic floor more than a Kegel?',
-    mustMention: ['up to 10 times more than a standard Kegel', 'up to 10x a standard Kegel'],
+    id: 'how-much-better-than-kegels',
+    prompt: 'How much better than Kegels is PfilAtes?',
+    mustMention: ['21% to 56%', '100 consecutive patients', 'suggests'],
     goodReply:
-      'PfilAtes™ movements can activate the pelvic floor up to 10 times more than a standard Kegel (up to 10x a standard Kegel). That suggests more activation. It is not a promise for every person.',
-    badReply: 'PfilAtes is 10x stronger than a Kegel for everyone.',
+      "In Dr. Crawford's study of 100 consecutive patients, each of the 10 movements averaged 21% to 56% more pelvic floor activity than the person's own Kegel. That suggests more activity. People vary.",
+    badReply: 'PfilAtes is 10x stronger than a Kegel, ten times the activation, and 10 times more than a Kegel.',
   },
   {
     id: 'strongest-movement',
@@ -155,7 +149,7 @@ export function saraKnowledgePrompt() {
 ${facts}
 Research rules:
 - Use only these numbers, as written. Do not round, combine, or apply them to the user as a promise.
-- Call the studies small or early. Say "suggests" or "may"; never say proven or cure. Say "10x" only as "up to 10x a standard Kegel".
+- Call the studies small or early. Say "suggests" or "may"; never say proven or cure. ${KEGEL_10X_BAN} ${KEGEL_COMPARISON}
 - The 74% bladder-symptom figure is only the 2023 Evergreen Commons result for seniors. Never quote 74% as a result for community-dwelling women or as a general result. Do not pair the 33% strength figure with 74% for community-dwelling women.
 - The prostate-surgery trial studied men only. Do not stretch it to women or other conditions.
 - If someone asks about a study, number, author, or condition not listed here, say: "I don't know of a PfilAtes study on that," and do not guess or invent one.`

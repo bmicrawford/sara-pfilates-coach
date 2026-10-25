@@ -1,10 +1,14 @@
+import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { askSaraGrok, buildMessages, corsHeaders, SARA_NO_RED_FLAG, SARA_NO_REPEAT_GREETING, SARA_OFFLINE, SARA_SYSTEM, SARA_TRIGGER_CHECKLIST, GROK_MODEL } from './askGrok.mjs'
+import { fileURLToPath } from 'node:url'
+import { askSaraGrok, buildMessages, corsHeaders, SARA_DEMO_AUDIENCE, SARA_NO_RED_FLAG, SARA_NO_REPEAT_GREETING, SARA_OFFLINE, SARA_SYSTEM, SARA_TRIGGER_CHECKLIST, GROK_MODEL } from './askGrok.mjs'
 import { stripLeadingGreeting } from '../src/lib/saraGreeting.mjs'
 import { splitSpeakChunksForTurn } from '../src/lib/speakChunks.mjs'
 import {
   APPROVED_CLAIMS,
   ESSENTIAL_PFILATES_MOVEMENTS,
+  KEGEL_10X_BAN,
+  KEGEL_COMPARISON,
   PFILATES_MOVEMENTS,
   RED_FLAG_QA_CASES,
   RED_FLAG_QA_NON_MATCHES,
@@ -12,6 +16,7 @@ import {
   matchingRedFlags,
   saraGuardrailPrompt,
 } from './saraGuardrails.mjs'
+import { ONBOARDING_EMAILS, onboardingPromptForTurn } from './onboardingEmails.mjs'
 import {
   RESEARCH_ALLOWED_PERCENTS,
   RESEARCH_FACTS,
@@ -194,7 +199,20 @@ assert(
 assert(/Red-flag rules always come first/.test(knowledge), 'research block defers to red-flag rules')
 assert(/I don't know of a PfilAtes study on that/.test(knowledge), 'research block says "I don\'t know" for unknown studies')
 assert(/never say proven or cure/i.test(knowledge), 'research block bans overstatement')
-assert(/up to 10x a standard Kegel/.test(knowledge), '10x is allowed only in the confirmed phrase')
+assert(knowledge.includes(KEGEL_10X_BAN), 'research block bans 10x by name')
+assert(knowledge.includes(KEGEL_COMPARISON), 'research block gives the EMG Kegel comparison')
+function withoutKegelBan(text) {
+  return String(text).split(KEGEL_10X_BAN).join('')
+}
+assert(!/\b10x\b/i.test(withoutKegelBan(knowledge)), 'research facts do not say 10x')
+assert(!/\bten times\b/i.test(withoutKegelBan(knowledge)), 'research facts do not say ten times')
+assert(!/\b10\s+times\b/i.test(withoutKegelBan(knowledge)), 'research facts do not say 10 times')
+assert(!/\b10x\b/i.test(withoutKegelBan(SARA_SYSTEM)), 'the prompt does not say 10x outside the ban')
+assert(!/\bten times\b/i.test(withoutKegelBan(SARA_SYSTEM)), 'the prompt does not say ten times outside the ban')
+assert(!/\b10\s+times\b/i.test(withoutKegelBan(SARA_SYSTEM)), 'the prompt does not say 10 times outside the ban')
+assert(!APPROVED_CLAIMS.some((claim) => /\b10x\b|\bten times\b|\b10\s+times\b/i.test(claim)), 'approved claims do not include 10x')
+assert(/21% to 56%/.test(SARA_SYSTEM) && /100 consecutive patients/.test(SARA_SYSTEM), 'prompt holds the EMG Kegel figure')
+assert(/suggests/.test(SARA_SYSTEM), 'prompt tells Sara to say suggests')
 assert(PFILATES_MOVEMENTS[8] === 'All Fours Side Leg Lift', 'movement 9 is All Fours Side Leg Lift')
 assert(SARA_SYSTEM.includes('All Fours Side Leg Lift'), 'prompt uses All Fours Side Leg Lift')
 assert(!SARA_SYSTEM.includes('All-4s side leg lift'), 'old All-4s side leg lift name is gone')
@@ -256,30 +274,37 @@ assert(
 )
 assert(!SARA_SYSTEM.includes('showed 74% bladder symptom improvement'), 'old general 74% bladder claim is gone')
 assert(
-  researchReplyIssues('PfilAtes™ movements can be up to 10x a standard Kegel.').length === 0,
-  'up to 10x a standard Kegel is allowed',
+  researchReplyIssues('PfilAtes™ movements can be up to 10x a standard Kegel.').some((issue) => /10x/i.test(issue)),
+  '10x is caught even in the old allowed phrase',
+)
+assert(
+  researchReplyIssues('It is ten times a standard Kegel.').some((issue) => /ten times/i.test(issue)),
+  'ten times is caught',
 )
 assert(
   researchReplyIssues(
     'PfilAtes™ movements can activate the pelvic floor up to 10 times more than a standard Kegel.',
-  ).length === 0,
-  'confirmed 10 times wording is allowed',
+  ).some((issue) => /10 times/i.test(issue)),
+  '10 times more than a Kegel is caught',
 )
-assert(
-  researchReplyIssues('PfilAtes is 10x stronger than a Kegel.').length > 0,
-  'unqualified 10x is caught',
-)
-assert(
-  researchReplyIssues('It activates the pelvic floor 10 times stronger than a Kegel.').length > 0,
-  'unqualified 10 times is caught',
-)
+assert(researchReplyIssues('It takes 10 minutes a day and uses 10 movements.').length === 0, '10 minutes and 10 movements are allowed')
 assert(
   researchReplyIssues('Studies have proven it is up to 10x a standard Kegel.').some((issue) => /proven/i.test(issue)),
-  'proven is still caught beside the allowed 10x phrase',
+  'proven is still caught beside 10x',
 )
 assert(
   researchReplyIssues('PfilAtes will cure leaks and is up to 10x a standard Kegel.').some((issue) => /cure/i.test(issue)),
-  'cure is still caught beside the allowed 10x phrase',
+  'cure is still caught beside 10x',
+)
+const kegelQuestion = 'How much better than Kegels is PfilAtes?'
+const kegelPrompt = buildMessages(kegelQuestion)[0].content
+assert(kegelPrompt === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}`, 'a Kegel comparison does not pull onboarding emails')
+assert(!/\b10x\b|\bten times\b|\b10\s+times\b/i.test(withoutKegelBan(kegelPrompt)), 'the Kegel question prompt contains no 10x')
+assert(
+  SARA_SYSTEM.includes(
+    'Pregnant users should avoid Butterfly, Bridging, and Corkscrew after 12 weeks gestational age.',
+  ),
+  'pregnancy sentence stays exact',
 )
 assert(researchDoc.includes('All Fours Side Leg Lift'), 'research doc uses All Fours Side Leg Lift')
 assert(!researchDoc.includes('All-4s side leg lift'), 'research doc drops All-4s side leg lift')
@@ -457,6 +482,151 @@ const flaggedFollowUp = await askSaraGrok({
   },
 })
 assert(flaggedFollowUp.reply === 'Sip water through the day.', 'firstTurn false strips the greeting')
+
+assert(ONBOARDING_EMAILS.length === 47, 'onboarding module has the 47 emails')
+assert(onboardingPromptForTurn('how much water?') === '', 'an ordinary question adds no onboarding text')
+assert(
+  buildMessages('how much water?')[0].content === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}`,
+  'water still uses the ordinary system prompt',
+)
+const emailFields = ONBOARDING_EMAILS.map((email) =>
+  [email.summary, email.asks, email.guidance, email.newer, email.subject].join('\n'),
+).join('\n')
+for (const [pattern, label] of [
+  [/\b10x\b/i, '10x'],
+  [/\bten times\b/i, 'ten times'],
+  [/\b10\s+times\b/i, '10 times'],
+  [/74%/, '74%'],
+  [/29%/, '29%'],
+  [/\b8 times\b/i, '8 times'],
+  [/62%/, '62%'],
+  [/95\.2/, '95.2'],
+  [/60\.7/, '60.7'],
+  [/43\.6/, '43.6'],
+  [/52\.8/, '52.8'],
+  [/3 in 10/i, '3 in 10'],
+  [/lying on your back/i, 'lying on your back'],
+  [/80%\s+reported/i, '80% reported'],
+  [/\bcure\b/i, 'cure'],
+  [/\bproven\b/i, 'proven'],
+]) {
+  assert(!pattern.test(emailFields), `onboarding email notes do not include ${label}`)
+}
+const onboardingSrc = readFileSync(new URL('./onboardingEmails.mjs', import.meta.url), 'utf8')
+assert(!/lying on your back/i.test(onboardingSrc), 'onboarding module does not copy the email pregnancy wording')
+assert(/only pregnancy rule/.test(onboardingSrc), 'onboarding rules defer to the existing pregnancy sentence')
+
+function onboardingFiles(message, options) {
+  const content = buildMessages(message, [], options)[0].content
+  return ONBOARDING_EMAILS.filter((email) =>
+    content.includes(`${email.sequence} (${email.who}), ${email.dayLabel}.`),
+  ).map((email) => email.file)
+}
+
+const pulse = buildMessages('What was the pulse self-check email about?')[0].content
+assert(
+  onboardingFiles('What was the pulse self-check email about?').join(',') === '18-W-email5.txt,19-M-email5.txt',
+  'pulse self-check retrieves the Day 11 emails',
+)
+assert(pulse.includes('Your 30-second pulse self-check'), 'pulse prompt includes the subject')
+assert(
+  pulse.includes('full movement first') && pulse.includes('squeezing on purpose'),
+  'pulse prompt includes the four questions',
+)
+assert(!pulse.includes(SARA_DEMO_AUDIENCE), 'a buyer question does not get the demo audience note')
+
+const prostate = "I'm a man. Which email covers leakage after prostate surgery?"
+assert(
+  onboardingFiles(prostate).join(',') === '12-M-track-prostatectomy-sui-T1.txt',
+  'a prostate-surgery question retrieves the men\'s track email',
+)
+assert(buildMessages(prostate)[0].content.includes('cold water'), 'men\'s prostate email keeps the squeeze cue')
+
+const diary = 'Which email has the bladder diary?'
+assert(
+  onboardingFiles(diary).join(',') === '32-W-email8.txt,33-M-email8.txt',
+  'bladder diary retrieves the Day 24 emails',
+)
+assert(
+  buildMessages(diary)[0].content.includes('no separate Day 25 email') ||
+    buildMessages(diary)[0].content.includes('There is no separate Day 25 email'),
+  'bladder diary prompt says there is no separate Day 25 email',
+)
+
+assert(
+  onboardingFiles('When do I get the Day 28 email?').join(',') === '34-W-email9.txt,35-M-email9.txt',
+  'Day 28 retrieves the main one-number emails',
+)
+assert(
+  buildMessages('When do I get the Day 28 email?')[0].content.includes('10 means no change'),
+  'Day 28 prompt explains the problem scale',
+)
+
+const stuck = 'I clicked Stuck, what now?'
+assert(onboardingFiles(stuck).join(',') === '16-W-email4.txt,17-M-email4.txt', 'Stuck retrieves the Day 8 check-in')
+assert(
+  !onboardingFiles(stuck).includes('24-WM-troubleshoot-d21-notyet.txt') &&
+    !buildMessages(stuck)[0].content.includes("Let's troubleshoot together"),
+  'Stuck does not retrieve the Day 21 troubleshoot email',
+)
+assert(buildMessages(stuck)[0].content.includes('team will follow up'), 'Stuck prompt says the team follows up')
+
+assert(
+  onboardingFiles('What do the 1-10 buttons do?').join(',') ===
+    '34-W-email9.txt,35-M-email9.txt,38-W-email11.txt,39-M-email11.txt',
+  '1-10 buttons retrieve Day 28 and Day 60',
+)
+
+const day2 = "I'm a man. What does the Day 2 email ask me to click?"
+assert(onboardingFiles(day2).join(',') === '04-M-email2.txt', 'men\'s Day 2 stays on the men\'s email')
+assert(buildMessages(day2)[0].content.includes('prostate surgery'), 'men\'s Day 2 names prostate surgery')
+assert(
+  !buildMessages(day2)[0].content.includes('W main (women), Day 2.'),
+  "men's Day 2 does not include the women's email",
+)
+
+const notYet = 'I clicked Not yet, what now?'
+assert(
+  onboardingFiles(notYet).join(',') === '22-W-email7.txt,23-M-email7.txt,24-WM-troubleshoot-d21-notyet.txt',
+  'Not yet includes the troubleshooting email',
+)
+
+const unknown = buildMessages('What did the email about the secret discount code say?')[0].content
+assert(unknown.includes('do not recognize that email'), 'an unknown email is named as unrecognized')
+assert(unknown.includes('pfilates1@gmail.com'), 'an unknown email points to pfilates1@gmail.com')
+assert(onboardingFiles('What did the email about the secret discount code say?').length === 0, 'an unknown email invents no card')
+
+const missingEmail = buildMessages('I never got the Day 8 email')[0].content
+assert(missingEmail.includes('Do not insist'), 'a missing email tells Sara not to insist')
+assert(missingEmail.includes('pfilates1@gmail.com'), 'a missing email points to pfilates1@gmail.com')
+assert(onboardingFiles('I never got the Day 8 email').join(',') === '16-W-email4.txt,17-M-email4.txt', 'a missing Day 8 still names that check-in')
+
+const demoPulse = buildMessages('What was the pulse self-check email about?', [], { audience: 'demo' })[0].content
+assert(demoPulse.includes(SARA_DEMO_AUDIENCE), 'demo onboarding keeps the audience note')
+assert(demoPulse.includes('has not received these emails'), 'demo onboarding says the emails have not arrived')
+assert(demoPulse.includes('your Day 8 email'), 'demo onboarding names the phrase Sara must not use')
+assert(SARA_DEMO_AUDIENCE.includes('has not received those emails'), 'every demo turn says the emails have not arrived')
+
+const secondEmail = buildMessages('What was the pulse self-check email about?', [
+  { from: 'you', text: 'hi' },
+  { from: 'sara', text: 'hey' },
+])[0].content
+assert(secondEmail.includes(SARA_NO_REPEAT_GREETING), 'a later email question still skips the greeting')
+assert(
+  secondEmail.indexOf('Your 30-second pulse self-check') < secondEmail.indexOf(SARA_NO_REPEAT_GREETING),
+  'the no-repeat note stays after the matching email',
+)
+
+const beforeRebuild = readFileSync(new URL('./onboardingEmails.mjs', import.meta.url), 'utf8')
+const rebuilt = spawnSync(process.execPath, ['scripts/build-onboarding-emails.mjs'], {
+  cwd: fileURLToPath(new URL('..', import.meta.url)),
+  encoding: 'utf8',
+})
+assert(rebuilt.status === 0, `onboarding rebuild exits 0 (${rebuilt.stderr || rebuilt.stdout})`)
+assert(
+  readFileSync(new URL('./onboardingEmails.mjs', import.meta.url), 'utf8') === beforeRebuild,
+  'rebuilding the onboarding module does not change it',
+)
 
 if (process.exitCode) {
   console.error('askGrok smoke failed')

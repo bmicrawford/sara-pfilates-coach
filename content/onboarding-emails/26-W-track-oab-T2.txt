@@ -1,0 +1,22 @@
+Subject: You're not alone, and it's worth a conversation
+Preview: Most women never bring this up. You've already started.
+Delay/trigger: Sequence 'Women concern track: oab' email T2. Delay 17 days after T1 (~Day 23).
+Tag action on links: None (no tagging links).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Three weeks in, I want you to know how common this is.
+
+- Only 29% of women with urinary leakage see a clinician about it, about 3 in 10 (Hou 2025). (This applies to urinary incontinence in general, comes from the study abstract, and the studies varied widely. It's about seeking care, not about treatment results.)
+- If urgency is new, painful, or comes with blood in your urine, see your doctor promptly.
+- When urgency hits, stop, do a few quick squeezes, and let the wave pass before you walk to the bathroom.
+- Keep your diary going. Repeat it on Days 25–28 and compare.
+
+Questions? Just hit reply. My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

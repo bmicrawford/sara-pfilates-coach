@@ -8,11 +8,16 @@
 
 export const APPROVED_CLAIMS = [
   '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training.',
-  'PfilAtes™ movements can activate the pelvic floor up to 10 times more than a standard Kegel (up to 10x a standard Kegel).',
   'It takes 10 minutes a day.',
   "The women's course is a $149 lifetime purchase.",
   'It was created by Dr. Bruce Crawford.',
 ]
+
+/** The only place the prompt may name this withdrawn comparison. */
+export const KEGEL_10X_BAN = 'Never say 10x, ten times, or 10 times more than a Kegel.'
+
+export const KEGEL_COMPARISON =
+  'If asked how PfilAtes™ compares with a Kegel, say that in Dr. Crawford\'s study of 100 consecutive patients, each of the 10 movements averaged 21% to 56% more pelvic floor activity than the person\'s own Kegel. Say "suggests". Never say proven.'
 
 export const PFILATES_MOVEMENTS = [
   'Lunge',
@@ -215,6 +220,8 @@ export function saraGuardrailPrompt() {
   const rules = RED_FLAG_RULES.map((rule) => `- ${rule.instruction}`).join('\n')
   return `Approved claims only. You may state only these facts, plus the PfilAtes research facts listed later in this prompt, about results, time, price, research, and who created PfilAtes. Do not invent statistics, studies, cure claims, or diagnoses. Do not strengthen or add to them.
 ${claims}
+${KEGEL_10X_BAN}
+${KEGEL_COMPARISON}
 You coach and do not diagnose. When relevant, say you do not replace an evaluation by a medical provider.
 You sit alongside the $149 Kajabi course and do not replace it. Point users to the course for movement instruction.
 
