@@ -1,8 +1,9 @@
 /**
- * One muted D-ID session for a demo Ask Sara visit.
- * Opens when the screen opens, not when Send is tapped. Strict-mode
- * remount reuses that attempt. The Worker lease is not renewed; it
- * expires on its own. This module does not import the Agents SDK.
+ * One muted D-ID session for a demo visit.
+ * The landing / home screen starts it; Ask Sara reuses that attempt.
+ * Strict-mode remount and the home → Ask Sara handoff keep the first
+ * connect. The Worker lease is not renewed; it expires on its own.
+ * This module does not import the Agents SDK.
  */
 
 export const DEMO_STREAM_IDLE_MS = 60_000

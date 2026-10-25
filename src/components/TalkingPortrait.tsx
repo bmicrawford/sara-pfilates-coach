@@ -9,6 +9,8 @@ type Props = {
   talking: boolean
   listening?: boolean
   streaming?: boolean
+  /** Muted warm connect is still in progress. The still keeps moving. */
+  preparing?: boolean
   onVideoEl?: (el: HTMLVideoElement | null) => void
   onVideoLive?: (live: boolean) => void
 }
@@ -17,6 +19,7 @@ export function TalkingPortrait({
   talking,
   listening = false,
   streaming = false,
+  preparing = false,
   onVideoEl,
   onVideoLive,
 }: Props) {
@@ -87,6 +90,7 @@ export function TalkingPortrait({
     <div
       ref={rootRef}
       data-sara-phase={phase}
+      data-sara-preparing={preparing ? 'true' : 'false'}
       className={`sara-portrait sara-portrait-cover relative overflow-hidden bg-sage-mist ${
         talking || showStream ? 'sara-portrait-live' : listening ? 'sara-portrait-listening' : ''
       }`}
@@ -111,6 +115,10 @@ export function TalkingPortrait({
           showStream ? 'opacity-0' : 'opacity-100'
         }`}
       />
+      <span className="sara-blink" aria-hidden>
+        <span />
+        <span />
+      </span>
     </div>
   )
 }

@@ -5,9 +5,11 @@ import { askIntro, askEmptyHint, homeIntro, PROSPECT_ASK_GREETING, PROSPECT_HOME
 import { isDemoPass, isDemoVoiceOnly } from './demoPass.ts'
 import {
   DEMO_DID_FRAME_BUDGET_MS,
+  DEMO_SEND_LIVE_BUDGET_MS,
   didWebRtcSilencedBySilentSwitch,
   planDemoVoice,
   SARA_DEMO_SILENT_HINT,
+  SARA_GETTING_READY,
 } from './demoVoicePlan.ts'
 import { DEMO_DEVICE_EMAIL, DEMO_TOKEN, redeemDemoPass } from './mockServer.ts'
 import { isSaraBusy, messageForSaraStatus, SARA_BUSY_MESSAGE, SARA_UNKNOWN_PASS_MESSAGE } from './saraGate.ts'
@@ -83,6 +85,8 @@ assert(
 assert(messageForSaraStatus(200, { reply: 'Hello' }) === null, 'a normal reply is not treated as a gate')
 
 assert(DEMO_DID_FRAME_BUDGET_MS === 3000, 'demo lip-sync budget is 3 seconds')
+assert(DEMO_SEND_LIVE_BUDGET_MS === 6000, 'a connecting demo speaks with ara by about 6 seconds after Send')
+assert(SARA_GETTING_READY === 'Sara is getting ready', 'the connecting still uses the short ready cue')
 assert(SARA_DEMO_SILENT_HINT === 'No sound? Turn off the Silent switch.', 'iPhone demo hint names the Silent switch')
 assert(didWebRtcSilencedBySilentSwitch('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'), 'iPhone WebRTC is treated as silenced by the Silent switch')
 assert(
@@ -103,7 +107,15 @@ const warm = { ...cold, streamWarm: true }
 assert(planDemoVoice(cold) === 'wait', 'a cold demo waits for the ara chunk and does not wait on D-ID')
 assert(
   planDemoVoice({ ...cold, chunkReady: true }) === 'ara',
-  'while D-ID is still connecting, the first ara chunk plays immediately',
+  'without a live-connect hold, a ready ara chunk still starts immediately',
+)
+assert(
+  planDemoVoice({ ...cold, chunkReady: true, awaitingLive: true }) === 'wait',
+  'a connect that can still catch this turn holds ara until the send budget',
+)
+assert(
+  planDemoVoice({ ...cold, chunkReady: true, awaitingLive: true, budgetExceeded: true }) === 'ara',
+  'past the send budget, a still-connecting turn speaks with ara',
 )
 assert(
   planDemoVoice({ ...cold, speechFramesLive: true, chunkReady: true }) === 'ara',
@@ -176,6 +188,9 @@ assert(/if \(voiceOnly\)/.test(askSrc) && /speakDemoReply\(text\)/.test(askSrc),
 assert(/playAra\(text\)/.test(askSrc), 'paid replies still fall back to ara')
 assert(/connectSaraStream\(\)/.test(askSrc), 'Send starts D-ID for the demo pass too')
 assert(/DEMO_DID_FRAME_BUDGET_MS/.test(askSrc) && /planDemoVoice/.test(askSrc), 'demo lip-sync uses the 3s planner')
+assert(/DEMO_SEND_LIVE_BUDGET_MS/.test(askSrc), 'demo voice gives a connecting session about 6 seconds after Send')
+assert(/warmPhase === 'connecting'/.test(askSrc), 'the 6s hold applies only while the shared session is still connecting')
+assert(/SARA_GETTING_READY/.test(askSrc) && /data-sara-ready-cue/.test(askSrc), 'Ask Sara shows the ready cue while the warm connect is in progress')
 assert(/streamWarm/.test(askSrc), 'the 3s budget applies only when the demo session is already warm')
 assert(/dropHeldSaraSpeech/.test(askSrc) && /releaseHeldSaraSpeech/.test(askSrc), 'demo plays one voice, never both')
 assert(/SARA_DEMO_SILENT_HINT/.test(askSrc), 'iPhone demo shows the Silent switch hint')
@@ -188,19 +203,28 @@ assert(/live && streamCapped && !voiceOnly/.test(askSrc), 'demo D-ID fallback do
 {
   const mount = askSrc.match(/setSaraStreamCallbacks\([\s\S]*?stopSaraSpeech\(\)/)?.[0] ?? ''
   assert(/preloadSaraStream\(\)/.test(mount), 'demo mount preloads the SDK')
-  assert(/if \(voiceOnly\) \{[\s\S]*?\.mount\(\)/.test(mount), 'demo mount warms one D-ID session')
+  assert(/holdDemoStream\(/.test(mount), 'demo Ask Sara holds the shared warm session')
   assert(!/connectSaraStream/.test(mount.split('if (voiceOnly)')[0] ?? ''), 'paid mount does not open D-ID')
   assert(/releaseSaraStream/.test(mount), 'leaving the screen releases the session')
   assert(/pageHide/.test(mount), 'page hide closes the demo session')
 }
-assert(/demoWarmEpoch/.test(askSrc) && /epoch !== demoWarmEpoch/.test(askSrc), 'a stale screen close does not drop the next visit’s D-ID session')
+assert(/epoch !== holdEpoch/.test(readFileSync(new URL('./demoStreamSession.ts', import.meta.url), 'utf8')), 'a stale screen close does not drop the next visit’s D-ID session')
 assert(/isSaraBusy\(reply\)/.test(askSrc), 'a 429 reply does not start playback')
 assert(/pass: currentSaraPass\(\)/.test(askClient), 'Ask Sara sends the pass, not an email')
 assert(!askClient.includes(DEMO_DEVICE_EMAIL), 'ask client does not send the demo placeholder')
 assert(/pass: currentSaraPass\(\)/.test(speakSrc), '/speak sends the pass')
 assert(/pass: currentSaraPass\(\)/.test(streamSrc), '/stream sends the pass for paid users')
+assert(/credsInflight/.test(streamSrc) && /STREAM_KEY_REUSE_MS = 30_000/.test(streamSrc), 'a fresh client key is shared and reused inside its TTL')
+assert(/discardSaraStreamCreds/.test(streamSrc), 'releasing a demo session drops the cached key so the next one POSTs /stream')
+{
+  const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
+  assert(/sara-blink/.test(css) && /sara-ready-cue/.test(css) && /sara-still-motion/.test(css), 'the connecting still breathes, blinks, and can show the ready cue')
+  assert(/prefers-reduced-motion/.test(css) && /sara-blink/.test(css), 'reduced motion turns the blink off')
+}
 assert(welcome.includes('PROSPECT_WELCOME') && !welcome.includes('Your course stays on Kajabi'), 'welcome uses prospect copy')
 assert(/prospect \? \(/.test(home) && home.includes('PROSPECT_HOME_NOTE'), 'home has a prospect branch')
+assert(/if \(!prospect\) return/.test(home) && /holdDemoStream\(/.test(home), 'demo home warms one D-ID session and paid home does not')
+assert(/motion=\{prospect\}/.test(home), 'the demo home still keeps idle motion')
 assert(/firstName\(session\.email\)/.test(home), 'paid home still greets from the saved profile')
 {
   const paidHomeSrc = home.split(') : (')[1] ?? ''
@@ -208,6 +232,8 @@ assert(/firstName\(session\.email\)/.test(home), 'paid home still greets from th
   assert(!paidHomeSrc.includes('PROSPECT_HOME_NOTE'), 'paid home branch does not include the prospect note')
 }
 assert(/redeemDemoPass/.test(redeem), 'demo redeem skips the email call')
+assert(/if \(!prospect\) return/.test(redeem) && /holdDemoStream\(/.test(redeem), 'only the demo landing warms a D-ID session')
+assert(/setSaraStreamPassOverride\(displayToken\)/.test(redeem), 'the landing can mint before Continue writes the session')
 assert(/redeemAsksForEmail\(prospect\) \? \(/.test(redeem), 'email field is the paid branch')
 {
   const emailBranch = redeem.split('redeemAsksForEmail(prospect) ? (')[1]?.split(') : (')[0] ?? ''

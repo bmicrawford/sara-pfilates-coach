@@ -22,12 +22,14 @@ import {
   shouldShowExerciseCue,
 } from '../lib/exercise'
 import { isDemoPass, reportForViewer } from '../lib/demoPass'
+import { demoStreamSnapshot, holdDemoStream } from '../lib/demoStreamSession'
+import type { DemoWarmPhase } from '../lib/demoStreamWarm'
 import { addDiaryLog, finishActiveDiary, readDiaries, readLogs, startNewDiary, syncDiaryWindows } from '../lib/mockServer'
 import { patientFirstName, readPatient } from '../lib/patient'
 import { PROSPECT_ASK_GREETING, PROSPECT_HOME_NOTE } from '../lib/prospectCopy'
 import { markCompanionOpened } from '../lib/notifications'
 import { saraDebugOn } from '../lib/saraDebug'
-import { gestureUnlockSaraStream } from '../lib/saraStream'
+import { gestureUnlockSaraStream, preloadSaraStream } from '../lib/saraStream'
 import {
   DRINK_OZ_DEFAULT,
   drinkEventVolume,
@@ -60,6 +62,9 @@ export function Home({ session }: Props) {
   const [logs, setLogs] = useState<LogEntry[]>(() => readLogs())
   const [diaries, setDiaries] = useState<Diary[]>(() => syncDiaryWindows())
   const prospect = isDemoPass(session.redeemToken)
+  const [warmPhase, setWarmPhase] = useState<DemoWarmPhase>(
+    () => (prospect ? demoStreamSnapshot()?.phase ?? 'idle' : 'idle'),
+  )
   const patient = prospect ? null : readPatient()
   const [smsNote, setSmsNote] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -69,6 +74,12 @@ export function Home({ session }: Props) {
     () => (active ? reportForViewer(bladderDiaryReport(active, logs, { patient }), prospect) : null),
     [active, logs, patient, prospect],
   )
+
+  useEffect(() => {
+    if (!prospect) return
+    preloadSaraStream()
+    return holdDemoStream((snap) => setWarmPhase(snap.phase))
+  }, [prospect])
 
   useEffect(() => {
     const evaled = markCompanionOpened()
@@ -149,7 +160,11 @@ export function Home({ session }: Props) {
       </header>
 
       <div className="mt-6">
-        <SaraPortrait mood={mood} />
+        <SaraPortrait
+          mood={mood}
+          preparing={prospect && warmPhase === 'connecting'}
+          motion={prospect}
+        />
         {prospect ? (
           <div className="mt-1 text-center">
             <p className="text-sm text-ink">{PROSPECT_ASK_GREETING}</p>

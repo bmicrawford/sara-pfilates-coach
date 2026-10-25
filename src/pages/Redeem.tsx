@@ -3,6 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { SaraPortrait } from '../components/SaraPortrait'
 import { Field, inputClass } from '../components/Chip'
 import { isDemoPass } from '../lib/demoPass'
+import { demoStreamSnapshot, holdDemoStream } from '../lib/demoStreamSession'
+import type { DemoWarmPhase } from '../lib/demoStreamWarm'
+import { preloadSaraStream, setSaraStreamPassOverride } from '../lib/saraStream'
 import { DEMO_TOKEN, normalizeToken, redeemDemoPass, redeemToken } from '../lib/mockServer'
 import { PROSPECT_REDEEM_NOTE, redeemAsksForEmail } from '../lib/prospectCopy'
 import { captureSaraDebug, withSaraDebug } from '../lib/saraDebug'
@@ -12,6 +15,9 @@ export function Redeem() {
   const navigate = useNavigate()
   const displayToken = useMemo(() => normalizeToken(token), [token])
   const prospect = isDemoPass(displayToken)
+  const [warmPhase, setWarmPhase] = useState<DemoWarmPhase>(
+    () => (prospect ? demoStreamSnapshot()?.phase ?? 'idle' : 'idle'),
+  )
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [bound, setBound] = useState(false)
@@ -20,6 +26,17 @@ export function Redeem() {
   useEffect(() => {
     captureSaraDebug(window.location.search)
   }, [])
+
+  useEffect(() => {
+    if (!prospect) return
+    setSaraStreamPassOverride(displayToken)
+    preloadSaraStream()
+    const release = holdDemoStream((snap) => setWarmPhase(snap.phase))
+    return () => {
+      setSaraStreamPassOverride('')
+      release()
+    }
+  }, [prospect, displayToken])
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -70,7 +87,11 @@ export function Redeem() {
         Redeem your companion
       </p>
       <div className="mt-8">
-        <SaraPortrait mood={bound ? 'neutral' : 'default'} />
+        <SaraPortrait
+          mood={bound ? 'neutral' : 'default'}
+          preparing={prospect && warmPhase === 'connecting'}
+          motion={prospect}
+        />
       </div>
       <p className="mt-3 text-center text-ink-mute">
         {prospect
