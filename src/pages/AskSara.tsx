@@ -25,9 +25,11 @@ import {
   preloadSaraStream,
   releaseSaraStream,
   retireDemoStream,
+  saraStreamConnectBlocked,
   saraStreamDebugFacts,
   saraStreamHasFrames,
   saraStreamPhase,
+  setSaraStreamTapReconnect,
   SARA_STREAM_CAPPED_NOTE,
   setSaraStreamCallbacks,
   setSaraStreamKeepMuted,
@@ -202,11 +204,19 @@ export function AskSara() {
       },
     })
     preloadSaraStream()
+    setSaraStreamTapReconnect(() => {
+      if (demoWarmRef.current) {
+        demoWarmRef.current.reconnectIfNeeded()
+        return
+      }
+      if (!saraStreamConnectBlocked()) void connectSaraStream()
+    })
     if (voiceOnly) {
       if (!demoWarmRef.current) {
         const epoch = ++demoWarmEpoch
         demoWarmRef.current = createDemoWarmController({
           connect: () => connectSaraStream(),
+          retryFailure: () => !saraStreamConnectBlocked(),
           close: () => {
             if (epoch !== demoWarmEpoch) return
             retireDemoStream()
@@ -226,7 +236,7 @@ export function AskSara() {
       iosTimer = window.setTimeout(() => {
         if (saraStreamPhase() === 'live') return
         iosGaveUpRef.current = true
-        noteStreamFallback('ios-15s')
+        noteStreamFallback('ios-25s')
         demoEvaluateRef.current?.()
         setDebugFacts(saraStreamDebugFacts())
       }, IOS_WEBRTC_BUDGET_MS)
@@ -239,6 +249,7 @@ export function AskSara() {
       demoPoll.current = 0
       demoEvaluateRef.current = null
       if (voiceOnly) demoWarmRef.current?.unmount()
+      setSaraStreamTapReconnect(null)
       setSaraStreamCallbacks({})
       releaseSaraStream()
       stopSaraSpeech()
@@ -327,7 +338,11 @@ export function AskSara() {
     araPlayingRef.current = false
     demoStreamFailedRef.current = false
     setConcealStream(false)
-    const streamWarm = !demoForceAraRef.current && !iosGaveUpRef.current && saraStreamPhase() === 'live'
+    // Re-read at reply time. A warm connect that finished during Grok, or
+    // after the iOS budget, is used. A stale ios-gave-up flag must not win.
+    const phaseAtReply = saraStreamPhase()
+    if (phaseAtReply === 'live') iosGaveUpRef.current = false
+    const streamWarm = !demoForceAraRef.current && phaseAtReply === 'live'
     demoForceAraRef.current = false
     demoUnmuteFailedRef.current = false
     demoUnmutedRef.current = false
@@ -366,7 +381,7 @@ export function AskSara() {
       setConcealStream(true)
       const prior = saraStreamDebugFacts().fallback
       const specific = prior.startsWith('play-') || prior === 'ice-failed' || prior === 'unmute' || prior === 'no-track' || prior === 'no-session'
-      if (iosGaveUpRef.current) noteStreamFallback('ios-15s')
+      if (iosGaveUpRef.current) noteStreamFallback('ios-25s')
       else if (!specific && !streamWarm) noteStreamFallback('cold')
       else if (!specific) noteStreamFallback('budget')
       settleSaraStreamVoice('ara')
@@ -463,6 +478,7 @@ export function AskSara() {
     const text = draft.trim()
     if (!text || busy) return
     haltPlayback()
+    if (saraStreamPhase() === 'live') iosGaveUpRef.current = false
     noteDemoSend()
     unlockSaraSpeech()
     unlockSaraStream()
@@ -633,7 +649,7 @@ export function AskSara() {
                       unlockSaraStream()
                       if (voiceOnly && saraStreamPhase() !== 'live') {
                         const ice = saraStreamDebugFacts().ice
-                        noteStreamFallback(iosGaveUpRef.current ? 'ios-15s' : ice === 'failed' ? 'ice-failed' : 'no-session')
+                        noteStreamFallback(iosGaveUpRef.current ? 'ios-25s' : ice === 'failed' ? 'ice-failed' : 'no-session')
                       } else if (voiceOnly && !saraStreamDebugFacts().track) {
                         const ice = saraStreamDebugFacts().ice
                         noteStreamFallback(ice === 'failed' ? 'ice-failed' : 'no-track')

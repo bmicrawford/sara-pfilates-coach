@@ -65,6 +65,9 @@ assert(/onStreamCreated/.test(streamSrc), 'reads session_id from stream/created'
 assert(/session_id — inserting from stream\/created/.test(streamSrc), 'patches SDP/ICE finalize when session_id is missing')
 assert(/bindLateTracks/.test(streamSrc), 're-assigns srcObject when a late video track arrives')
 assert(/addtrack/.test(streamSrc), 'listens for video tracks added after warmup-off connect')
+assert(!/addEventListener\('unmute'/.test(streamSrc), 'track unmute does not clear and reattach srcObject')
+assert(/classifyPlayRejection/.test(streamSrc), 'AbortError from video.play() is not a Tap to see Sara fallback')
+assert(/playPending/.test(streamSrc), 'at most one video.play() is pending at a time')
 assert(/framesArePlayable/.test(streamSrc), 'does not skip ara unless srcObject is playing frames')
 assert(/onVoiceFallback/.test(streamSrc), 'heard path that dies later can start ara')
 assert(/speak finished with no video srcObject/.test(streamSrc), 'missing srcObject after speak falls back to ara')
@@ -187,6 +190,26 @@ assert(
   'srcObject without decoded frames is not live',
 )
 assert(
+  isSaraVideoLive({
+    srcObject: {},
+    videoWidth: 0,
+    readyState: 2,
+    paused: false,
+    currentTime: 0.2,
+  } as HTMLVideoElement),
+  'iOS can paint WebRTC frames while videoWidth is still 0',
+)
+assert(
+  !isSaraVideoLive({
+    srcObject: {},
+    videoWidth: 0,
+    readyState: 2,
+    paused: true,
+    currentTime: 0.2,
+  } as HTMLVideoElement),
+  'a paused element with width 0 is not live',
+)
+assert(
   isSaraVideoLive({ srcObject: {}, videoWidth: 512 } as HTMLVideoElement),
   'decoded frames on a srcObject count as live',
 )
@@ -282,6 +305,11 @@ assert(/object-cover/.test(portraitSrc), 'still and stream video cover the portr
 assert(!/rounded-full/.test(portraitSrc), 'TalkingPortrait is not a circular crop on Ask Sara')
 assert(/opacity-100/.test(portraitSrc), 'idle still is opacity-100 unless the stream is actually live')
 assert(/isSaraVideoLive/.test(portraitSrc), 'portrait reports live only when the video has srcObject + frames')
+assert(
+  /addEventListener\('resize', reportLive\)/.test(portraitSrc) &&
+    /addEventListener\('timeupdate', reportLive\)/.test(portraitSrc),
+  'portrait listens for resize and timeupdate because iOS width can be 0 at playing',
+)
 assert(/setVideoNode/.test(portraitSrc), 'binds the stream video during commit so Send/Play can attach')
 assert(/replaySaraStreamVideo/.test(portraitSrc), 'portrait play retries do not force-mute D-ID audio')
 assert(!/video\.muted = true/.test(portraitSrc), 'portrait effect does not pin muted=true after bind')

@@ -47,7 +47,7 @@ function fakeClock() {
   }
 }
 
-function harness(connectResult: boolean | 'later' = true) {
+function harness(connectResult: boolean | 'later' = true, retryFailure?: () => boolean) {
   const clock = fakeClock()
   const connects: Array<(ok: boolean) => void> = []
   let connectCalls = 0
@@ -72,6 +72,7 @@ function harness(connectResult: boolean | 'later' = true) {
     keep: () => {
       keepCalls += 1
     },
+    retryFailure,
   })
   return {
     clock,
@@ -200,6 +201,35 @@ async function flush() {
   ctl.send()
   clock.advance(DEMO_STREAM_IDLE_MS)
   assert(counts().closeCalls === 0 && ctl.snapshot().phase === 'live', 'Send cancels the idle close')
+}
+
+{
+  const { ctl, counts } = harness(false, () => true)
+  ctl.mount()
+  await flush()
+  assert(ctl.snapshot().phase === 'failed' && counts().connectCalls === 1, 'a retryable warm failure still releases the first session')
+  const turn = ctl.send()
+  await flush()
+  assert(
+    turn.araThisTurn === false && counts().connectCalls === 2 && ctl.snapshot().held === 0,
+    'the next Send reconnects a warm that failed without a cap',
+  )
+  ctl.reconnectIfNeeded()
+  await flush()
+  assert(counts().connectCalls === 3 && ctl.snapshot().phase === 'failed', 'Tap to see Sara can reconnect that same retryable failure')
+}
+
+{
+  const { ctl, counts } = harness(false, () => false)
+  ctl.mount()
+  await flush()
+  ctl.send()
+  ctl.reconnectIfNeeded()
+  await flush()
+  assert(
+    counts().connectCalls === 1 && ctl.snapshot().phase === 'failed' && ctl.snapshot().held === 0,
+    'a capped or denied warm does not reconnect on Send or Tap',
+  )
 }
 
 if (process.exitCode) {

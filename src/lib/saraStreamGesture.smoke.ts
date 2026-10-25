@@ -2,6 +2,7 @@ import { planDemoVoice } from './demoVoicePlan.ts'
 import { captureSaraDebug, saraDebugOn, SARA_DEBUG_KEY, withSaraDebug } from './saraDebug.ts'
 import {
   beginMutedGesturePlay,
+  classifyPlayRejection,
   iosWebrtcMissed,
   IOS_WEBRTC_BUDGET_MS,
   playErrorName,
@@ -89,11 +90,30 @@ function fakeVideo(play: GestureVideo['play'], paused = false): GestureVideo & {
 }
 
 assert(SARA_SEE_LABEL === 'Tap to see Sara', 'the face overlay says Tap to see Sara')
-assert(IOS_WEBRTC_BUDGET_MS === 15_000, 'iOS WebRTC give-up is 15 seconds')
-assert(!iosWebrtcMissed({ elapsedMs: 14_999, phase: 'connecting' }), 'just inside 15s the warm session may still connect')
-assert(iosWebrtcMissed({ elapsedMs: 15_000, phase: 'connecting' }), '15s without a live session is a clean iOS fallback')
-assert(iosWebrtcMissed({ elapsedMs: 15_000, phase: 'failed' }), 'a failed warm at 15s is the same fallback')
-assert(!iosWebrtcMissed({ elapsedMs: 20_000, phase: 'live' }), 'a live session is not marked missed')
+assert(IOS_WEBRTC_BUDGET_MS === 25_000, 'iOS WebRTC give-up is 25 seconds')
+assert(!iosWebrtcMissed({ elapsedMs: 20_000, phase: 'connecting' }), 'a 20s warm connect is still inside the 25s iOS budget')
+assert(!iosWebrtcMissed({ elapsedMs: 24_999, phase: 'connecting' }), 'just inside 25s the warm session may still connect')
+assert(iosWebrtcMissed({ elapsedMs: 25_000, phase: 'connecting' }), '25s without a live session is a clean iOS fallback')
+assert(iosWebrtcMissed({ elapsedMs: 25_000, phase: 'failed' }), 'a failed warm at 25s is the same fallback')
+assert(!iosWebrtcMissed({ elapsedMs: 30_000, phase: 'live' }), 'a live session is not marked missed')
+
+{
+  const abort = classifyPlayRejection(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+  assert(
+    abort.benignAbort === true && abort.showSeeOverlay === false && abort.fallback == null,
+    'AbortError from video.play() does not show Tap to see Sara or set play-AbortError',
+  )
+  const denied = classifyPlayRejection(Object.assign(new Error('denied'), { name: 'NotAllowedError' }))
+  assert(
+    denied.benignAbort === false && denied.showSeeOverlay === true && denied.fallback === 'play-NotAllowedError',
+    'only NotAllowedError shows Tap to see Sara',
+  )
+  const other = classifyPlayRejection(Object.assign(new Error('nope'), { name: 'NotSupportedError' }))
+  assert(
+    other.showSeeOverlay === false && other.fallback === 'play-NotSupportedError',
+    'other play() errors stay off the overlay',
+  )
+}
 
 const memory = new Map<string, string>()
 ;(globalThis as { sessionStorage?: Storage }).sessionStorage = {
