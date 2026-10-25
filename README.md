@@ -21,7 +21,7 @@ npm run dev
 
 `npm run dev` starts:
 
-- Ask Sara API on **http://127.0.0.1:8787** (`POST /ask`, `POST /speak`, `POST /talk`, `GET /talk?id=`, `POST /redeem`, `POST /redeem/mint`) — reads `XAI_API_KEY` from the environment. Mint also needs `REDEEM_MINT_SECRET` (server only).
+- Ask Sara API on **http://127.0.0.1:8787** (`POST /ask`, `POST /speak`, `POST /talk`, `GET /talk?id=`, `POST /redeem`, `POST /redeem/mint`, `POST /kajabi/purchase`, `POST /kajabi/open`, `POST /kajabi/grant`) — reads `XAI_API_KEY` from the environment. Mint and grant need `REDEEM_MINT_SECRET` (server only). Purchase needs `KAJABI_WEBHOOK_KEY` and `KAJABI_SARA_OFFER_IDS`.
 - Vite app on **port 43147**, proxying those paths to that API
 
 Or run them separately:
@@ -128,7 +128,7 @@ npx surge ./dist https://sara-pfilates.surge.sh
 
 ## Kajabi purchase → Sara link
 
-The course stays on Kajabi. A purchase mints a unique pass on this same Worker. The buyer opens `https://sara-pfilates.surge.sh/r/{TOKEN}` on their phone and enters the same email. There is no Kajabi SSO and no lesson content in this app.
+The course stays on Kajabi. A Kajabi **Payment Succeeded** or **Cart Purchase** webhook records an entitlement for the buyer email. The welcome email button opens `https://sara-pfilates.surge.sh/open?e={{ email }}`. When that entitlement is already stored, Sara mints or reuses one redeem pass and binds this phone the same way `/r/{TOKEN}` does. There is no Kajabi SSO, no lesson content in this app, and the Worker never sends email.
 
 `DEMO-SARA-001` is the public prospect link and the local QA pass (welcome screen and `/r/DEMO-SARA-001`). It is not stored in KV as a redeem record and does not need the mint secret. Prospects are not asked for an email, name, or date of birth. Ask Sara on that pass uses prospect copy and can open D-ID lip-sync, with ara as the fallback. See `server/demoGate.mjs`: 20 `/ask` and 60 `/speak` per IP per hour, 60 `/ask` and 150 `/speak` per IP per UTC day, and 3000 `/ask` plus 3000 `/speak` per UTC day across all demo traffic. The speak caps are higher because one reply can take up to 3 `/speak` calls. The global daily speak cap stays 3000. D-ID on that pass is separate: 3 sessions per IP per hour, 6 per IP per day, 150 per day globally, and 2 concurrent WebRTC sessions. Over an ask or speak limit the Worker returns HTTP 429 with `Retry-After` and `Sara is busy, please try again in a bit.` Over a D-ID cap it returns HTTP 429 `did_unavailable` with an empty message so the phone falls back to ara and shows no error. Unknown passes are rejected. No new secret and no new KV binding — counters and the concurrency lease are short-TTL `rl:demo:` keys in `REDEEM_TOKENS`.
 
@@ -140,7 +140,7 @@ The course stays on Kajabi. A purchase mints a unique pass on this same Worker. 
 | Store | Cloudflare KV binding `REDEEM_TOKENS`. |
 | Link origin | `SARA_PUBLIC_ORIGIN` (default `https://sara-pfilates.surge.sh`). |
 
-Send `externalId` (the Kajabi transaction id) so a Zapier retry returns the same link.
+Send `externalId` (a Kajabi transaction id, or the open flow’s buyer id) so a retry returns the same link.
 
 ### Human setup (after merge)
 
@@ -161,7 +161,7 @@ curl -sS -X POST "https://sara-pfilates-ask.<account>.workers.dev/redeem/mint" \
   -d '{"email":"buyer@example.com","externalId":"kajabi-test-1"}'
 ```
 
-The JSON `url` is the link to email. Rebuild Surge with that Worker as `VITE_SARA_API_URL` so the phone can call `POST /redeem`. Local `npm run dev` proxies `/redeem` to the Node API.
+The JSON `url` is a direct `/r/{TOKEN}` link for a manual or class pass. A Kajabi purchase uses the welcome-email button below, not this curl. Rebuild Surge with that Worker as `VITE_SARA_API_URL` so the phone can call `POST /redeem` and `POST /kajabi/open`. Local `npm run dev` proxies those paths to the Node API.
 
 ### Live class QR (one link, many students)
 
@@ -178,35 +178,51 @@ The response `url` looks like `https://sara-pfilates.surge.sh/r/SARA-XXXX-XXXX-X
 
 `node scripts/mint-class-token.mjs class-cert-sac-2026-10-08` does the same call when `REDEEM_MINT_SECRET` and `SARA_WORKER_URL` are set. It prints the token and url only.
 
-### Zapier (Kajabi → New Purchase)
+### Kajabi webhook (no Zapier)
 
-Kajabi’s thank-you page is one page for every buyer, so the unique link has to travel in email (or a custom field the email template reads). Zapier can call mint and then send the `url` from the response.
+Kajabi’s thank-you page is one page for every buyer, so Sara’s link travels in the welcome email. Zapier is not part of this path. The Worker does not send that email.
 
-1. Trigger: **Kajabi → New Purchase**. Filter to the PfilAtes offer.
-2. Action: **Webhooks by Zapier → Custom Request / POST**.
-   - URL: `https://sara-pfilates-ask.<account>.workers.dev/redeem/mint`
-   - Payload type: JSON
-   - Header `Authorization`: `Bearer <REDEEM_MINT_SECRET>`
-   - Header `Content-Type`: `application/json`
-   - Body fields: `email` = the buyer email, `externalId` = the transaction id
-   - Keep the secret in the header.
-3. Action: email the buyer. Use the `url` field from the mint step.
+Dr C’s admin (Pro Annual) configures outbound webhooks under **Settings > Integrations & Webhooks > Webhooks**. The form has an Event and an Endpoint URL. The events offered are **Payment Succeeded** and **Cart Purchase**. Granted or comped access does not fire either event. Kajabi’s webhook articles do not document a signature header.
 
-Optional Kajabi side: add a person custom field `Sara link`, and have the Zap update that field with `url`, then a Kajabi email template prints it. The thank-you page still renders before the Zap finishes, so the email is the link the buyer opens.
+Create **two** webhooks. Both use the same endpoint:
 
-### Paste into Kajabi
+`https://sara-pfilates-ask.pfilates.workers.dev/kajabi/purchase?key=<KAJABI_WEBHOOK_KEY>`
 
-**Email button label:** Open Sara
+| Event | When it fires |
+|---|---|
+| Payment Succeeded | A successful charge, including a one-time offer checkout and a cart order |
+| Cart Purchase | A successful Kajabi Cart order |
 
-**Email body** (`{{url}}` is the mint response in Zapier):
+A classic offer checkout fires Payment Succeeded. A cart checkout can fire both. The same order is one entitlement.
+
+`KAJABI_SARA_OFFER_IDS` is the deploy-time allowlist (comma-separated). Known $149 offers: `2147989270` (women), `2149556914` (men). Leave the live list unset in git; set it when deploying.
+
+```bash
+cd worker
+openssl rand -hex 32   # this value is KAJABI_WEBHOOK_KEY — do not commit it
+printf '%s' "$KAJABI_WEBHOOK_KEY" | npx wrangler secret put KAJABI_WEBHOOK_KEY
+printf '%s' "$KAJABI_SARA_OFFER_IDS" | npx wrangler secret put KAJABI_SARA_OFFER_IDS
+npx wrangler deploy
+```
+
+`REDEEM_MINT_SECRET` and the `REDEEM_TOKENS` KV binding stay as they are. Opening Sara mints the redeem pass with that secret. Rebuild Surge after merge so `/open` is in the phone bundle.
+
+### Paste into the Kajabi welcome email
+
+**Button label:** Open Sara
+
+**Button URL** (Kajabi merge tag `{{ email }}`; a space in the address is treated as `+`):
+
+```
+https://sara-pfilates.surge.sh/open?e={{ email }}
+```
+
+**Email body:**
 
 ```
 Your course stays on Kajabi. Sara is the phone companion — a quiet place to log the day and ask a question between lessons.
 
-Open your private link on your phone:
-{{url}}
-
-Use the same email as this purchase. No extra password. You can add Sara to your home screen once it opens.
+Open Sara on your phone with the same email as this purchase. No extra password. You can add Sara to your home screen once it opens.
 ```
 
 **Thank-you page** (this page has no per-buyer token):
@@ -214,14 +230,26 @@ Use the same email as this purchase. No extra password. You can add Sara to your
 ```
 Your course stays on Kajabi. Sara is the phone companion for logging the day and questions between lessons.
 
-Check your email for a private Sara link. It looks like sara-pfilates.surge.sh/r/… Open that link on your phone and enter the same email you used here. No extra password.
+Check your email for Open Sara. Open that button on your phone. No extra password.
 ```
 
-The Kajabi button uses the minted `url`. `DEMO-SARA-001` stays on the QA welcome screen.
+`DEMO-SARA-001` stays on the QA welcome screen.
+
+### Backfill (comped access and earlier buyers)
+
+Payment Succeeded and Cart Purchase do not fire when an offer is granted without a sale. Grant an entitlement with the mint secret, then send the same Open Sara button. This command does not send email and does not deploy.
+
+```bash
+REDEEM_MINT_SECRET=... SARA_WORKER_URL=https://sara-pfilates-ask.pfilates.workers.dev \
+  node worker/scripts/grant-entitlement.mjs buyer@example.com 2147989270
+```
+
+The offer id is optional. A repeat for the same email keeps the first entitlement. `POST /kajabi/grant` with `Authorization: Bearer $REDEEM_MINT_SECRET` does the same thing.
 
 ## What this prototype does
 
 - Welcome gate when there is no session, with a link to the demo redeem pass
+- Open Sara at `/open?e=` from the Kajabi welcome email. An entitlement mints or reuses a pass and binds this phone, including the Home Screen coach. Otherwise the page says Sara is getting ready, with Try again and the purchase email.
 - Redeem at `/r/:token` — email + Continue for a purchased or class pass. The public demo pass `DEMO-SARA-001` continues without an email and is not asked for a name or date of birth. A purchased pass is checked with the Worker (`POST /redeem`) before this phone binds.
 - Device bind via `localStorage` plus a mock server token (one phone)
 - Stub move-to-new-phone at `/move`

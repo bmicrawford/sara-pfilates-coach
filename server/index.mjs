@@ -11,6 +11,8 @@ import {
 import { mintSaraStreamKey, streamStartResponse } from './streamSara.mjs'
 import { dispatchRedeem, headerGetter } from './redeem.mjs'
 import { createFileRedeemStore } from './redeemFileStore.mjs'
+import { dispatchKajabi, rawQueryParam } from './kajabiPurchase.mjs'
+import { createFileEntitlementStore } from './kajabiFileStore.mjs'
 import {
   authorizePaidRequest,
   clientIpFromHeaders,
@@ -22,7 +24,9 @@ import {
 } from './demoGate.mjs'
 
 const redeemStore = createFileRedeemStore(new URL('./.redeem-store.json', import.meta.url))
+const entitlementStore = createFileEntitlementStore(new URL('./.kajabi-entitlements.json', import.meta.url))
 const demoCounters = memoryCounterStore()
+const kajabiCounters = memoryCounterStore()
 
 const PORT = Number(process.env.SARA_API_PORT || 8787)
 
@@ -114,6 +118,50 @@ const server = createServer(async (req, res) => {
       res.end(out.body)
     } catch {
       const out = jsonResponse(503, { ok: false, error: 'redeem_failed' }, origin)
+      res.writeHead(out.status, { ...out.headers, 'Cache-Control': 'no-store' })
+      res.end(out.body)
+    }
+    return
+  }
+
+  if (url.pathname.startsWith('/kajabi/')) {
+    let rawBody = ''
+    try {
+      rawBody = await readBody(req, 100_000)
+    } catch {
+      const out = jsonResponse(400, { ok: false, error: 'invalid_json' }, origin)
+      res.writeHead(out.status, { ...out.headers, 'Cache-Control': 'no-store' })
+      res.end(out.body)
+      return
+    }
+    try {
+      const result = await dispatchKajabi(url.pathname, req.method, {
+        store: entitlementStore,
+        entitlementStore,
+        redeemStore,
+        counterStore: kajabiCounters,
+        secret: String(process.env.REDEEM_MINT_SECRET || '').trim(),
+        expectedKey: String(process.env.KAJABI_WEBHOOK_KEY || '').trim(),
+        presentedKey: rawQueryParam(url.search, 'key'),
+        offerIds: process.env.KAJABI_SARA_OFFER_IDS,
+        getHeader: headerGetter(req.headers),
+        rawBody,
+        publicOrigin: process.env.SARA_PUBLIC_ORIGIN,
+        ip: clientIpFromHeaders(req.headers, req.socket?.remoteAddress || 'unknown'),
+        now: new Date().toISOString(),
+        nowMs: Date.now(),
+      })
+      if (!result) {
+        res.writeHead(404, { 'Content-Type': 'application/json', ...corsHeaders(origin) })
+        res.end(JSON.stringify({ reply: 'Not found' }))
+        return
+      }
+      sendJson(res, result, origin, {
+        'Cache-Control': 'no-store',
+        ...(result.retryAfter ? { 'Retry-After': String(result.retryAfter) } : {}),
+      })
+    } catch {
+      const out = jsonResponse(503, { ok: false, error: 'kajabi_failed' }, origin)
       res.writeHead(out.status, { ...out.headers, 'Cache-Control': 'no-store' })
       res.end(out.body)
     }

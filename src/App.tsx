@@ -12,6 +12,7 @@ import { ExerciseLog } from './pages/ExerciseLog'
 import { Home } from './pages/Home'
 import { Move } from './pages/Move'
 import { PatientOnboarding } from './pages/PatientOnboarding'
+import { OpenSara } from './pages/OpenSara'
 import { Redeem } from './pages/Redeem'
 import { Welcome } from './pages/Welcome'
 
@@ -47,6 +48,7 @@ export default function App() {
             path="/r/:token"
             element={session ? <Navigate to="/" replace /> : <Redeem />}
           />
+          <Route path="/open" element={session ? <Navigate to="/" replace /> : <OpenSara />} />
           <Route path="/move" element={<Move />} />
           <Route
             path="/ask"
