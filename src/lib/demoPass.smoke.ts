@@ -184,7 +184,10 @@ const diary = readFileSync(new URL('../pages/DiaryReport.tsx', import.meta.url),
 const exercise = readFileSync(new URL('../pages/ExerciseLog.tsx', import.meta.url), 'utf8')
 
 assert(/voiceOnly/.test(askSrc) && /isDemoVoiceOnly/.test(askSrc), 'Ask Sara derives prospect copy from the demo pass')
-assert(/if \(voiceOnly\)/.test(askSrc) && /speakDemoReply\(text\)/.test(askSrc), 'demo replies try D-ID then ara')
+assert(
+  /if \(voiceOnly\)/.test(askSrc) && /speakDemoReply\(text, followUp\)/.test(askSrc),
+  'demo replies try D-ID then ara',
+)
 assert(/playAra\(text\)/.test(askSrc), 'paid replies still fall back to ara')
 assert(/connectSaraStream\(\)/.test(askSrc), 'Send starts D-ID for the demo pass too')
 assert(/DEMO_DID_FRAME_BUDGET_MS/.test(askSrc) && /planDemoVoice/.test(askSrc), 'demo lip-sync uses the 3s planner')

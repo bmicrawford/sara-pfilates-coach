@@ -28,6 +28,7 @@ export async function askSaraRemote(
       body: JSON.stringify({
         message,
         history: history.slice(-12).map((m) => ({ from: m.from, text: m.text })),
+        firstTurn: !history.some((m) => m.text.trim()),
         pass: currentSaraPass(),
       }),
     })

@@ -1,7 +1,7 @@
 import { currentSaraPass } from './demoPass.ts'
 import { rewritePfilatesForSpeech } from './pfilatesSpeech.mjs'
 import { SARA_BUSY_MESSAGE, SARA_UNKNOWN_PASS_MESSAGE } from './saraGate.ts'
-import { splitSpeakChunks } from './speakChunks.mjs'
+import { splitSpeakChunksForTurn } from './speakChunks.mjs'
 
 const MUTE_KEY = 'sara.voiceMuted'
 
@@ -62,6 +62,8 @@ type SpeakOpts = {
   onBlocked?: () => void
   /** First chunk's blob URL is stored. May still be held and not playing. */
   onFirstChunk?: () => void
+  /** Follow-up turn: drop a leading greeting before the sentence split. */
+  stripGreeting?: boolean
 }
 
 type ChunkSlot = {
@@ -522,7 +524,7 @@ function startSpeak(text: string, opts: SpeakOpts, holding: boolean): void {
     opts.onEnd?.()
     return
   }
-  const chunks = splitSpeakChunks(text)
+  const chunks = splitSpeakChunksForTurn(text, opts.stripGreeting !== true)
   if (!chunks.length) {
     opts.onEnd?.()
     return

@@ -136,6 +136,7 @@ export default {
         const result = await askSaraGrok({
           message: body.message ?? body.text,
           history: body.history,
+          firstTurn: body.firstTurn,
           apiKey: env.XAI_API_KEY,
           model: env.XAI_MODEL || GROK_MODEL,
           audience: decision.pass.voiceOnly ? 'demo' : undefined,
