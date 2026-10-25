@@ -1,4 +1,4 @@
-import { SARA_SPEAK_MAX_CHUNKS, splitSentences, splitSpeakChunks } from './speakChunks.mjs'
+import { SARA_SPEAK_MAX_CHUNKS, splitSentences, splitSpeakChunks, splitSpeakChunksForTurn } from './speakChunks.mjs'
 import { readFileSync } from 'node:fs'
 
 function assert(cond, msg) {
@@ -34,6 +34,21 @@ assert(decimal.length === 2 && decimal[0].includes('1.5'), 'decimals are not sen
 
 assert(splitSpeakChunks('').length === 0, 'empty reply does not call /speak')
 assert(splitSpeakChunks('No punctuation here').length === 1, 'a fragment is one chunk')
+
+const followUpVoice = splitSpeakChunksForTurn(
+  'Hey there. Sip water through the day. A glass with meals is plenty.',
+  false,
+)
+assert(followUpVoice[0] === 'Sip water through the day.', 'a follow-up voice chunk does not start with Hey there')
+assert(!/^(hey|hi|hello)\b/i.test(followUpVoice[0]), 'second-turn spoken answer does not start with a greeting')
+assert(
+  splitSpeakChunksForTurn('Hi there, sip water through the day.', false)[0] === 'Sip water through the day.',
+  'Hi there is stripped before the first voice chunk',
+)
+assert(
+  splitSpeakChunksForTurn("Hi, it's Sara.", true)[0] === "Hi, it's Sara.",
+  'the opening turn and test voice keep their line',
+)
 
 const speakSrc = readFileSync(new URL('./speakSara.ts', import.meta.url), 'utf8')
 assert(/splitSpeakChunks/.test(speakSrc), 'speakSara fetches one chunk at a time from the splitter')

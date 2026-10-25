@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { askSaraGrok, buildMessages, corsHeaders, SARA_NO_RED_FLAG, SARA_OFFLINE, SARA_SYSTEM, SARA_TRIGGER_CHECKLIST, GROK_MODEL } from './askGrok.mjs'
+import { askSaraGrok, buildMessages, corsHeaders, SARA_NO_RED_FLAG, SARA_NO_REPEAT_GREETING, SARA_OFFLINE, SARA_SYSTEM, SARA_TRIGGER_CHECKLIST, GROK_MODEL } from './askGrok.mjs'
+import { stripLeadingGreeting } from '../src/lib/saraGreeting.mjs'
+import { splitSpeakChunksForTurn } from '../src/lib/speakChunks.mjs'
 import {
   APPROVED_CLAIMS,
   ESSENTIAL_PFILATES_MOVEMENTS,
@@ -298,8 +300,54 @@ const built = buildMessages('how much water?', [
   { from: 'sara', text: 'hey' },
 ])
 assert(
-  built[0].role === 'system' && built[0].content === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}`,
-  'system message first, with the no-trigger note on an ordinary question',
+  built[0].role === 'system' &&
+    built[0].content === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}\n\n${SARA_NO_REPEAT_GREETING}`,
+  'system message first, with the no-trigger note on an ordinary question, and no second greeting',
+)
+assert(/Greet at most once per conversation/.test(SARA_SYSTEM), 'prompt allows a greeting at most once')
+assert(
+  /only on the first turn, and only if they greeted you or this is the opening/.test(SARA_SYSTEM),
+  'prompt greets only on the opening turn',
+)
+assert(/Do not open with "Hey there"/.test(SARA_SYSTEM), 'prompt names the repeated greeting')
+assert(!buildMessages('how much water?')[0].content.includes(SARA_NO_REPEAT_GREETING), 'opening turn does not get the no-repeat note')
+assert(built[0].content.includes(SARA_NO_RED_FLAG), 'second turn still gets the no-trigger note')
+assert(
+  built[0].content.indexOf(SARA_NO_RED_FLAG) < built[0].content.indexOf(SARA_NO_REPEAT_GREETING),
+  'no-repeat greeting note stays after the no-trigger note',
+)
+
+const greetings = [
+  ['Hey there, sip water through the day.', 'Sip water through the day.'],
+  ['Hi there! A sneeze is a push.', 'A sneeze is a push.'],
+  ['Hello there. Log the leak.', 'Log the leak.'],
+  ['Hey, keep the last drink modest.', 'Keep the last drink modest.'],
+  ['Hi, a glass with meals is plenty.', 'A glass with meals is plenty.'],
+  ['Hello! Rest today.', 'Rest today.'],
+  ['Hey! Quality over stacking.', 'Quality over stacking.'],
+  ['Hey there. Sip water through the day.', 'Sip water through the day.'],
+  ['Hey, i would log the leak.', 'I would log the leak.'],
+  ['Hello there — log the time.', 'Log the time.'],
+  [
+    'Hey there, If a movement at any time causes pain, stop that movement. Then rest.',
+    'If a movement at any time causes pain, stop that movement. Then rest.',
+  ],
+]
+for (const [raw, expected] of greetings) {
+  assert(stripLeadingGreeting(raw) === expected, `strips a leading greeting: ${raw}`)
+}
+assert(stripLeadingGreeting('High effort is not the goal.') === 'High effort is not the goal.', 'does not strip High')
+assert(stripLeadingGreeting('Hey there!') === 'Hey there!', 'a greeting-only line is kept')
+assert(
+  stripLeadingGreeting('Sip water. Hey there, that is enough.') === 'Sip water. Hey there, that is enough.',
+  'does not strip a greeting later in the reply',
+)
+const voiced = splitSpeakChunksForTurn('Hey there. Sip water through the day. A glass with meals is plenty.', false)
+assert(voiced[0] === 'Sip water through the day.', 'follow-up voice chunk does not start with a greeting')
+assert(!/^(hey|hi|hello)\b/i.test(voiced[0]), 'second-turn voice chunk is the answer')
+assert(
+  splitSpeakChunksForTurn("Hi, it's Sara.", true)[0] === "Hi, it's Sara.",
+  'opening turn chunker leaves a greeting in place',
 )
 assert(built.at(-1).content === 'how much water?', 'latest user message last')
 assert(built.some((m) => m.role === 'assistant'), 'history maps sara → assistant')
@@ -353,6 +401,62 @@ const down = await askSaraGrok({
   },
 })
 assert(down.reply === SARA_OFFLINE, 'network failure → honest offline line, not a keyword stub')
+
+const secondTurn = await askSaraGrok({
+  message: 'how much water?',
+  history: [
+    { from: 'you', text: 'hi' },
+    { from: 'sara', text: 'Hey there. Ask me a real one.' },
+  ],
+  apiKey: 'test-not-a-real-key',
+  fetchFn: async (_url, init) => {
+    const body = JSON.parse(init.body)
+    assert(body.messages[0].content.includes(SARA_NO_REPEAT_GREETING), 'second turn tells Sara not to greet')
+    assert(body.messages.some((m) => m.role === 'assistant'), 'second turn still sends history')
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Hey there, sip water through the day. A glass with meals is plenty.' } }],
+      }),
+    }
+  },
+})
+assert(
+  secondTurn.reply === 'Sip water through the day. A glass with meals is plenty.',
+  'second-turn answer does not start with a greeting',
+)
+assert(
+  !/^(hey|hi|hello)\b/i.test(splitSpeakChunksForTurn(secondTurn.reply, false)[0] ?? ''),
+  'second-turn spoken chunks do not start with a greeting',
+)
+
+const openingTurn = await askSaraGrok({
+  message: 'hi',
+  history: [],
+  firstTurn: true,
+  apiKey: 'test-not-a-real-key',
+  fetchFn: async () => ({
+    ok: true,
+    json: async () => ({ choices: [{ message: { content: 'Hey there. Ask me a real one about water.' } }] }),
+  }),
+})
+assert(openingTurn.reply.startsWith('Hey there'), 'opening turn may still greet')
+
+const flaggedFollowUp = await askSaraGrok({
+  message: 'how much water?',
+  history: [],
+  firstTurn: false,
+  apiKey: 'test-not-a-real-key',
+  fetchFn: async (_url, init) => {
+    const body = JSON.parse(init.body)
+    assert(body.messages[0].content.includes(SARA_NO_REPEAT_GREETING), 'firstTurn false is a follow-up even with empty history')
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'Hi, sip water through the day.' } }] }),
+    }
+  },
+})
+assert(flaggedFollowUp.reply === 'Sip water through the day.', 'firstTurn false strips the greeting')
 
 if (process.exitCode) {
   console.error('askGrok smoke failed')

@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { TalkingPortrait } from '../components/TalkingPortrait'
 import { askSaraRemote, isSaraUnreachable } from '../lib/askSara'
+import { stripLeadingGreeting } from '../lib/saraGreeting.mjs'
 import { isDemoVoiceOnly } from '../lib/demoPass'
 import {
   demoStreamOpenedAt,
@@ -145,7 +146,7 @@ export function AskSara() {
     setSaraStreamUserMuted(muted)
   }, [muted])
 
-  const playAra = useCallback((text: string) => {
+  const playAra = useCallback((text: string, followUp = false) => {
     if (mutedRef.current || !isVoiceReady() || araPlayingRef.current) return
     retryTextRef.current = text
     araPlayingRef.current = true
@@ -153,6 +154,7 @@ export function AskSara() {
     setVoiceNote(null)
     setNeedsTap(false)
     void speakSara(text, {
+      stripGreeting: followUp,
       onStart: () => {
         setNeedsTap(false)
         setSpeaking(true)
@@ -328,7 +330,7 @@ export function AskSara() {
     if (text) playAra(text)
   }
 
-  const speakDemoReply = (text: string) => {
+  const speakDemoReply = (text: string, followUp = false) => {
     if (isSaraBusy(text) || mutedRef.current || !isVoiceReady()) return
     const ticket = demoTicket.current
     fallbackTextRef.current = text
@@ -443,6 +445,7 @@ export function AskSara() {
 
     demoEvaluateRef.current = evaluate
     holdSaraSpeech(text, {
+      stripGreeting: followUp,
       onStart: () => {
         setNeedsTap(false)
         setSpeaking(true)
@@ -470,10 +473,11 @@ export function AskSara() {
     evaluate()
   }
 
-  const speakReply = (text: string) => {
+  const speakReply = (raw: string, followUp = false) => {
+    const text = followUp ? stripLeadingGreeting(raw) : raw
     if (isSaraBusy(text)) return
     if (voiceOnly) {
-      speakDemoReply(text)
+      speakDemoReply(text, followUp)
       return
     }
     setSaraStreamKeepMuted(false)
@@ -495,7 +499,7 @@ export function AskSara() {
         setSpeaking(true)
         return
       }
-      playAra(text)
+      playAra(text, followUp)
     })()
   }
 
@@ -514,7 +518,8 @@ export function AskSara() {
     setMessages((cur) => [...cur, you])
     setDraft('')
     setBusy(true)
-    const reply = await askSaraRemote(text, prior)
+    const rawReply = await askSaraRemote(text, prior)
+    const reply = prior.length > 0 ? stripLeadingGreeting(rawReply) : rawReply
     const sara: ChatMessage = { id: uid(), from: 'sara', text: reply, at: nowIso() }
     setMessages((cur) => {
       const next = [...cur, sara]
@@ -537,7 +542,7 @@ export function AskSara() {
       )
       return
     }
-    speakReply(reply)
+    speakReply(reply, prior.length > 0)
   }
 
   const lastSara = [...messages].reverse().find((m) => m.from === 'sara')
@@ -654,7 +659,7 @@ export function AskSara() {
             {messages.length === 0 ? (
               <p className="text-sm font-semibold leading-relaxed">{askEmptyHint(voiceOnly)}</p>
             ) : null}
-            {messages.map((m) => (
+            {messages.map((m, index) => (
               <div
                 key={m.id}
                 className={`max-w-[90%] text-sm font-semibold leading-relaxed ${
@@ -688,7 +693,7 @@ export function AskSara() {
                       }
                       noteDemoSend()
                       if (!voiceOnly) void connectSaraStream()
-                      speakReply(m.text)
+                      speakReply(m.text, messages.slice(0, index).some((item) => item.from === 'sara'))
                     }}
                   >
                     {live ? 'Stop' : 'Play'}

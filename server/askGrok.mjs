@@ -1,5 +1,6 @@
 /** Shared Ask Sara → xAI Grok proxy. Never import this from the Vite app. */
 
+import { stripLeadingGreeting } from '../src/lib/saraGreeting.mjs'
 import { redFlagLeadIn, saraGuardrailPrompt } from './saraGuardrails.mjs'
 import { saraKnowledgePrompt } from './saraKnowledge.mjs'
 
@@ -22,6 +23,9 @@ No trigger: answer the question they asked. Do not add UTI warning signs unless 
 /** Appended only when the latest message matches no red-flag rule. Guardrails stay above this note. */
 export const SARA_NO_RED_FLAG = `No red-flag trigger on this message. Do not state a red-flag sentence. Negations (does not hurt, I don't have osteoporosis), other joints such as a knee replacement, a question about why a leak happened, and unrelated topics such as water are not triggers. Answer only what they asked. Do not add a UTI warning.`
 
+/** Appended only after the opening turn. Guardrails and any red-flag lead-in stay above this note. */
+export const SARA_NO_REPEAT_GREETING = `This is not the first turn. Do not greet. Start directly with the answer. Do not open with "Hey there", "Hi there", "Hello there", "Hey,", "Hi,", "Hello", or "Hey!". If a red-flag sentence applies, that sentence still comes first.`
+
 export const SARA_SYSTEM = `You are Sara, a warmer peer around 40–50. You are the PfilAtes companion in a phone-first pocket app after someone bought the course on Kajabi.
 
 You are not a clinician and you do not diagnose. You are a pocket coach and bladder-diary buddy. The lessons and videos stay on Kajabi; do not pretend this chat replaces a module.
@@ -41,6 +45,8 @@ Never diagnose a UTI or other infection. Never say "you have a UTI." Only when t
 If they ask about moving phones: this companion binds to one device; they can use New phone /move and redeem again with the same email.
 
 Stay kind. Stay specific.
+
+Greet at most once per conversation: only on the first turn, and only if they greeted you or this is the opening. Otherwise start directly with the answer. Do not open with "Hey there", "Hi there", "Hello there", "Hey,", "Hi,", "Hello", or "Hey!". If a red-flag sentence applies, that sentence still comes first.
 
 ` +
   saraGuardrailPrompt() +
@@ -100,9 +106,21 @@ function clip(text, max = 2000) {
   return String(text ?? '').trim().slice(0, max)
 }
 
+/** Opening turn when history is empty, unless the caller passes firstTurn: false. Prior turns win over a true flag. */
+export function isFirstSaraTurn(history, options = {}) {
+  const recent = Array.isArray(history) ? history : []
+  for (const turn of recent) {
+    if (clip(turn?.text)) return false
+  }
+  if (options && options.firstTurn === false) return false
+  return true
+}
+
 export function buildMessages(userMessage, history = [], options = {}) {
-  const audience = options && typeof options === 'object' ? options.audience : undefined
-  const messages = [{ role: 'system', content: systemContentForAudience(userMessage, audience) }]
+  const opts = options && typeof options === 'object' ? options : {}
+  let content = systemContentForAudience(userMessage, opts.audience)
+  if (!isFirstSaraTurn(history, opts)) content = `${content}\n\n${SARA_NO_REPEAT_GREETING}`
+  const messages = [{ role: 'system', content }]
   const recent = Array.isArray(history) ? history.slice(-12) : []
   for (const turn of recent) {
     const text = clip(turn?.text)
@@ -121,6 +139,7 @@ export async function askSaraGrok({
   model = GROK_MODEL,
   fetchFn = fetch,
   audience,
+  firstTurn,
 } = {}) {
   const userMessage = clip(message)
   if (!userMessage) {
@@ -130,12 +149,17 @@ export async function askSaraGrok({
     return { ok: false, status: 503, reply: SARA_OFFLINE }
   }
 
+  const opts = {}
+  if (audience) opts.audience = audience
+  if (typeof firstTurn === 'boolean') opts.firstTurn = firstTurn
+  const opening = isFirstSaraTurn(history, opts)
+
   const payload = {
     model,
     stream: false,
     temperature: 0.6,
     max_tokens: 600,
-    messages: buildMessages(userMessage, history, audience ? { audience } : {}),
+    messages: buildMessages(userMessage, history, opts),
   }
 
   let res
@@ -163,9 +187,13 @@ export async function askSaraGrok({
     return { ok: false, status: 503, reply: SARA_OFFLINE }
   }
 
-  const reply = clip(data?.choices?.[0]?.message?.content, 4000)
+  let reply = clip(data?.choices?.[0]?.message?.content, 4000)
   if (!reply) {
     return { ok: false, status: 503, reply: SARA_OFFLINE }
+  }
+  if (!opening) {
+    const stripped = stripLeadingGreeting(reply)
+    if (stripped) reply = stripped
   }
   return { ok: true, status: 200, reply }
 }

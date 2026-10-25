@@ -4,6 +4,8 @@
  * is fetched. Extra sentences pack into the last chunks.
  */
 
+import { stripLeadingGreeting } from './saraGreeting.mjs'
+
 export const SARA_SPEAK_MAX_CHUNKS = 3
 
 const ABBR = /(?:Dr|Mr|Mrs|Ms|St|Jr|Sr|vs|etc)\.$/i
@@ -39,4 +41,16 @@ export function splitSpeakChunks(text, maxChunks = SARA_SPEAK_MAX_CHUNKS) {
   const head = sentences.slice(0, cap - 1)
   const tail = sentences.slice(cap - 1).join(' ')
   return [...head, tail]
+}
+
+/**
+ * Follow-up turns drop a leading greeting before the split, so the first
+ * chunk TTS speaks is the answer and not "Hey there."
+ * @param {string} text
+ * @param {boolean} [firstTurn]
+ * @param {number} [maxChunks]
+ */
+export function splitSpeakChunksForTurn(text, firstTurn = true, maxChunks = SARA_SPEAK_MAX_CHUNKS) {
+  const spoken = firstTurn === false ? stripLeadingGreeting(text) : text
+  return splitSpeakChunks(spoken, maxChunks)
 }
