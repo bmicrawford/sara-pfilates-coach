@@ -117,11 +117,50 @@ select {
 
 .sara-portrait-face {
   transform-origin: center 28%;
+  transition: opacity 0.45s ease;
 }
 
 .sara-portrait[data-sara-phase='idle'] .sara-portrait-face,
-.sara-portrait[data-sara-phase='listening'] .sara-portrait-face {
-  animation: sara-breathe 4.8s ease-in-out infinite;
+.sara-portrait[data-sara-phase='listening'] .sara-portrait-face,
+.sara-still-motion {
+  animation: sara-breathe 4.2s ease-in-out infinite;
+}
+
+.sara-blink {
+  position: absolute;
+  z-index: 11;
+  left: 50%;
+  top: 34%;
+  width: 46%;
+  height: 9%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.sara-blink span {
+  width: 38%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(62, 44, 32, 0.55);
+  transform: scaleY(0.05);
+  transform-origin: center;
+  opacity: 0;
+  animation: sara-blink 4.6s linear infinite;
+}
+
+.sara-blink span:nth-child(2) {
+  animation-delay: 0.04s;
+}
+
+.sara-portrait[data-sara-phase='stream'] .sara-blink,
+.sara-portrait[data-sara-preparing='false'] .sara-blink {
+  display: none;
+}
+
+.sara-portrait[data-sara-preparing='true'] .sara-blink {
+  display: flex;
 }
 
 .sara-portrait[data-sara-phase='listening'] .sara-portrait-face {
@@ -160,11 +199,56 @@ select {
 @keyframes sara-breathe {
   0%,
   100% {
-    transform: scale(1) rotate(0deg);
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
   }
-  50% {
-    transform: scale(1.018) rotate(0.35deg);
+  35% {
+    transform: translate3d(-1.1%, 0.5%, 0) scale(1.022) rotate(-0.7deg);
   }
+  70% {
+    transform: translate3d(1.15%, -0.35%, 0) scale(1.034) rotate(0.85deg);
+  }
+}
+
+@keyframes sara-blink {
+  0%,
+  7%,
+  100% {
+    transform: scaleY(0.05);
+    opacity: 0;
+  }
+  3.2% {
+    transform: scaleY(1);
+    opacity: 0.9;
+  }
+  88%,
+  93% {
+    transform: scaleY(0.05);
+    opacity: 0;
+  }
+  90.5% {
+    transform: scaleY(1);
+    opacity: 0.9;
+  }
+}
+
+.sara-ready-cue {
+  margin: 0;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 252, 248, 0.88);
+  color: #1c1a17;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.sara-portrait-cover .sara-ready-cue {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  top: 58%;
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 @keyframes sara-speak {
@@ -218,9 +302,19 @@ select {
 
 @media (prefers-reduced-motion: reduce) {
   .sara-portrait .sara-portrait-face,
+  .sara-still-motion,
+  .sara-blink span,
   .sara-listening-dots span,
   .sara-talking {
     animation: none !important;
+  }
+
+  .sara-portrait-face {
+    transition: none;
+  }
+
+  .sara-blink {
+    display: none !important;
   }
 
   .sara-glow {

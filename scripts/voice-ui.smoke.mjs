@@ -4,7 +4,7 @@
  * round trip, one HTMLAudioElement is unlocked inside the Send tap,
  * speech is fetched in parallel and swapped on ended, the glow shows
  * only while that element is playing, and a rejected play() shows
- * Tap to hear Sara. The demo path warms POST /stream when Ask Sara opens;
+ * Tap to hear Sara. The demo path warms one POST /stream on the landing;
  * this mock returns 429 did_unavailable, so the visit stays on ara with no error.
  *
  *   npm run build && npm run smoke:voice-ui

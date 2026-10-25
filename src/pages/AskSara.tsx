@@ -3,12 +3,23 @@ import { Link } from 'react-router-dom'
 import { TalkingPortrait } from '../components/TalkingPortrait'
 import { askSaraRemote, isSaraUnreachable } from '../lib/askSara'
 import { isDemoVoiceOnly } from '../lib/demoPass'
-import { createDemoWarmController, type DemoWarmController, type DemoWarmSnapshot } from '../lib/demoStreamWarm'
+import {
+  demoStreamOpenedAt,
+  demoStreamReplyEnded,
+  demoStreamSend,
+  demoStreamSnapshot,
+  holdDemoStream,
+  pageHideDemoStream,
+  reconnectDemoStream,
+} from '../lib/demoStreamSession'
+import type { DemoWarmSnapshot } from '../lib/demoStreamWarm'
 import {
   DEMO_DID_FRAME_BUDGET_MS,
+  DEMO_SEND_LIVE_BUDGET_MS,
   didWebRtcSilencedBySilentSwitch,
   planDemoVoice,
   SARA_DEMO_SILENT_HINT,
+  SARA_GETTING_READY,
 } from '../lib/demoVoicePlan'
 import { saraDebugOn } from '../lib/saraDebug'
 import { IOS_WEBRTC_BUDGET_MS, SARA_SEE_LABEL } from '../lib/saraStreamGesture'
@@ -20,15 +31,14 @@ import {
   connectSaraStream,
   gestureUnlockSaraStream,
   isSaraStreamSpeechLive,
-  keepSaraStream,
   noteStreamFallback,
   preloadSaraStream,
   releaseSaraStream,
-  retireDemoStream,
   saraStreamConnectBlocked,
   saraStreamDebugFacts,
   saraStreamHasFrames,
   saraStreamPhase,
+  saraStreamTimingLabel,
   setSaraStreamTapReconnect,
   SARA_STREAM_CAPPED_NOTE,
   setSaraStreamCallbacks,
@@ -58,9 +68,6 @@ import {
 } from '../lib/speakSara'
 import { nowIso, uid } from '../lib/storage'
 import type { ChatMessage } from '../lib/types'
-
-/** Bumps on each Ask Sara visit so a delayed close cannot drop the next session. */
-let demoWarmEpoch = 0
 
 function ListeningLine() {
   return (
@@ -106,8 +113,8 @@ export function AskSara() {
   const demoUnmutedRef = useRef(false)
   const iosGaveUpRef = useRef(false)
   const demoPathRef = useRef<'did-audio' | 'did-visual-ara' | 'ara' | null>(null)
-  const demoWarmRef = useRef<DemoWarmController | null>(null)
-  const [warmSnap, setWarmSnap] = useState<DemoWarmSnapshot | null>(null)
+  const demoSendAtRef = useRef(0)
+  const [warmSnap, setWarmSnap] = useState<DemoWarmSnapshot | null>(() => demoStreamSnapshot())
   const [debugVoice, setDebugVoice] = useState<'did-audio' | 'did-visual-ara' | 'ara' | null>(null)
   const [needsSee, setNeedsSee] = useState(false)
   const [debugFacts, setDebugFacts] = useState(() => saraStreamDebugFacts())
@@ -174,7 +181,7 @@ export function AskSara() {
         demoEvaluateRef.current?.()
         if (!talking && demoPathRef.current === 'did-audio') {
           demoPathRef.current = null
-          demoWarmRef.current?.replyEnded()
+          if (voiceOnly) demoStreamReplyEnded()
         }
         if (!talking && streamVoiceRef.current) {
           streamVoiceRef.current = false
@@ -205,41 +212,30 @@ export function AskSara() {
     })
     preloadSaraStream()
     setSaraStreamTapReconnect(() => {
-      if (demoWarmRef.current) {
-        demoWarmRef.current.reconnectIfNeeded()
+      if (voiceOnly) {
+        reconnectDemoStream()
         return
       }
       if (!saraStreamConnectBlocked()) void connectSaraStream()
     })
-    if (voiceOnly) {
-      if (!demoWarmRef.current) {
-        const epoch = ++demoWarmEpoch
-        demoWarmRef.current = createDemoWarmController({
-          connect: () => connectSaraStream(),
-          retryFailure: () => !saraStreamConnectBlocked(),
-          close: () => {
-            if (epoch !== demoWarmEpoch) return
-            retireDemoStream()
-          },
-          keep: () => keepSaraStream(),
-          onChange: (snap) => setWarmSnap(snap),
-        })
-      }
-      demoWarmRef.current.mount()
-    }
+    const releaseWarm = voiceOnly ? holdDemoStream((snap) => setWarmSnap(snap)) : null
     const onPageHide = () => {
-      if (voiceOnly) demoWarmRef.current?.pageHide()
+      if (voiceOnly) pageHideDemoStream()
     }
     window.addEventListener('pagehide', onPageHide)
     let iosTimer = 0
     if (voiceOnly && iosPhone) {
-      iosTimer = window.setTimeout(() => {
+      const opened = demoStreamOpenedAt() ?? Date.now()
+      const remain = IOS_WEBRTC_BUDGET_MS - (Date.now() - opened)
+      const giveUp = () => {
         if (saraStreamPhase() === 'live') return
         iosGaveUpRef.current = true
         noteStreamFallback('ios-25s')
         demoEvaluateRef.current?.()
         setDebugFacts(saraStreamDebugFacts())
-      }, IOS_WEBRTC_BUDGET_MS)
+      }
+      if (remain <= 0) giveUp()
+      else iosTimer = window.setTimeout(giveUp, remain)
     }
     return () => {
       if (iosTimer) window.clearTimeout(iosTimer)
@@ -248,7 +244,7 @@ export function AskSara() {
       if (demoPoll.current) window.clearInterval(demoPoll.current)
       demoPoll.current = 0
       demoEvaluateRef.current = null
-      if (voiceOnly) demoWarmRef.current?.unmount()
+      releaseWarm?.()
       setSaraStreamTapReconnect(null)
       setSaraStreamCallbacks({})
       releaseSaraStream()
@@ -298,7 +294,8 @@ export function AskSara() {
 
   const noteDemoSend = () => {
     if (!voiceOnly) return
-    const turn = demoWarmRef.current?.send()
+    demoSendAtRef.current = Date.now()
+    const turn = demoStreamSend()
     demoForceAraRef.current = Boolean(turn?.araThisTurn)
   }
 
@@ -338,17 +335,32 @@ export function AskSara() {
     araPlayingRef.current = false
     demoStreamFailedRef.current = false
     setConcealStream(false)
-    // Re-read at reply time. A warm connect that finished during Grok, or
-    // after the iOS budget, is used. A stale ios-gave-up flag must not win.
-    const phaseAtReply = saraStreamPhase()
-    if (phaseAtReply === 'live') iosGaveUpRef.current = false
-    const streamWarm = !demoForceAraRef.current && phaseAtReply === 'live'
+    // Re-read as the connect finishes. A stale ios-gave-up flag must not win
+    // once the session is live. If it is still not live by Send+6s, this
+    // turn uses ara and a later reply can use the video.
+    const sendAt = demoSendAtRef.current || Date.now()
+    const forceAra = demoForceAraRef.current
     demoForceAraRef.current = false
     demoUnmuteFailedRef.current = false
     demoUnmutedRef.current = false
     setSaraStreamKeepMuted(false)
-    const startedAt = Date.now()
     let committed = false
+    let didSpeak = false
+    let speakArmedAt = 0
+
+    const armSpeak = () => {
+      if (didSpeak || forceAra || iosGaveUpRef.current) return
+      if (saraStreamPhase() !== 'live') return
+      if (Date.now() - sendAt >= DEMO_SEND_LIVE_BUDGET_MS) return
+      didSpeak = true
+      speakArmedAt = Date.now()
+      iosGaveUpRef.current = false
+      void speakSaraStream(text).then((outcome) => {
+        if (ticket !== demoTicket.current) return
+        if (outcome !== 'heard') demoStreamFailedRef.current = true
+        evaluate()
+      })
+    }
 
     const finish = (choice: 'did-audio' | 'did-visual-ara' | 'ara') => {
       if (committed || ticket !== demoTicket.current) return
@@ -382,7 +394,7 @@ export function AskSara() {
       const prior = saraStreamDebugFacts().fallback
       const specific = prior.startsWith('play-') || prior === 'ice-failed' || prior === 'unmute' || prior === 'no-track' || prior === 'no-session'
       if (iosGaveUpRef.current) noteStreamFallback('ios-25s')
-      else if (!specific && !streamWarm) noteStreamFallback('cold')
+      else if (!specific && !didSpeak) noteStreamFallback('cold')
       else if (!specific) noteStreamFallback('budget')
       settleSaraStreamVoice('ara')
       streamVoiceRef.current = false
@@ -395,15 +407,33 @@ export function AskSara() {
     const evaluate = () => {
       if (committed || ticket !== demoTicket.current) return
       const now = Date.now()
+      const phase = saraStreamPhase()
+      // The warm controller stays 'failed' after a cap or a 429. saraStreamPhase()
+      // can read 'idle' once that session is released, and that must not hold ara.
+      const warmPhase = demoStreamSnapshot()?.phase
+      if (phase === 'live' || warmPhase === 'live') iosGaveUpRef.current = false
+      armSpeak()
+      const liveNow = phase === 'live' || warmPhase === 'live'
+      const sendBudgetExceeded = now - sendAt >= DEMO_SEND_LIVE_BUDGET_MS
+      const awaitingLive =
+        !didSpeak &&
+        !forceAra &&
+        !demoStreamFailedRef.current &&
+        !iosGaveUpRef.current &&
+        !sendBudgetExceeded &&
+        warmPhase === 'connecting'
       const speechFramesLive = isSaraStreamSpeechLive()
       const chunkReady = saraSpeechChunkReady()
       const choice = planDemoVoice({
         araStarted: false,
         didFailed: demoStreamFailedRef.current || iosGaveUpRef.current,
-        budgetExceeded: now - startedAt >= DEMO_DID_FRAME_BUDGET_MS,
+        budgetExceeded: didSpeak
+          ? speakArmedAt > 0 && now - speakArmedAt >= DEMO_DID_FRAME_BUDGET_MS
+          : sendBudgetExceeded,
         speechFramesLive,
         chunkReady,
-        streamWarm: streamWarm && !iosGaveUpRef.current,
+        streamWarm: didSpeak && liveNow && !iosGaveUpRef.current,
+        awaitingLive,
         unmuted: demoUnmutedRef.current,
         unmuteBlocked: demoUnmuteFailedRef.current,
         framesVisible: saraStreamHasFrames(),
@@ -420,7 +450,7 @@ export function AskSara() {
       onEnd: () => {
         araPlayingRef.current = false
         setSpeaking(false)
-        demoWarmRef.current?.replyEnded()
+        if (voiceOnly) demoStreamReplyEnded()
       },
       onError: (message) => {
         araPlayingRef.current = false
@@ -436,12 +466,8 @@ export function AskSara() {
     })
     if (demoPoll.current) window.clearInterval(demoPoll.current)
     demoPoll.current = window.setInterval(evaluate, 100)
-    if (!streamWarm) return
-    void speakSaraStream(text).then((outcome) => {
-      if (ticket !== demoTicket.current) return
-      if (outcome !== 'heard') demoStreamFailedRef.current = true
-      evaluate()
-    })
+    armSpeak()
+    evaluate()
   }
 
   const speakReply = (text: string) => {
@@ -526,6 +552,7 @@ export function AskSara() {
           talking={speaking}
           listening={busy}
           streaming={streaming}
+          preparing={voiceOnly && warmSnap?.phase === 'connecting'}
           onVideoEl={onVideoEl}
           onVideoLive={onVideoLive}
         />
@@ -563,6 +590,11 @@ export function AskSara() {
           <p className="ask-sara-greeting ask-sara-greeting-lead px-5 text-center font-serif text-xl font-bold">
             {intro.title}
           </p>
+          {voiceOnly && warmSnap?.phase === 'connecting' ? (
+            <p className="sara-ready-cue mx-auto mt-2 w-fit" data-sara-ready-cue="true">
+              {SARA_GETTING_READY}
+            </p>
+          ) : null}
           <p className="ask-sara-greeting px-5 pt-0.5 text-center text-sm font-semibold">
             {busy ? <ListeningLine /> : intro.sub}
           </p>
@@ -581,7 +613,7 @@ export function AskSara() {
                 debugFacts.muted == null ? '—' : debugFacts.muted ? '1' : '0'
               } · w ${debugFacts.videoWidth} · rs ${debugFacts.readyState} · ice ${debugFacts.ice} · track ${
                 debugFacts.track ? 'yes' : 'no'
-              } · fallback ${debugFacts.fallback}`}
+              } · fallback ${debugFacts.fallback} · ${saraStreamTimingLabel()}`}
             </p>
           ) : null}
           {voiceOnly ? (

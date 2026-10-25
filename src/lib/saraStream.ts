@@ -5,8 +5,8 @@
  * Do not connect() on Ask Sara mount. Lite’s concurrent stream cap is small; idle
  * tabs (phone + laptop PWA + Studio) exhaust it and freeze the still. Paid and
  * class passes mint + WebRTC on Send / Play, in parallel with Grok. The demo
- * pass is the exception: Ask Sara warms one muted session when that screen
- * opens and reuses it (demoStreamWarm). This module still does not connect
+ * pass is the exception: the landing and home screen warm one muted session
+ * and Ask Sara reuses it (demoStreamSession). This module still does not connect
  * from preload. Keep the session after connect so the next speak() does not
  * re-pay WebRTC; release on leave / unmount / pagehide. The demo Worker lease
  * is not renewed — it expires on its TTL.
@@ -24,7 +24,7 @@
  * the SDK retry; do not treat that flap as a dead session.
  */
 
-import { currentSaraPass } from './demoPass.ts'
+import { currentSaraPass, isDemoPass } from './demoPass.ts'
 import { rewritePfilatesForSpeech } from './pfilatesSpeech.mjs'
 import { beginMutedGesturePlay, classifyPlayRejection, unmuteInPlace } from './saraStreamGesture.ts'
 
@@ -584,6 +584,7 @@ function waitForAvReady(): Promise<boolean> {
 }
 
 function onAvCue() {
+  noteFirstFrame()
   maybePromoteHeard()
 }
 
@@ -889,7 +890,190 @@ export function setSaraStreamCallbacks(next: StreamCallbacks) {
   if (next.onStatus && sessionCapped) next.onStatus('session_capped')
 }
 
+/** Reuse a minted client key until this long before it expires. */
+const STREAM_KEY_REUSE_MS = 30_000
+
+export type SaraConnectTiming = {
+  mintMs: number | null
+  /** True when this connect did not POST /stream because the key was still inside its TTL. */
+  mintCached: boolean
+  sdkMs: number | null
+  agentMs: number | null
+  createMs: number | null
+  streamPostMs: number | null
+  sdpMs: number | null
+  /** ICE gathering duration after the peer connection exists. */
+  iceGatherMs: number | null
+  /** Offset from connect start to iceConnectionState connected/completed. */
+  iceConnectedMs: number | null
+  connectMs: number | null
+  firstFrameMs: number | null
+  totalMs: number | null
+}
+
+const emptyTiming = (): SaraConnectTiming => ({
+  mintMs: null,
+  mintCached: false,
+  sdkMs: null,
+  agentMs: null,
+  createMs: null,
+  streamPostMs: null,
+  sdpMs: null,
+  iceGatherMs: null,
+  iceConnectedMs: null,
+  connectMs: null,
+  firstFrameMs: null,
+  totalMs: null,
+})
+
+let connectTiming = emptyTiming()
+let connectT0 = 0
+let peerWatchGen = 0
+let credsCache: SaraStreamCreds | null = null
+let credsInflight: Promise<SaraStreamCreds | null> | null = null
+let credsGen = 0
+/** Demo landing can mint before Continue writes the local session. Paid passes never use this. */
+let passOverride = ''
+
+export function saraStreamConnectTiming(): SaraConnectTiming {
+  return { ...connectTiming }
+}
+
+export function saraStreamTimingLabel(): string {
+  const t = connectTiming
+  const n = (value: number | null) => (value == null ? '—' : String(value))
+  const mint = t.mintCached ? 'cached' : n(t.mintMs)
+  return `mint ${mint} · sdk ${n(t.sdkMs)} · agent ${n(t.agentMs)} · create ${n(t.createMs)} · stream ${n(t.streamPostMs)} · sdp ${n(t.sdpMs)} · gather ${n(t.iceGatherMs)} · iceAt ${n(t.iceConnectedMs)} · connect ${n(t.connectMs)} · up ${n(t.totalMs)} · frame ${n(t.firstFrameMs)}`
+}
+
+function publishTiming(reason: string) {
+  if (connectT0) connectTiming.totalMs = Math.round(performance.now() - connectT0)
+  logStream('timing', `${reason} ${saraStreamTimingLabel()}`)
+}
+
+function noteFirstFrame() {
+  if (!connectT0 || connectTiming.firstFrameMs != null) return
+  if (!isSaraVideoLive(videoEl)) return
+  connectTiming.firstFrameMs = Math.round(performance.now() - connectT0)
+  publishTiming('first-frame')
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input
+  if (input instanceof URL) return input.toString()
+  return input.url
+}
+
+function noteNetworkTiming(method: string, url: string, ms: number) {
+  if (!connectT0) return
+  const path = url.split('?')[0]
+  const rounded = Math.round(ms)
+  if (method === 'POST' && /\/stream$/.test(path)) {
+    if (connectTiming.mintMs == null) connectTiming.mintMs = rounded
+    return
+  }
+  if (method === 'GET' && /\/runtime$/.test(path)) {
+    if (connectTiming.agentMs == null) connectTiming.agentMs = rounded
+    return
+  }
+  if (method === 'POST' && /\/streams$/.test(path)) {
+    if (connectTiming.streamPostMs == null) connectTiming.streamPostMs = rounded
+    return
+  }
+  if (method === 'POST' && /\/sdp$/.test(path)) {
+    if (connectTiming.sdpMs == null) connectTiming.sdpMs = rounded
+  }
+}
+
+function observePeer(pc: RTCPeerConnection) {
+  const watch = peerWatchGen
+  const gatherStart = performance.now()
+  pc.addEventListener('icegatheringstatechange', () => {
+    if (watch !== peerWatchGen) return
+    if (pc.iceGatheringState === 'complete' && connectTiming.iceGatherMs == null) {
+      connectTiming.iceGatherMs = Math.round(performance.now() - gatherStart)
+      logStream('timing', `ice-gathering-complete ${saraStreamTimingLabel()}`)
+    }
+  })
+  pc.addEventListener('iceconnectionstatechange', () => {
+    if (watch !== peerWatchGen) return
+    const state = pc.iceConnectionState
+    if ((state === 'connected' || state === 'completed') && connectTiming.iceConnectedMs == null && connectT0) {
+      connectTiming.iceConnectedMs = Math.round(performance.now() - connectT0)
+      logStream('timing', `ice-connected ${saraStreamTimingLabel()}`)
+    }
+  })
+}
+
+/** Installed before the Agents SDK evaluates, because the SDK binds RTCPeerConnection at import. */
+function installConnectObservers() {
+  if (typeof window === 'undefined') return
+  const win = window as Window & { __saraConnectObserved?: boolean }
+  if (win.__saraConnectObserved) return
+  win.__saraConnectObserved = true
+  const OrigPC = window.RTCPeerConnection
+  if (OrigPC) {
+    const Wrapped = function (this: RTCPeerConnection, config?: RTCConfiguration) {
+      const pc = new OrigPC(config)
+      observePeer(pc)
+      return pc
+    }
+    Wrapped.prototype = OrigPC.prototype
+    window.RTCPeerConnection = Wrapped as unknown as typeof RTCPeerConnection
+  }
+  const nativeFetch = window.fetch.bind(window)
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const method = String(
+      init?.method || (typeof Request !== 'undefined' && input instanceof Request ? input.method : 'GET'),
+    ).toUpperCase()
+    const url = requestUrl(input)
+    const start = performance.now()
+    return nativeFetch(input, init).then((res) => {
+      noteNetworkTiming(method, url, performance.now() - start)
+      return res
+    })
+  }
+}
+
+installConnectObservers()
+
+export function setSaraStreamPassOverride(pass: string): void {
+  passOverride = isDemoPass(pass) ? String(pass).trim() : ''
+}
+
+function credsStillFresh(creds: SaraStreamCreds | null, now = Date.now()): boolean {
+  if (!creds?.agentId || !creds.clientKey) return false
+  if (creds.expiresAt == null) return true
+  return creds.expiresAt - now > STREAM_KEY_REUSE_MS
+}
+
+/** Drop the cached client key so the next session POSTs /stream and counts against the gate. */
+export function discardSaraStreamCreds(): void {
+  credsGen += 1
+  credsCache = null
+  credsInflight = null
+}
+
 export async function fetchSaraStreamCreds(): Promise<SaraStreamCreds | null> {
+  if (credsStillFresh(credsCache)) {
+    connectTiming.mintCached = true
+    connectTiming.mintMs = 0
+    return credsCache
+  }
+  if (credsInflight) return credsInflight
+  const gen = credsGen
+  const pending = fetchSaraStreamCredsFresh()
+  credsInflight = pending
+  try {
+    const creds = await pending
+    if (gen === credsGen && credsStillFresh(creds)) credsCache = creds
+    return creds
+  } finally {
+    if (credsInflight === pending) credsInflight = null
+  }
+}
+
+async function fetchSaraStreamCredsFresh(): Promise<SaraStreamCreds | null> {
   const ctrl = new AbortController()
   const timer = window.setTimeout(() => ctrl.abort(), 12_000)
   try {
@@ -897,7 +1081,7 @@ export async function fetchSaraStreamCreds(): Promise<SaraStreamCreds | null> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: ctrl.signal,
-      body: JSON.stringify({ pass: currentSaraPass() }),
+      body: JSON.stringify({ pass: currentSaraPass() || passOverride }),
     })
     const data = (await res.json().catch(() => ({}))) as {
       agentId?: string | null
@@ -1017,19 +1201,37 @@ export async function connectSaraStream(): Promise<boolean> {
         return false
       }
       deadMode = false
-      const [creds, create] = await Promise.all([fetchSaraStreamCreds(), loadSdk()])
+      connectT0 = performance.now()
+      connectTiming = emptyTiming()
+      peerWatchGen += 1
+      const cachedKey = credsStillFresh(credsCache)
+      const parallelStart = performance.now()
+      const [creds, create] = await Promise.all([
+        fetchSaraStreamCreds(),
+        loadSdk().then((factory) => {
+          connectTiming.sdkMs = Math.round(performance.now() - parallelStart)
+          return factory
+        }),
+      ])
+      if (cachedKey) {
+        connectTiming.mintCached = true
+        connectTiming.mintMs = 0
+      }
       if (!creds || session !== sessionGen) {
         logStream('no stream credentials — keeping still')
+        publishTiming('no-creds')
         return false
       }
       if (!create || session !== sessionGen) return false
+      const createStart = performance.now()
       created = await create(creds.agentId, {
         auth: { type: 'key', clientKey: creds.clientKey },
         mode: SPEAK_MODE,
         enableAnalytics: false,
-        streamOptions: {
+          streamOptions: {
           compatibilityMode: 'on',
           // iOS often never decodes warmup; gating connect() on that leaves speak() dead.
+          // Warmup also delays the SDK's connected callback until that clip ends.
           streamWarmup: false,
           outputResolution: 512,
         },
@@ -1128,18 +1330,30 @@ export async function connectSaraStream(): Promise<boolean> {
           },
         },
       })
-      if (session !== sessionGen || sessionCapped) return false
+      connectTiming.createMs = Math.round(performance.now() - createStart)
+      if (session !== sessionGen || sessionCapped) {
+        publishTiming('superseded')
+        return false
+      }
       manager = created
+      const connectStart = performance.now()
       await created.connect()
-      if (session !== sessionGen || deadMode || sessionCapped) return false
+      connectTiming.connectMs = Math.round(performance.now() - connectStart)
+      if (session !== sessionGen || deadMode || sessionCapped) {
+        publishTiming('connect-dropped')
+        return false
+      }
       if (srcObject) attachSrcObject(srcObject)
       // Keep the session without frames. Warmup is off; speak() attaches the talking track.
+      // ICE trickle is already how the SDK works (answer is sent, then candidates).
+      // Gathering finishes in a few hundred ms; the long wait is POST /streams.
       if (!elementHoldsStream()) {
         logStream('connected — no video frames yet; session kept for speak()')
       } else {
         listeners.onStatus?.('live')
       }
       keepSession = true
+      publishTiming('connected')
       return true
     } catch (error) {
       if (isSaraSessionCapError(error)) {
