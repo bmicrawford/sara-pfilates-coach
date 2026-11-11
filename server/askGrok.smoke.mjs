@@ -6,13 +6,16 @@ import { stripLeadingGreeting } from '../src/lib/saraGreeting.mjs'
 import { splitSpeakChunksForTurn } from '../src/lib/speakChunks.mjs'
 import {
   APPROVED_CLAIMS,
+  APPROVED_OUTCOME_CLAIM,
   ESSENTIAL_PFILATES_MOVEMENTS,
   KEGEL_10X_BAN,
   KEGEL_COMPARISON,
+  PFILATES_MARK,
   PFILATES_MOVEMENTS,
   RED_FLAG_QA_CASES,
   RED_FLAG_QA_NON_MATCHES,
   RED_FLAG_RULES,
+  ensurePfilatesTrademark,
   matchingRedFlags,
   saraGuardrailPrompt,
 } from './saraGuardrails.mjs'
@@ -264,14 +267,13 @@ assert(
   'pain + research question leads with the stop rule',
 )
 assert(RESEARCH_ALLOWED_PERCENTS.includes('80%') && RESEARCH_ALLOWED_PERCENTS.includes('50%'), '80% and 50% are allowed percents')
+assert(knowledge.includes(APPROVED_OUTCOME_CLAIM), '80% / 28 days result is in the research knowledge')
+assert(SARA_SYSTEM.includes(APPROVED_OUTCOME_CLAIM), '80% / 28 days result is in the prompt')
 assert(
-  /80% of people who use the PfilAtes™ program \(or at least 50%\) improved in 28 days of training/.test(knowledge),
-  '80% / 28 days result is in the research knowledge',
+  /Quote this outcome sentence verbatim and never split or paraphrase it/.test(SARA_SYSTEM),
+  'prompt tells Sara to quote the outcome sentence verbatim',
 )
-assert(
-  /80% of people who use the PfilAtes™ program \(or at least 50%\) improved in 28 days of training/.test(SARA_SYSTEM),
-  '80% / 28 days result is in the prompt',
-)
+assert(!SARA_SYSTEM.includes('improved in 28 days of training'), 'old split-prone 28-day sentence is gone')
 assert(!SARA_SYSTEM.includes('showed 74% bladder symptom improvement'), 'old general 74% bladder claim is gone')
 assert(
   researchReplyIssues('PfilAtes™ movements can be up to 10x a standard Kegel.').some((issue) => /10x/i.test(issue)),
@@ -390,12 +392,7 @@ const mocked = await askSaraGrok({
     assert(body.model === 'grok-4.20-0309-non-reasoning', 'sends the non-reasoning model')
     assert(body.max_tokens === 600, 'keeps max_tokens at 600')
     assert(body.messages[0].content.includes('Never diagnose'), 'sends Sara system prompt')
-    assert(
-      body.messages[0].content.includes(
-        '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training',
-      ),
-      'sends the approved-claims whitelist',
-    )
+    assert(body.messages[0].content.includes(APPROVED_OUTCOME_CLAIM), 'sends the approved-claims whitelist')
     assert(
       body.messages[0].content.includes('If a movement at any time causes pain, stop that movement.'),
       'sends Dr C red-flag rules',
@@ -627,6 +624,96 @@ assert(
   readFileSync(new URL('./onboardingEmails.mjs', import.meta.url), 'utf8') === beforeRebuild,
   'rebuilding the onboarding module does not change it',
 )
+
+const OLD_OUTCOME = '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training'
+assert(APPROVED_OUTCOME_CLAIM === '80% of people who use the program improved by at least 50% in 28 days.', 'outcome claim is the approved sentence')
+assert(!SARA_SYSTEM.includes(OLD_OUTCOME), 'system prompt drops the old outcome sentence')
+assert(!knowledge.includes(OLD_OUTCOME), 'research knowledge drops the old outcome sentence')
+assert(!qaDoc.includes(OLD_OUTCOME), 'QA doc drops the old outcome sentence')
+const prospectSrc = readFileSync(new URL('../src/lib/prospectCopy.ts', import.meta.url), 'utf8')
+assert(prospectSrc.includes(APPROVED_OUTCOME_CLAIM), 'homepage prospect copy uses the approved outcome sentence')
+assert(!prospectSrc.includes(OLD_OUTCOME), 'homepage prospect copy drops the old outcome sentence')
+assert(onboardingSrc.includes(APPROVED_OUTCOME_CLAIM), 'onboarding rules quote the approved outcome sentence')
+assert(/verbatim and never split or paraphrase it/.test(onboardingSrc), 'onboarding rules forbid splitting the outcome sentence')
+
+const retentionPrompt = "I suddenly can't urinate at all. Should I keep doing the exercises?"
+const retentionHits = matchingRedFlags(retentionPrompt).map((rule) => rule.id)
+assert(retentionHits.includes('urinary-retention'), 'inability to urinate matches the retention rule')
+assert(!retentionHits.includes('urgent-care'), 'inability to urinate is the go-now rule')
+const retentionLead = buildMessages(retentionPrompt)[0].content.slice(SARA_SYSTEM.length)
+assert(retentionLead.includes('Red-flag lead-in'), 'inability to urinate adds a red-flag lead-in')
+assert(
+  retentionLead.includes('Go now to urgent care or the ER. Stop all movements. Do not exercise.'),
+  'inability to urinate leads with go now, stop all movements, and no exercise',
+)
+assert(
+  /Do not say "I don't know of a PfilAtes study on that."/.test(retentionLead),
+  'inability to urinate forbids the study line',
+)
+assert(!retentionLead.includes(SARA_NO_RED_FLAG), 'inability to urinate does not get the no-trigger note')
+for (const phrasing of [
+  'This is acute urinary retention.',
+  "I can't pee at all.",
+  'I am unable to pass urine.',
+  'I cannot urinate.',
+]) {
+  assert(
+    matchingRedFlags(phrasing).some((rule) => rule.id === 'urinary-retention'),
+    `retention phrasing matches: ${phrasing}`,
+  )
+}
+assert(
+  matchingRedFlags("I don't have urinary retention.").length === 0,
+  'denying urinary retention is not an emergency',
+)
+
+const bloodPrompt = 'I have blood in my urine. What exercises should I do?'
+const bloodLead = buildMessages(bloodPrompt)[0].content.slice(SARA_SYSTEM.length)
+assert(
+  bloodLead.includes('Get same-day care at urgent care or the ER. Stop all movements. Do not exercise.'),
+  'blood in urine leads with same-day urgent care and no exercise',
+)
+assert(
+  /Do not say "I don't know of a PfilAtes study on that."/.test(bloodLead),
+  'blood in urine forbids the study line',
+)
+assert(
+  matchingRedFlags('I have a fever and pelvic pain.').some((rule) => rule.id === 'urgent-care'),
+  'fever is a same-day emergency',
+)
+assert(
+  matchingRedFlags('I have chest pain right now.').some((rule) => rule.id === 'urgent-care'),
+  'chest pain is a same-day emergency',
+)
+assert(matchingRedFlags('I have no fever.').every((rule) => rule.id !== 'urgent-care'), 'a denied fever is not urgent care')
+
+const outcomePrompt = buildMessages('How effective is PfilAtes? What results should I expect?')[0].content
+assert(outcomePrompt.includes(APPROVED_OUTCOME_CLAIM), 'an outcome question carries the exact approved sentence')
+assert(
+  /Quote this outcome sentence verbatim and never split or paraphrase it/.test(outcomePrompt),
+  'an outcome question tells Sara not to split the sentence',
+)
+assert(!/Red-flag lead-in/.test(outcomePrompt), 'an outcome question is not an emergency')
+
+assert(ensurePfilatesTrademark('You can spell the program name PfilAtes.') === `You can spell the program name ${PFILATES_MARK}.`, 'bare PfilAtes gets ™')
+assert(ensurePfilatesTrademark(`Already ${PFILATES_MARK} here.`) === `Already ${PFILATES_MARK} here.`, 'an existing ™ is not doubled')
+assert(ensurePfilatesTrademark(`${PFILATES_MARK}\u2122`) === PFILATES_MARK, 'a doubled mark collapses to one')
+assert(ensurePfilatesTrademark('See pfilates.com and www.pfilates.com.') === 'See pfilates.com and www.pfilates.com.', 'a hostname stays unmarked')
+assert(ensurePfilatesTrademark('Write pfilates, then Pfilates.') === `Write ${PFILATES_MARK}, then ${PFILATES_MARK}.`, 'either casing becomes PfilAtes™')
+assert(/Whenever you write the program name, write PfilAtes™/.test(SARA_SYSTEM), 'prompt requires PfilAtes™, including when spelling it')
+
+const markedReply = await askSaraGrok({
+  message: 'Please spell the program name.',
+  apiKey: 'test-not-a-real-key',
+  fetchFn: async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content: 'You can spell the program name PfilAtes.' } }],
+    }),
+  }),
+})
+assert(markedReply.reply === `You can spell the program name ${PFILATES_MARK}.`, 'a reply containing bare PfilAtes gets ™')
+assert(!markedReply.reply.includes(`${PFILATES_MARK}${PFILATES_MARK.slice(-1)}`), 'the reply mark is not doubled')
 
 if (process.exitCode) {
   console.error('askGrok smoke failed')

@@ -52,7 +52,7 @@ assert(demoHome.greeting === PROSPECT_ASK_GREETING, 'demo home leads with the pr
 assert(demoHome.note === PROSPECT_HOME_NOTE, 'demo home note is the prospect block')
 
 for (const claim of [
-  '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training.',
+  '80% of people who use the program improved by at least 50% in 28 days.',
   'It takes 10 minutes a day.',
   "The women's course is a $149 lifetime purchase.",
   'It was created by Dr. Bruce Crawford.',

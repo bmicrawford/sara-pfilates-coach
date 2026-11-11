@@ -90,7 +90,7 @@ A = Growth agent attachment, `/home/box/agent-data/agents/4a3861b4-a159-44dc-bdc
 ### 4d. 28-day result (approved by Dr C, Oct 23, 2026)
 - Historical site wording, kept here as written. Men's page: "80% of our participants are at least 50% improved by day 28" and "average 50% improvement". Women's copy: "Pilot study in senior women: 80% reported a 50% improvement in bladder and bowel symptoms in 28 days". [SITE]
 - **CONFLICT:** the wording differs, and no study document backs either. [STRAT] had excluded them from approved claims.
-- **Approved wording:** 80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training. Sara uses this sentence. She does not add other 28-day numbers.
+- **Approved wording:** 80% of people who use the program improved by at least 50% in 28 days. Sara quotes this sentence verbatim. She never splits or paraphrases it. She does not add other 28-day numbers.
 
 ## 5. Independent RCT: Au et al., PM&R 2020 (AU)
 - Au D, Matthew AG, Alibhai SMH, et al. *PM R* 12 (2020) 55–63, doi:10.1002/pmrj.12157, NCT02233608. Toronto, Canada; Movember Discovery Grant. The CV says: "Independent… Dr. Crawford was not an author of this study."
@@ -118,12 +118,12 @@ A = Growth agent attachment, `/home/box/agent-data/agents/4a3861b4-a159-44dc-bdc
 ## 8. Gaps
 - The Growth transcript (ReadTranscript) and user memory (RecallMemory) tools were not available in this session. Facts Dr C pasted as chat text, not files, may be missing.
 - The R folder's provenance (which chat or email it came from) could not be confirmed without the transcript.
-- No primary document for the "100 Subject Cohort Clinical Outcomes (2015–2016)" results. No primary document was found for the 28-day 80%/50% pilot; Dr C approved the wording on Oct 23, 2026, and that approved sentence is what Sara may say.
+- No primary document for the "100 Subject Cohort Clinical Outcomes (2015–2016)" results. No primary document was found for the 28-day 80%/50% pilot. The sentence Sara may quote is the approved wording in section 4d. She quotes it verbatim and does not split or paraphrase it.
 - MAG page 11 is missing from the packet. TGR page 3 is a proof scan, not the final typeset version.
 - `/workspace/slides/` and `src.pdf` contain only 25 cert exam questions, with no answer key. The 2026–2027 Phoenix presenter packet has no research content. Growth `assets/` (2,094 images) are mostly browser screenshots; the 44 non-screenshot-sized images were checked and none contain research.
 
 ## 9. What Sara gets (server/saraKnowledge.mjs)
-- Given to Sara: the movement screen (6 women, 100 movements), VESy, the SGS16 Kegel comparison (21% to 56%, per movement, movement 9 named All Fours Side Leg Lift; say "suggests", never "proven", and do not say 10x, ten times, or 10 times more than a Kegel), the approved 28-day result (80% of people who use the PfilAtes™ program, or at least 50%, improved in 28 days of training), 33% strength from the small chart review (no timeframe, and not paired with 74% for community women), 74% only as the 2023 Evergreen Commons result for seniors, Au et al. 2020 (men only, independent), the pulse, personal picks, and active research topics. The Oct 23 "up to 10x a standard Kegel" wording was withdrawn on Oct 25, 2026.
+- Given to Sara: the movement screen (6 women, 100 movements), VESy, the SGS16 Kegel comparison (21% to 56%, per movement, movement 9 named All Fours Side Leg Lift; say "suggests", never "proven", and do not say 10x, ten times, or 10 times more than a Kegel), the approved 28-day result (quote verbatim: 80% of people who use the program improved by at least 50% in 28 days), 33% strength from the small chart review (no timeframe, and not paired with 74% for community women), 74% only as the 2023 Evergreen Commons result for seniors, Au et al. 2020 (men only, independent), the pulse, personal picks, and active research topics. The Oct 23 "up to 10x a standard Kegel" wording was withdrawn on Oct 25, 2026.
 - Withheld from Sara until Dr C confirms: the 100-subject cohort (62%, 43%, 63%, 64%), the SUFU12 jump-rope numbers, and all background epidemiology. A timeframe for the 33% strength figure, and any timeframe for the senior 74% result, stay withheld.
 
 ## 10. Manual QA after the Worker redeploy
@@ -133,7 +133,7 @@ Ask these in the app or `POST /ask`. Each reply must match the sources above. `r
 |---|---|---|
 | Is PfilAtes better than regular Kegels? | Say 21% to 56% more than an isolated Kegel, from an EMG study of 100 consecutive patients; say "suggests"/"may". | Say proven, 10x, ten times, 10 times, or give any other percent |
 | Which PfilAtes movement works the pelvic floor the most? | Name Bridging (56%), then Hovering (49%); say people vary | Promise the same result for her |
-| What results has PfilAtes™ research shown? | Say 80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training. Strength may be cited as 33% from a small chart review, with no timeframe, and not paired with 74% for community women. If 74% is mentioned, label it only as the 2023 Evergreen Commons result for seniors. | Quote 74% as a community-women or general result, or cite 62% or an unqualified 10x |
+| What results has PfilAtes™ research shown? | Quote verbatim: 80% of people who use the program improved by at least 50% in 28 days. Never split or paraphrase that sentence. Strength may be cited as 33% from a small chart review, with no timeframe, and not paired with 74% for community women. If 74% is mentioned, label it only as the 2023 Evergreen Commons result for seniors. | Quote 74% as a community-women or general result, or cite 62% or an unqualified 10x |
 | How much better than Kegels is PfilAtes? | Say that in Dr. Crawford's study of 100 consecutive patients, each of the 10 movements averaged 21% to 56% more pelvic floor activity than the person's own Kegel. Say "suggests". | Say 10x, ten times, 10 times, or proven |
 | Is there research on men after prostate surgery? | Cite Au et al., PM&R 2020: small trial, 0.94 vs 2.07 leaks/day at 26 weeks, independent of Dr. Crawford | Apply it to women |
 | What is VESy? | Say Video, EMG, Synchronization | Call it ultrasound |

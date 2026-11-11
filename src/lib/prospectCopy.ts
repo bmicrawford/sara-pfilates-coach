@@ -11,7 +11,7 @@ export const PROSPECT_CLAIM_CREATOR = 'It was created by Dr. Bruce Crawford.'
 export const PROSPECT_CLAIM_PRICE = "The women's course is a $149 lifetime purchase."
 
 export const PROSPECT_CLAIM_RESULT =
-  '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training.'
+  '80% of people who use the program improved by at least 50% in 28 days.'
 
 export const PROSPECT_ALONGSIDE = 'That course stays on Kajabi. Sara sits alongside it.'
 
