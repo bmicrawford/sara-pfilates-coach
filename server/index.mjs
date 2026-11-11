@@ -22,8 +22,11 @@ import {
   paidEndpoint,
   passFromParts,
 } from './demoGate.mjs'
+import { dispatchReminderRequest, remindersConfigured, vapidFromEnv } from './reminders.mjs'
+import { createFileReminderStore } from './remindersFileStore.mjs'
 
 const redeemStore = createFileRedeemStore(new URL('./.redeem-store.json', import.meta.url))
+const reminderStore = createFileReminderStore(new URL('./.reminder-store.json', import.meta.url))
 const entitlementStore = createFileEntitlementStore(new URL('./.kajabi-entitlements.json', import.meta.url))
 const demoCounters = memoryCounterStore()
 const kajabiCounters = memoryCounterStore()
@@ -80,6 +83,7 @@ const server = createServer(async (req, res) => {
         talk: Boolean(process.env.DID_API_KEY),
         stream: Boolean(process.env.DID_API_KEY && process.env.DID_AGENT_ID),
         redeem: Boolean(String(process.env.REDEEM_MINT_SECRET || '').trim() && redeemStore),
+        reminders: remindersConfigured(process.env),
       }),
     )
     return
@@ -162,6 +166,44 @@ const server = createServer(async (req, res) => {
       })
     } catch {
       const out = jsonResponse(503, { ok: false, error: 'kajabi_failed' }, origin)
+      res.writeHead(out.status, { ...out.headers, 'Cache-Control': 'no-store' })
+      res.end(out.body)
+    }
+    return
+  }
+
+  if (url.pathname === '/reminders' || url.pathname === '/reminders/vapid') {
+    let body = {}
+    if (req.method === 'POST') {
+      try {
+        const raw = await readBody(req)
+        if (raw.trim()) {
+          const parsed = JSON.parse(raw)
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) body = parsed
+        }
+      } catch {
+        body = {}
+      }
+    }
+    try {
+      const result = await dispatchReminderRequest(url.pathname, req.method || 'GET', {
+        store: reminderStore,
+        redeemStore,
+        vapid: vapidFromEnv(process.env),
+        envSuppress: process.env.REMINDER_SUPPRESS_EMAILS,
+        getHeader: headerGetter(req.headers),
+        body,
+        query: url.searchParams,
+        now: new Date(),
+      })
+      if (!result) {
+        res.writeHead(404, { 'Content-Type': 'application/json', ...corsHeaders(origin) })
+        res.end(JSON.stringify({ reply: 'Not found' }))
+        return
+      }
+      sendJson(res, result, origin, { 'Cache-Control': 'no-store' })
+    } catch {
+      const out = jsonResponse(503, { ok: false, error: 'reminders_failed' }, origin)
       res.writeHead(out.status, { ...out.headers, 'Cache-Control': 'no-store' })
       res.end(out.body)
     }

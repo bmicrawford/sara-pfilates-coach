@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { DailyReminder } from './DailyReminder'
 import {
-  REMINDER_TIME_HINT,
   adherenceSummary,
   answerSymptomCheck,
   checkedToday,
@@ -9,7 +9,6 @@ import {
   everydayMovementIds,
   isPlanPaused,
   readMovementPlan,
-  readReminderTime,
   resumeAfterProviderClearance,
   setEverydayMovementDone,
   shouldShowRestartCue,
@@ -17,7 +16,6 @@ import {
   symptomCheckDue,
   syncPregnancyExclusions,
   todayPlanComplete,
-  writeReminderTime,
   type MovementPlanState,
 } from '../lib/movementPlan'
 import {
@@ -252,7 +250,6 @@ function SymptomQuestion({ onAnswer }: { onAnswer: (gettingWorse: boolean) => vo
 
 export function MovementPhoneSettings() {
   const [plan, setPlan] = useState<MovementPlanState>(() => readMovementPlan())
-  const reminder = readReminderTime(plan)
   const hasWorksheet = currentWorksheet(plan) !== null
 
   useEffect(() => {
@@ -280,16 +277,7 @@ export function MovementPhoneSettings() {
       >
         {hasWorksheet ? 'Redo worksheet' : WORKSHEET_TITLE}
       </Link>
-      <label className="mt-4 block text-sm font-bold text-black">
-        Reminder time
-        <input
-          type="time"
-          value={reminder ?? ''}
-          onChange={(event) => setPlan(writeReminderTime(event.target.value || null))}
-          className="mt-1.5 min-h-11 w-full rounded-2xl border border-black/15 bg-white/75 px-3 text-base font-bold text-black"
-        />
-      </label>
-      <p className="mt-2 text-xs font-bold leading-relaxed text-black">{REMINDER_TIME_HINT}</p>
+      <DailyReminder />
     </section>
   )
 }

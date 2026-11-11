@@ -32,3 +32,14 @@ id = "6465ceb88c4b4fdfbc9cf0374588181d"
 # Comma-separated offer ids that should receive Sara. Deploy-time. Do not commit the live choice.
 # Known $149 offers: 2147989270 women's, 2149556914 men's.
 #   printf '%s' "$KAJABI_SARA_OFFER_IDS" | npx wrangler secret put KAJABI_SARA_OFFER_IDS
+# Daily reminder Web Push. Generate with: node worker/scripts/generate-vapid.mjs
+# Do not commit the values. VAPID_SUBJECT is mailto: or an https URL.
+#   printf '%s' "$VAPID_PUBLIC_KEY" | npx wrangler secret put VAPID_PUBLIC_KEY
+#   printf '%s' "$VAPID_PRIVATE_KEY" | npx wrangler secret put VAPID_PRIVATE_KEY
+#   printf '%s' "$VAPID_SUBJECT" | npx wrangler secret put VAPID_SUBJECT
+# Optional comma-separated do-not-contact seed. KV key ops:do-not-contact is the other seed.
+#   printf '%s' "$REMINDER_SUPPRESS_EMAILS" | npx wrangler secret put REMINDER_SUPPRESS_EMAILS
+
+[triggers]
+# Every minute. A sign-up is due from its local minute through the next 14 minutes, once per local date.
+crons = ["* * * * *"]

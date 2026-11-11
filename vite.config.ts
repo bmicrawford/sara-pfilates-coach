@@ -74,6 +74,7 @@ export default defineConfig(({ command }) => {
           ],
         },
         workbox: {
+          importScripts: ['push-handler.js'],
           cacheId: 'sara-pwa-20260920-home-sara-portrait',
           skipWaiting: true,
           clientsClaim: true,
@@ -111,6 +112,7 @@ export default defineConfig(({ command }) => {
         '/health': { target: 'http://127.0.0.1:8787', changeOrigin: true },
         '/redeem': { target: 'http://127.0.0.1:8787', changeOrigin: true },
         '/kajabi': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+        '/reminders': { target: 'http://127.0.0.1:8787', changeOrigin: true },
       },
     },
     preview: {
@@ -130,6 +132,7 @@ export default defineConfig(({ command }) => {
         '/health': { target: 'http://127.0.0.1:8787', changeOrigin: true },
         '/redeem': { target: 'http://127.0.0.1:8787', changeOrigin: true },
         '/kajabi': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+        '/reminders': { target: 'http://127.0.0.1:8787', changeOrigin: true },
       },
     },
   }
