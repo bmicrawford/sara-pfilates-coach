@@ -30,7 +30,7 @@ export const RESEARCH_FACTS = [
     id: 'clinical-74-33',
     source:
       'Dr. Crawford, approved claim, Oct 23, 2026; strength 33%: Crawford & Noia, SGS 2014 poster, and Crawford, Topics in Geriatric Rehabilitation 2017; 74% seniors only: 2023 Evergreen Commons',
-    fact: '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training. In a small retrospective chart review, pelvic floor strength by vaginal balloon manometry improved 33% (p=.006). Do not add a timeframe to that 33% strength figure, and do not pair it with 74% as a result for community-dwelling women. The 74% bladder-symptom figure is only the 2023 Evergreen Commons result for seniors. Never quote 74% as a result for community-dwelling women or as a general result.',
+    fact: '80% of people who use the program improved by at least 50% in 28 days. Quote that sentence verbatim and never split or paraphrase it. In a small retrospective chart review, pelvic floor strength by vaginal balloon manometry improved 33% (p=.006). Do not add a timeframe to that 33% strength figure, and do not pair it with 74% as a result for community-dwelling women. The 74% bladder-symptom figure is only the 2023 Evergreen Commons result for seniors. Never quote 74% as a result for community-dwelling women or as a general result.',
   },
   {
     id: 'au-2020',
@@ -114,7 +114,7 @@ export const RESEARCH_QA_CASES = [
     prompt: 'What results has PfilAtes research shown?',
     mustMention: ['80%', '28 days', '33%', '2023 Evergreen Commons', 'seniors'],
     goodReply:
-      '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training. A small chart review found pelvic floor strength improved 33%. The 74% bladder-symptom figure is only the 2023 Evergreen Commons result for seniors, not a result for community-dwelling women.',
+      '80% of people who use the program improved by at least 50% in 28 days. A small chart review found pelvic floor strength improved 33%. The 74% bladder-symptom figure is only the 2023 Evergreen Commons result for seniors, not a result for community-dwelling women.',
     badReply:
       'Studies have proven PfilAtes™ cures leaks for community-dwelling women, a 74% improvement and a 95% success rate.',
   },
@@ -152,5 +152,5 @@ Research rules:
 - Call the studies small or early. Say "suggests" or "may"; never say proven or cure. ${KEGEL_10X_BAN} ${KEGEL_COMPARISON}
 - The 74% bladder-symptom figure is only the 2023 Evergreen Commons result for seniors. Never quote 74% as a result for community-dwelling women or as a general result. Do not pair the 33% strength figure with 74% for community-dwelling women.
 - The prostate-surgery trial studied men only. Do not stretch it to women or other conditions.
-- If someone asks about a study, number, author, or condition not listed here, say: "I don't know of a PfilAtes study on that," and do not guess or invent one.`
+- If someone asks about a study, number, author, or condition not listed here, say: "I don't know of a PfilAtes study on that," and do not guess or invent one. Do not say that in an emergency.`
 }

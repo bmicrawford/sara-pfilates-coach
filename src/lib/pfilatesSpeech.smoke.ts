@@ -46,6 +46,12 @@ assert(
   rewritePfilatesForSpeech('fill-ah-tees') === 'fill-ah-tees',
   'spoken form is idempotent',
 )
+assert(rewritePfilatesForSpeech('PfilAtes™') === 'fill-ah-tees', '™ is not spoken')
+assert(
+  rewritePfilatesForSpeech('Spell PfilAtes™ aloud.') === 'Spell fill-ah-tees aloud.',
+  'a marked name is spoken as fil-la-tees',
+)
+assert(!rewritePfilatesForSpeech('PfilAtes™ and PfilAtes.').includes('™'), 'speech drops every trademark mark')
 
 const helperSrc = readFileSync(new URL('./pfilatesSpeech.mjs', import.meta.url), 'utf8')
 assert(/fill-ah-tees/.test(helperSrc), 'helper documents fill-ah-tees')

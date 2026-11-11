@@ -38,6 +38,7 @@ assert(
   'ara /speak rewrites PfilAtes before TTS',
 )
 assert(clipSpeakText('pfilates') === 'fill-ah-tees', 'rewrite is case-insensitive')
+assert(clipSpeakText('Spell PfilAtes™.') === 'Spell fill-ah-tees.', 'ara does not speak the trademark mark')
 assert(clipSpeakText('Pilates class') === 'Pilates class', 'does not rewrite Pilates')
 assert(
   SARA_STILL_URL === 'https://sara-pfilates.surge.sh/avatar/sara-default.png',

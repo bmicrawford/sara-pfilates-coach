@@ -1,9 +1,9 @@
 /**
  * Speak-only brand pronunciation.
  *
- * On-screen / chat copy stays `PfilAtes`. Before D-ID JennyNeural `speak()`
+ * On-screen / chat copy stays `PfilAtes™`. Before D-ID JennyNeural `speak()`
  * and xAI ara `POST /speak`, rewrite mentions to a plain-text form both
- * engines already know how to say.
+ * engines already know how to say. Drop a trailing ™ so it is not spoken.
  *
  * Why `fill-ah-tees` (not `Filates`, not `fil la tees`):
  * - D-ID Agents `speak({ type: 'text' })` is plain text (no SSML phoneme).
@@ -18,7 +18,7 @@
  */
 export const PFILATES_SPOKEN = 'fill-ah-tees'
 
-const BRAND = /\bpfilates\b/gi
+const BRAND = /\bpfilates\b\u2122*/gi
 
 /** @param {string} [text] */
 export function rewritePfilatesForSpeech(text) {

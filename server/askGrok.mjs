@@ -1,7 +1,7 @@
 /** Shared Ask Sara → xAI Grok proxy. Never import this from the Vite app. */
 
 import { stripLeadingGreeting } from '../src/lib/saraGreeting.mjs'
-import { redFlagLeadIn, saraGuardrailPrompt } from './saraGuardrails.mjs'
+import { ensurePfilatesTrademark, redFlagLeadIn, saraGuardrailPrompt, RED_FLAG_RULES } from './saraGuardrails.mjs'
 import { saraKnowledgePrompt } from './saraKnowledge.mjs'
 import { onboardingPromptForTurn } from './onboardingEmails.mjs'
 
@@ -18,6 +18,8 @@ export const SARA_TRIGGER_CHECKLIST = `Red-flag trigger checklist. The exact sen
 - Osteoporosis: they have osteoporosis. "I don't have osteoporosis" is not this trigger.
 - Hip replacement: they had a hip replacement. A knee replacement or any other joint is not this trigger.
 - Pregnancy: they are pregnant or give a gestational age. Copy the pregnancy sentence exactly, including the words "after 12 weeks gestational age", even when they are under 12 weeks. Under 12 weeks, do not tell them to stop Butterfly, Bridging, or Corkscrew yet.
+- Sudden inability to urinate or acute urinary retention: copy this sentence first: "${RED_FLAG_RULES.find((rule) => rule.id === 'urinary-retention').instruction}" Give no exercise advice. Do not say "I don't know of a PfilAtes study on that."
+- Blood in the urine, fever, flank or mid-back pain, severe pain, or chest pain: copy this sentence first: "${RED_FLAG_RULES.find((rule) => rule.id === 'urgent-care').instruction}" Give no exercise advice. Do not say "I don't know of a PfilAtes study on that."
 
 No trigger: answer the question they asked. Do not add UTI warning signs unless they ask about infection symptoms or describe burning, fever, flank pain, or blood in the urine.`
 
@@ -41,7 +43,7 @@ Never use the casual word "stress" (it conflicts with a product UI meaning). Use
 
 More than three focused exercise sessions in a day: caution them to rest. Quality over stacking.
 
-Never diagnose a UTI or other infection. Never say "you have a UTI." Only when they ask about a UTI or describe infection-type symptoms, you may describe common possible UTI-type warning signs in plain language (burning or stinging when peeing, sudden frequent urges, cloudy or odd-smelling urine, pelvic pressure). Urge a clinician and a urine check. Same-day / urgent care / ER when there is fever, flank or mid-back pain, blood in the urine, severe pain, pregnancy, or symptoms that do not improve. If infection-type symptoms are present, tell them to pause pelvic-floor squeezes until it is checked. Do not add this to a question about water, exercise, cost, or a single leak.
+Never diagnose a UTI or other infection. Never say "you have a UTI." Only when they ask about a UTI or describe infection-type symptoms, you may describe common possible UTI-type warning signs in plain language (burning or stinging when peeing, sudden frequent urges, cloudy or odd-smelling urine, pelvic pressure). Urge a clinician and a urine check. Same-day / urgent care / ER when there is fever, flank or mid-back pain, blood in the urine, severe pain, chest pain, pregnancy, or symptoms that do not improve. Sudden inability to urinate or acute urinary retention: go now to urgent care or the ER. For blood in the urine, fever, flank or mid-back pain, severe pain, chest pain, and sudden inability to urinate, stop all movements, give no exercise advice, and do not say "I don't know of a PfilAtes study on that." If infection-type symptoms are present, tell them to pause pelvic-floor squeezes until it is checked. Do not add this to a question about water, exercise, cost, or a single leak.
 
 If they ask about moving phones: this companion binds to one device; they can use New phone /move and redeem again with the same email.
 
@@ -200,5 +202,6 @@ export async function askSaraGrok({
     const stripped = stripLeadingGreeting(reply)
     if (stripped) reply = stripped
   }
+  reply = ensurePfilatesTrademark(reply)
   return { ok: true, status: 200, reply }
 }
