@@ -16,6 +16,8 @@
     "smoke:speak": "node server/speakSara.smoke.mjs",
     "smoke:diary": "node --experimental-strip-types src/lib/diary.smoke.ts",
     "smoke:exercise": "node --experimental-strip-types src/lib/exercise.smoke.ts",
+    "smoke:movement": "node --experimental-strip-types src/lib/movements.smoke.ts",
+    "smoke:reminders": "node server/reminders.smoke.mjs",
     "smoke:verify-api": "node scripts/verify-sara-api.mjs --self-test",
     "smoke:redeem": "node server/redeem.smoke.mjs",
     "smoke:kajabi": "node server/kajabiPurchase.smoke.mjs && node --experimental-strip-types src/lib/openSara.smoke.ts",

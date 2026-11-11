@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { TalkingPortrait } from '../components/TalkingPortrait'
 import { askSaraRemote, isSaraUnreachable } from '../lib/askSara'
+import { everydayMovementsAskContext } from '../lib/movementPlan'
 import { stripLeadingGreeting } from '../lib/saraGreeting.mjs'
 import { isDemoVoiceOnly } from '../lib/demoPass'
 import {
@@ -518,7 +519,7 @@ export function AskSara() {
     setMessages((cur) => [...cur, you])
     setDraft('')
     setBusy(true)
-    const rawReply = await askSaraRemote(text, prior)
+    const rawReply = await askSaraRemote(text, prior, everydayMovementsAskContext())
     const reply = prior.length > 0 ? stripLeadingGreeting(rawReply) : rawReply
     const sara: ChatMessage = { id: uid(), from: 'sara', text: reply, at: nowIso() }
     setMessages((cur) => {

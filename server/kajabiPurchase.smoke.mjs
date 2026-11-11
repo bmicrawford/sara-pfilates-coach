@@ -668,8 +668,11 @@ async function workerPost(pathname, { json, key, ip, bearer, origin } = {}) {
 const health = await askWorker.fetch(new Request('https://worker.test/health'), workerEnv)
 const healthBody = await health.json()
 assert(
-  Object.keys(healthBody).sort().join(',') === 'model,ok,redeem,stream,talk,tts' && healthBody.ok === true && healthBody.redeem === true,
-  'Worker /health is unchanged',
+  Object.keys(healthBody).sort().join(',') === 'model,ok,redeem,reminders,stream,talk,tts' &&
+    healthBody.ok === true &&
+    healthBody.redeem === true &&
+    healthBody.reminders === false,
+  'Worker /health keeps its fields and adds reminders, off until VAPID is set',
 )
 const workerDenied = await workerPost('/kajabi/purchase', { key: 'nope', json: paymentSucceeded() })
 assert(workerDenied.status === 401 && workerKv.size === 0, 'Worker purchase rejects a bad key and writes nothing')

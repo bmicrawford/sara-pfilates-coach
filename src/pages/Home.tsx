@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../components/BottomSheet'
+import { MovementPhoneSettings, TodayPlanCard } from '../components/TodayPlan'
 import { Chip, Field, inputClass } from '../components/Chip'
 import { InstallCoach } from '../components/InstallCoach'
 import { SaraPortrait } from '../components/SaraPortrait'
@@ -185,6 +186,14 @@ export function Home({ session }: Props) {
         <p className="mb-4 rounded-2xl bg-sage-mist px-4 py-3 text-xs text-ink-mute">{smsNote}</p>
       ) : null}
 
+      <TodayPlanCard
+        onLogsChange={() => {
+          const nextLogs = readLogs()
+          setLogs(nextLogs)
+          setExerciseCue(shouldShowExerciseCue(nextLogs))
+        }}
+      />
+
       {active ? (
         <p
           role="status"
@@ -304,6 +313,8 @@ export function Home({ session }: Props) {
           Finish this diary
         </button>
       ) : null}
+
+      <MovementPhoneSettings />
 
       {toast ? (
         <div
