@@ -1,0 +1,18 @@
+Subject: Bowel control: your focus
+Preview: Practical habits to pair with your 10 minutes.
+Delay/trigger: Sequence 'Women concern track: bowel' email T1. Trigger: tag pf-w-concern-bowel added (Email 2 click) → subscribe to this sequence; delay 4 days after tag (~Day 6).
+Tag action on links: None (no tagging links).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}}, you told us trouble controlling gas or stool is your main concern.
+- Include the back passage in your squeeze. When you do the voluntary pelvic floor contraction, think of gently holding in gas as well as lifting.
+- Track it. Jot bowel urgency or accidents in the margin of your exercise log.
+- Don't strain on the toilet. Feet on a small footstool, lean forward, and breathe out.
+
+Questions? Just hit reply. My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

@@ -21,7 +21,9 @@ import {
   type MovementPlanState,
 } from '../lib/movementPlan'
 import {
+  AI_COACH_LINE,
   COURSE_LINE,
+  DAILY_ROUTINE_LINE,
   HEALTH_SCREEN_TITLE,
   NO_EVERYDAY_PLAN_MESSAGE,
   PAIN_REDO_LINE,
@@ -111,6 +113,8 @@ export function TodayPlanCard({ onLogsChange }: Props) {
         <>
           <h2 className="font-serif text-2xl font-bold text-black">{WORKSHEET_TITLE}</h2>
           <p className="mt-2 text-sm font-bold leading-relaxed text-black">{WORKSHEET_INTRO}</p>
+          <p className="mt-2 text-sm font-bold leading-relaxed text-black">{DAILY_ROUTINE_LINE}</p>
+          <p className="mt-2 text-sm font-bold leading-relaxed text-black">{AI_COACH_LINE}</p>
           <Link
             to="/worksheet"
             className="mt-4 block rounded-full bg-sage py-3 text-center text-sm font-bold text-white"
@@ -148,6 +152,8 @@ export function TodayPlanCard({ onLogsChange }: Props) {
       ) : (
         <>
           <h2 className="font-serif text-2xl font-bold leading-tight text-black">Today's everyday movements</h2>
+          <p className="mt-2 text-sm font-bold leading-relaxed text-black">{DAILY_ROUTINE_LINE}</p>
+          <p className="mt-2 text-sm font-bold leading-relaxed text-black">{AI_COACH_LINE}</p>
           {showSymptomQuestion ? (
             <SymptomQuestion onAnswer={answerSymptoms} />
           ) : null}

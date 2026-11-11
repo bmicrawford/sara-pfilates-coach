@@ -1,0 +1,40 @@
+Subject: Two months of PfilAtes™
+Preview: A quick check-in, plus how to keep the habit going.
+Delay/trigger: Sequence 'PfilAtes™ for Women – Onboarding' email 11. Delay after previous: 15 days (Day 60).
+Tag action on links: consistency buttons → add tag w-d60-consistency-N (1–10).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Two months! Most habits get easier around now, and also easier to let slip. Three ways to stay on track:
+
+- Keep your anchor. Brush your teeth, then do PfilAtes™, morning and evening.
+- Keep it short. 5 minutes is enough, so it doesn't need to be a big event.
+- Keep your pulse sharp. Small range at the hold point, a percussive open-mouth "HA" that engages the transversus abdominis, and a voluntary squeeze.
+
+Check-in: How consistent have you been this month? Tap one (1 = hardly at all, 10 = every day).
+[1] https://www.pfilates.com/thanks-got-it?a=w-d60-consistency-1
+[2] https://www.pfilates.com/thanks-got-it?a=w-d60-consistency-2
+[3] https://www.pfilates.com/thanks-got-it?a=w-d60-consistency-3
+[4] https://www.pfilates.com/thanks-got-it?a=w-d60-consistency-4
+[5] https://www.pfilates.com/thanks-got-it?a=w-d60-consistency-5
+[6] https://www.pfilates.com/thanks-got-it?a=w-d60-consistency-6
+[7] https://www.pfilates.com/thanks-got-it?a=w-d60-consistency-7
+[8] https://www.pfilates.com/thanks-got-it?a=w-d60-consistency-8
+[9] https://www.pfilates.com/thanks-got-it?a=w-d60-consistency-9
+[10] https://www.pfilates.com/thanks-got-it?a=w-d60-consistency-10
+
+Then hit reply with one thing that would make it easier. We read every answer.
+
+Share it: Know someone who could use 10 minutes a day for her pelvic floor? https://www.pfilates.com/womens-course
+
+Quick answers
+- I fell off the routine. Restart today. Re-watch the Movement Selection Video if you need a refresher.
+- Forgot your password? Use the reset link at https://www.pfilates.com/login.
+- Where are the downloads again? Outline and Objectives → Downloads.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

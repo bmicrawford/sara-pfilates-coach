@@ -1,4 +1,4 @@
-import { addLocalDays, EXERCISE_DAILY_MINUTES, localDayKeyFromDate, startOfLocalDay } from './exercise.ts'
+import { addLocalDays, localDayKeyFromDate, startOfLocalDay } from './exercise.ts'
 import { addDiaryLog, readLogs, removeLog } from './mockServer.ts'
 import {
   COURSE_LINE,
@@ -20,7 +20,8 @@ import type { ExerciseLog } from './types.ts'
 /** localStorage key `sara.movementPlan`. Worksheet history, today's checks, reminder stub. */
 export const MOVEMENT_PLAN_STORAGE_KEY = 'movementPlan'
 
-export const EVERYDAY_PLAN_MINUTES = String(EXERCISE_DAILY_MINUTES)
+/** A finished day is the about-10-minute routine, morning and evening together. */
+export const EVERYDAY_PLAN_MINUTES = '10'
 
 export const REMINDER_TIME_HINT = 'Saved on this phone. Reminders are not sent yet.'
 
@@ -171,7 +172,7 @@ export function everydayMovementsAskContext(state: MovementPlanState = readMovem
   if (isPlanPaused(state)) return ''
   const names = everydayMovementNames(state)
   if (names.length === 0) return ''
-  return `The person's current everyday movements, chosen on their Movement Selection Worksheet, are: ${names.join('; ')}. ${COURSE_LINE} They are done as taught in the PfilAtes course on Kajabi. Do not invent exercise instructions, and do not suggest movements they did not choose.`
+  return `The person's current everyday movements, chosen on their Movement Selection Worksheet, are: ${names.join('; ')}. ${COURSE_LINE} They are done as taught in the PfilAtes™ course on Kajabi. About 10 minutes a day. Do not invent exercise instructions, and do not suggest movements they did not choose.`
 }
 
 export function saveWorksheetResult(

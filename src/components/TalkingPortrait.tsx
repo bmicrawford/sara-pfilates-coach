@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { SARA_PORTRAIT_STILL } from '../lib/saraPortrait'
 import { isSaraVideoLive, replaySaraStreamVideo } from '../lib/saraStream'
+import { subscribeSaraLevel } from '../lib/speakSara'
 
 const STILL = SARA_PORTRAIT_STILL
 
@@ -8,6 +9,8 @@ type Props = {
   talking: boolean
   listening?: boolean
   streaming?: boolean
+  /** Muted warm connect is still in progress. The still keeps moving. */
+  preparing?: boolean
   onVideoEl?: (el: HTMLVideoElement | null) => void
   onVideoLive?: (live: boolean) => void
 }
@@ -16,11 +19,25 @@ export function TalkingPortrait({
   talking,
   listening = false,
   streaming = false,
+  preparing = false,
   onVideoEl,
   onVideoLive,
 }: Props) {
+  const rootRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const showStream = Boolean(streaming)
+  const phase = showStream ? 'stream' : talking ? 'speaking' : listening ? 'listening' : 'idle'
+
+  useEffect(() => {
+    return subscribeSaraLevel((level, audible) => {
+      const root = rootRef.current
+      if (!root) return
+      const next = Math.max(0, Math.min(1, level))
+      root.style.setProperty('--sara-level', next.toFixed(3))
+      if (audible) root.setAttribute('data-sara-audible', 'true')
+      else root.removeAttribute('data-sara-audible')
+    })
+  }, [])
 
   // Bind during commit so Send/Play connect can attach srcObject before effects run.
   const setVideoNode = useCallback(
@@ -50,6 +67,9 @@ export function TalkingPortrait({
     video.addEventListener('playing', kick)
     video.addEventListener('playing', reportLive)
     video.addEventListener('loadeddata', reportLive)
+    // iOS can report videoWidth 0 at 'playing'. resize / timeupdate see the frame.
+    video.addEventListener('resize', reportLive)
+    video.addEventListener('timeupdate', reportLive)
     video.addEventListener('emptied', reportDead)
     video.addEventListener('error', reportDead)
     return () => {
@@ -59,6 +79,8 @@ export function TalkingPortrait({
       video.removeEventListener('playing', kick)
       video.removeEventListener('playing', reportLive)
       video.removeEventListener('loadeddata', reportLive)
+      video.removeEventListener('resize', reportLive)
+      video.removeEventListener('timeupdate', reportLive)
       video.removeEventListener('emptied', reportDead)
       video.removeEventListener('error', reportDead)
     }
@@ -66,13 +88,19 @@ export function TalkingPortrait({
 
   return (
     <div
+      ref={rootRef}
+      data-sara-phase={phase}
+      data-sara-preparing={preparing ? 'true' : 'false'}
       className={`sara-portrait sara-portrait-cover relative overflow-hidden bg-sage-mist ${
         talking || showStream ? 'sara-portrait-live' : listening ? 'sara-portrait-listening' : ''
       }`}
     >
+      <div className="sara-glow" aria-hidden />
       <video
         ref={setVideoNode}
-        className="sara-stream-video absolute inset-0 z-0 h-full w-full object-cover object-[center_22%]"
+        className={`sara-stream-video absolute inset-0 h-full w-full object-cover object-[center_22%] ${
+          showStream ? 'sara-stream-visible' : 'z-0'
+        }`}
         poster={STILL}
         playsInline
         muted
@@ -83,10 +111,14 @@ export function TalkingPortrait({
       <img
         src={STILL}
         alt="Sara"
-        className={`absolute inset-0 z-10 h-full w-full object-cover object-[center_22%] ${
+        className={`sara-portrait-face absolute inset-0 z-10 h-full w-full object-cover object-[center_22%] ${
           showStream ? 'opacity-0' : 'opacity-100'
         }`}
       />
+      <span className="sara-blink" aria-hidden>
+        <span />
+        <span />
+      </span>
     </div>
   )
 }

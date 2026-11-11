@@ -1,0 +1,43 @@
+Subject: Your "before" check-in (2 minutes, just tap)
+Preview: Ten quick taps now, so on Day 28 you can see what's changed.
+Delay/trigger: Sequence 'PfilAtes™ for Men – Onboarding', NEW email right after welcome. Delay: 1 hour after Email 1 (Day 0).
+Tag action on links: each button → Add tag m-c10-pre-q{n}-{score} (e.g. m-c10-pre-q3-2). Lands on thanks-got-it. 41 links (Q5 pads has 5 options: 0,1,2,3,4 or more).
+From: Dr. Bruce Crawford | PfilAtes™ | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Before you start practicing, take 2 minutes for your "before" picture. This is the C-10 Symptom Questionnaire from your course downloads, right here in the email. Tap the answer that fits you best today. Each tap saves your answer.
+
+How big a problem is your bladder?
+1. How much of a problem is having to urinate too often?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q1-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q1-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q1-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q1-3
+2. How much of a problem is having to urinate during the night?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q2-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q2-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q2-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q2-3
+3. How much of a problem is having to rush to the bathroom to avoid leaking?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q3-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q3-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q3-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q3-3
+4. How much of a problem is urine leakage related to coughing, sneezing, laughing, or exercise?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q4-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q4-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q4-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q4-3
+5. How many pads do you use daily?
+   [0] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q5-0  [1] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q5-1  [2] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q5-2  [3] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q5-3  [4 or more] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q5-4
+
+How does your bladder problem affect your day-to-day activities?
+6. Does your bladder problem affect your ability to perform normal household chores?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q6-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q6-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q6-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q6-3
+7. Does your bladder problem affect your ability to exercise?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q7-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q7-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q7-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q7-3
+8. Does your bladder problem affect your ability to do things you enjoy?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q8-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q8-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q8-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q8-3
+9. Does/would your bladder problem affect your ability to work?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q9-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q9-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q9-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q9-3
+10. How likely are you to avoid leaving the house because of your bladder problem?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q10-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q10-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q10-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=m-c10-pre-q10-3
+
+On Day 28 I'll send you the same questions so you can see your own progress. You can still fill out the printed C-10 in your downloads if you like paper.
+
+Questions? Just hit reply. My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor. This check-in is a personal tracking tool, not a diagnosis.

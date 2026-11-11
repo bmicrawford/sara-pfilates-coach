@@ -16,30 +16,40 @@ import {
   readExerciseGate,
 } from '../lib/exercise'
 import { exerciseLogReportSubtitle } from '../lib/exercisePdf'
-import { readLogs } from '../lib/mockServer'
+import { isDemoPass, reportForViewer } from '../lib/demoPass'
+import { readLogs, readSession } from '../lib/mockServer'
 import { formatDateOfBirth, readPatient } from '../lib/patient'
+import { PROSPECT_NO_IDENTITY } from '../lib/prospectCopy'
 import { formatDay } from '../lib/storage'
 
 export function ExerciseLog() {
   const [logs] = useState(() => readLogs())
   const [gate, setGate] = useState(() => readExerciseGate())
-  const patient = readPatient()
-  const report = useMemo(() => fourWeekExerciseReport(logs, { patient, gate }), [logs, patient, gate])
+  const prospect = isDemoPass(readSession()?.redeemToken)
+  const patient = prospect ? null : readPatient()
+  const report = useMemo(
+    () => reportForViewer(fourWeekExerciseReport(logs, { patient, gate }), prospect),
+    [logs, patient, gate, prospect],
+  )
 
   return (
     <ReportShell title={EXERCISE_REPORT_TITLE} subtitle={exerciseLogReportSubtitle(report)}>
       <PfilatesBrandHeader />
 
-      <section className="mb-5 rounded-2xl bg-cream-card px-4 py-4 shadow-card">
-        <p className="text-xs uppercase tracking-wide text-ink-faint">Patient</p>
-        <p className="mt-1 font-serif text-xl text-ink">{report.patientName}</p>
-        <p className="mt-1 text-sm text-ink">
-          Date of birth{' '}
-          {report.dateOfBirth.includes('-') && report.dateOfBirth.length === 10
-            ? formatDateOfBirth(report.dateOfBirth)
-            : report.dateOfBirth}
-        </p>
-      </section>
+      {prospect ? (
+        <p className="mb-5 text-sm text-ink-mute">{PROSPECT_NO_IDENTITY}</p>
+      ) : (
+        <section className="mb-5 rounded-2xl bg-cream-card px-4 py-4 shadow-card">
+          <p className="text-xs uppercase tracking-wide text-ink-faint">Patient</p>
+          <p className="mt-1 font-serif text-xl text-ink">{report.patientName}</p>
+          <p className="mt-1 text-sm text-ink">
+            Date of birth{' '}
+            {report.dateOfBirth.includes('-') && report.dateOfBirth.length === 10
+              ? formatDateOfBirth(report.dateOfBirth)
+              : report.dateOfBirth}
+          </p>
+        </section>
+      )}
 
       <section className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-cream-card px-4 py-3 shadow-card">

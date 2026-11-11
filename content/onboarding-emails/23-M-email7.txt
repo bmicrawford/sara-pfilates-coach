@@ -1,0 +1,37 @@
+Subject: Noticing results? (one click)
+Preview: Three weeks in. Tell me how it's going with one click.
+Delay/trigger: Sequence 'PfilAtes™ for Men – Onboarding' email 7. Delay after previous: 4 days (Day 21).
+Tag action on links: Yes→pf-d21-yes; A little→pf-d21-little; Not yet→pf-d21-notyet (pf-d21-notyet triggers 'Let's troubleshoot together' immediately).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+You're three weeks into PfilAtes™. Honest question: are you noticing results?
+
+Yes → https://www.pfilates.com/thanks-got-it?a=pf-d21-yes
+A little → https://www.pfilates.com/thanks-got-it?a=pf-d21-little
+Not yet → https://www.pfilates.com/thanks-got-it?a=pf-d21-notyet
+
+Whatever you click is useful. It tells me how to help.
+
+If you clicked "Not yet," you are not behind. Here's what to check:
+1. Your movements. Are your 2–3 movements really your best? Pull out your worksheet. Pick the pain-free ones you could do every day that scored highest. If you're unsure, try Lunge, Bridge, Hovering, Cat Cow or Butterfly.
+2. Your pulse. All three parts at the same moment: a small range at the hold point, a short, forceful, open-mouth "HA," and a voluntary squeeze (picture stepping into cold water). Re-watch the Squat in the Movement Selection Video.
+3. Your consistency. Look at your exercise log. Are you getting both 5-minute sessions in most days? Tie them to things you already do every day.
+4. Your measuring. Your exercise log has you repeat the bladder diary on Days 25–28. That's where you'll see your own numbers.
+5. Some coaching. The Certified Teachers list on https://www.pfilates.com can connect you with someone who can watch your form.
+
+And reply to this email. Tell me your movements and how often you're practicing, and we'll help you troubleshoot.
+
+Clicked "Yes" or "A little"? Great. Keep going. Your Day-28 check is next week.
+
+Quick answers
+- Should I add more movements? Not yet. Get your best 2–3 right first.
+- Can I change movements? Yes. Move to your next-highest pain-free score.
+- Something hurts. Stop that movement and talk with your doctor if the pain continues.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

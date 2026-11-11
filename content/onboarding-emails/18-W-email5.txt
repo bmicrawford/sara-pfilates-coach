@@ -1,0 +1,31 @@
+Subject: Your 30-second pulse self-check
+Preview: Run through these 4 questions at your next session.
+Delay/trigger: Sequence 'PfilAtes™ for Women – Onboarding' email 5. Delay after previous: 3 days (Day 11).
+Tag action on links: None (no tagging links; plain URLs only).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+This is my fourth reminder about the pulse, because it really is the part that matters most. At your next session, ask yourself these 4 questions:
+
+1. Did I do the full movement first, then settle at my hold point?
+2. Is my pulse small? It should stay near the hold point, not go through a full repetition.
+3. Is my breath percussive? A short, forceful, open-mouth exhale ("HA") that I can feel firm up my deep abdominal wall, the transversus abdominis.
+4. Am I squeezing on purpose? A voluntary pelvic floor contraction, timed with the breath and the pulse.
+
+Four yeses means you're doing PfilAtes™ the way it was designed.
+
+P.S. If a friend has ever said "I leak when I laugh," she might want to know about this. Here's the link: https://www.pfilates.com/womens-course
+
+Questions? Just hit reply. My team and I read every message.
+
+Quick answers
+- Where can I re-watch the pulse? Learn the Movements → Movement Selection Video (the Squat section).
+- How long should each session take? 5 minutes, twice a day: 10 minutes total.
+- I'm busy. Can I do 10 minutes at once? The course is built on 5 in the morning and 5 in the evening. Keep that rhythm if you can.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

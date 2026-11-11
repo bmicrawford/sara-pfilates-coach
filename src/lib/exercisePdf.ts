@@ -105,8 +105,8 @@ export function exerciseLogPdfPlainText(doc: ExercisePdfDoc): string {
     doc.title,
     doc.subtitle,
     ...(doc.attestedNote ? [doc.attestedNote] : []),
-    `Name: ${doc.patientName}`,
-    `Date of birth: ${doc.dateOfBirth}`,
+    ...(doc.patientName ? [`Name: ${doc.patientName}`] : []),
+    ...(doc.dateOfBirth ? [`Date of birth: ${doc.dateOfBirth}`] : []),
     '',
   ]
   for (const stat of doc.stats) lines.push(`${stat.label}: ${stat.value}`)
@@ -186,8 +186,8 @@ export async function buildExerciseLogPdf(
   writeWrapped(model.title, 20, 'bold', 4)
   writeWrapped(model.subtitle, 11, 'normal', 8)
   if (model.attestedNote) writeWrapped(model.attestedNote, 10, 'normal', 8)
-  writeWrapped(`Name: ${model.patientName}`, 12, 'bold', 1)
-  writeWrapped(`Date of birth: ${model.dateOfBirth}`, 12, 'normal', 12)
+  if (model.patientName) writeWrapped(`Name: ${model.patientName}`, 12, 'bold', model.dateOfBirth ? 1 : 12)
+  if (model.dateOfBirth) writeWrapped(`Date of birth: ${model.dateOfBirth}`, 12, 'normal', 12)
 
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(11)

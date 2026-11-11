@@ -1,0 +1,20 @@
+Subject: What the research says about stress leakage
+Preview: Two studies on pelvic floor training, and what they mean for you.
+Delay/trigger: Sequence 'Women concern track: sui' email T2. Delay 17 days after T1 (~Day 23).
+Tag action on links: None (no tagging links).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}}, some background on pelvic floor training for stress leakage:
+- Cochrane review (Dumoulin 2018): women with stress leakage who did pelvic floor muscle training were 8 times more likely to report cure than women who had no treatment: 56% vs 6%. This compared training with no treatment, used a small number of trials and women, and looked at pelvic floor muscle training in general. It did not test PfilAtes™.
+- Supervision helped in one trial (Fitz 2020): women whose training was supervised in a clinic were objectively cured more often than women who trained at home: 62% vs 28%. It was a single centre, the confidence interval was wide, and it did not test PfilAtes™. If you'd like someone to check your form, look at the Certified Teachers list on https://www.pfilates.com.
+- Tip: keep both 5-minute sessions every day, and check that each pulse has all three parts.
+
+If you're pregnant: In one study of a pregnancy exercise class that included pelvic floor training (Pelaez 2014), 95.2% of the women who trained never leaked, compared with 60.7% of women in the control group. That result is from the study abstract only, from a single centre, and it did not test PfilAtes™. Get clearance from your OB or midwife before you start, and after 12 weeks of pregnancy avoid any PfilAtes™ movements that involve lying on your back (Butterfly, Bridge, Corkscrew).
+
+Questions? Just hit reply. My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

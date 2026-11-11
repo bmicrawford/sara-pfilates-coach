@@ -1,4 +1,29 @@
-import { askSaraGrok, buildMessages, corsHeaders, SARA_OFFLINE, SARA_SYSTEM, GROK_MODEL } from './askGrok.mjs'
+import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { askSaraGrok, buildMessages, corsHeaders, SARA_DEMO_AUDIENCE, SARA_NO_RED_FLAG, SARA_NO_REPEAT_GREETING, SARA_OFFLINE, SARA_SYSTEM, SARA_TRIGGER_CHECKLIST, GROK_MODEL } from './askGrok.mjs'
+import { stripLeadingGreeting } from '../src/lib/saraGreeting.mjs'
+import { splitSpeakChunksForTurn } from '../src/lib/speakChunks.mjs'
+import {
+  APPROVED_CLAIMS,
+  ESSENTIAL_PFILATES_MOVEMENTS,
+  KEGEL_10X_BAN,
+  KEGEL_COMPARISON,
+  PFILATES_MOVEMENTS,
+  RED_FLAG_QA_CASES,
+  RED_FLAG_QA_NON_MATCHES,
+  RED_FLAG_RULES,
+  matchingRedFlags,
+  saraGuardrailPrompt,
+} from './saraGuardrails.mjs'
+import { ONBOARDING_EMAILS, onboardingPromptForTurn } from './onboardingEmails.mjs'
+import {
+  RESEARCH_ALLOWED_PERCENTS,
+  RESEARCH_FACTS,
+  RESEARCH_QA_CASES,
+  researchReplyIssues,
+  saraKnowledgePrompt,
+} from './saraKnowledge.mjs'
 
 function assert(cond, msg) {
   if (!cond) {
@@ -9,7 +34,25 @@ function assert(cond, msg) {
   }
 }
 
-assert(GROK_MODEL === 'grok-4.6', 'model id is grok-4.6')
+/** 74% may appear only as the 2023 Evergreen Commons senior result, or in a ban on quoting it for community women. */
+function seventyFourProblems(text) {
+  const problems = []
+  for (const line of String(text).split(/\n+/)) {
+    for (const sentence of line.split(/(?<=[.!?])\s+/)) {
+      if (!sentence.includes('74%')) continue
+      const mentionsCommunity = /community(?:-|\s)dwelling women|community women/i.test(sentence)
+      const negated = /(?:never|do not|don't|must not|not be quoted|not quote|do not pair|not a result)/i.test(
+        sentence,
+      )
+      const seniorLabeled = /2023 Evergreen Commons/.test(sentence) && /senior/i.test(sentence)
+      if (mentionsCommunity && !negated) problems.push(sentence.trim())
+      else if (!seniorLabeled && !negated) problems.push(sentence.trim())
+    }
+  }
+  return problems
+}
+
+assert(GROK_MODEL === 'grok-4.20-0309-non-reasoning', 'model id is the non-reasoning grok-4.20')
 assert(
   corsHeaders('https://sara-pfilates.surge.sh')['Access-Control-Allow-Origin'] ===
     'https://sara-pfilates.surge.sh',
@@ -25,35 +68,336 @@ assert(!/reduce stress|don't stress|less stress/i.test(SARA_SYSTEM), 'prompt doe
 assert(/Kajabi/.test(SARA_SYSTEM), 'course stays on Kajabi')
 assert(/UTI/.test(SARA_SYSTEM) && /do not diagnose|Never diagnose/i.test(SARA_SYSTEM), 'UTI: no diagnosis')
 assert(/three/i.test(SARA_SYSTEM), 'session cap mentioned')
-assert(/pelvic pain/i.test(SARA_SYSTEM), 'pelvic pain stop rule')
+assert(/2 to 4 short sentences/.test(SARA_SYSTEM), 'voice replies are 2 to 4 short sentences')
+assert(/no lists/.test(SARA_SYSTEM), 'voice replies have no lists')
+assert(
+  SARA_SYSTEM.indexOf('2 to 4 short sentences') < SARA_SYSTEM.indexOf(saraGuardrailPrompt()),
+  'voice style stays ahead of the guardrails',
+)
+assert(SARA_SYSTEM.includes(SARA_TRIGGER_CHECKLIST), 'system prompt includes the trigger checklist')
+assert(
+  SARA_SYSTEM.indexOf('Red-flag trigger checklist') < SARA_SYSTEM.indexOf(saraGuardrailPrompt()),
+  'trigger checklist stays ahead of the guardrail block',
+)
+assert(/Does not hurt/.test(SARA_TRIGGER_CHECKLIST), 'checklist excludes a movement that does not hurt')
+assert(/don't have osteoporosis/i.test(SARA_TRIGGER_CHECKLIST), 'checklist excludes denied osteoporosis')
+assert(/knee replacement/i.test(SARA_TRIGGER_CHECKLIST), 'checklist excludes a knee replacement')
+assert(/why did I leak/i.test(SARA_TRIGGER_CHECKLIST), 'checklist excludes a cause question about a leak')
+assert(/after 12 weeks gestational age/.test(SARA_TRIGGER_CHECKLIST), 'checklist keeps the pregnancy wording for early pregnancy')
+assert(SARA_SYSTEM.includes(saraGuardrailPrompt()), 'system prompt includes Dr C guardrails')
+assert(
+  /do not invent statistics, studies, cure claims, or diagnoses/i.test(SARA_SYSTEM),
+  'claims whitelist forbids invented stats, studies, cures, and diagnoses',
+)
+assert(
+  /do not replace an evaluation by a medical provider/i.test(SARA_SYSTEM),
+  'Sara does not replace a medical evaluation',
+)
+assert(
+  /sit alongside the \$149 Kajabi course and do not replace it/i.test(SARA_SYSTEM),
+  'Sara sits alongside the Kajabi course',
+)
+assert(/do not invent step-by-step instructions/i.test(SARA_SYSTEM), 'no invented movement instructions')
+assert(
+  /do not add other conditions or advice beyond these rules/i.test(SARA_SYSTEM),
+  'no extra red-flag conditions',
+)
+assert(/after 12 weeks gestational age/i.test(SARA_SYSTEM), 'pregnancy limit is after 12 weeks')
+assert(PFILATES_MOVEMENTS.length === 10, 'ten PfilAtes movements')
+assert(ESSENTIAL_PFILATES_MOVEMENTS.length === 5, 'five essential movements')
+for (const name of ESSENTIAL_PFILATES_MOVEMENTS) {
+  assert(PFILATES_MOVEMENTS.includes(name), `essential movement is one of the ten: ${name}`)
+}
+for (const name of PFILATES_MOVEMENTS) {
+  assert(SARA_SYSTEM.includes(name), `movement name in prompt: ${name}`)
+}
+assert(
+  SARA_SYSTEM.includes(
+    `The Essential PfilAtes Movements are ${ESSENTIAL_PFILATES_MOVEMENTS.slice(0, -1).join(', ')}, and ${ESSENTIAL_PFILATES_MOVEMENTS.at(-1)}.`,
+  ),
+  'essential movements named exactly',
+)
+for (const claim of APPROVED_CLAIMS) {
+  assert(SARA_SYSTEM.includes(claim), `approved claim in prompt: ${claim}`)
+}
+for (const rule of RED_FLAG_RULES) {
+  assert(SARA_SYSTEM.includes(rule.instruction), `red-flag rule in prompt: ${rule.id}`)
+}
+assert(
+  SARA_SYSTEM.includes('If a movement at any time causes pain, stop that movement.'),
+  'movement pain stop rule uses Dr C wording',
+)
+
+const qaDoc = readFileSync(new URL('../docs/sara-red-flag-qa.md', import.meta.url), 'utf8')
+for (const claim of APPROVED_CLAIMS) {
+  assert(qaDoc.includes(claim), `QA doc lists claim: ${claim}`)
+}
+for (const rule of RED_FLAG_RULES) {
+  assert(qaDoc.includes(rule.instruction), `QA doc lists rule: ${rule.id}`)
+}
+for (const name of PFILATES_MOVEMENTS) {
+  assert(qaDoc.includes(name), `QA doc lists movement: ${name}`)
+}
+for (const sample of RED_FLAG_QA_CASES) {
+  const rule = RED_FLAG_RULES.find((item) => item.id === sample.ruleId)
+  assert(rule, `QA case ${sample.id} points at a rule`)
+  assert(qaDoc.includes(sample.prompt), `QA doc lists prompt: ${sample.id}`)
+  const hits = matchingRedFlags(sample.prompt)
+  assert(hits.some((item) => item.id === sample.ruleId), `${sample.id} matches ${sample.ruleId}`)
+  const builtCase = buildMessages(sample.prompt)
+  const lead = builtCase[0].content.slice(SARA_SYSTEM.length)
+  assert(lead.includes('Red-flag lead-in'), `${sample.id} adds a red-flag lead-in`)
+  assert(lead.includes(rule.instruction), `${sample.id} lead-in uses Dr C wording`)
+  assert(!lead.includes(SARA_NO_RED_FLAG), `${sample.id} does not get the no-trigger note`)
+}
+const earlyPregnancy = buildMessages("I'm 8 weeks pregnant. Can I do Corkscrew?")[0].content
+assert(
+  earlyPregnancy.includes('after 12 weeks gestational age') && /under 12 weeks/.test(earlyPregnancy),
+  'an 8-week pregnancy turn still requires the exact 12-week sentence',
+)
+for (const prompt of RED_FLAG_QA_NON_MATCHES) {
+  assert(qaDoc.includes(prompt), `QA doc lists non-match: ${prompt}`)
+  assert(matchingRedFlags(prompt).length === 0, `no red-flag match for: ${prompt}`)
+  const ordinary = buildMessages(prompt)[0].content
+  assert(ordinary === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}`, `no red-flag lead-in for: ${prompt}`)
+  assert(!ordinary.includes('Red-flag lead-in'), `non-trigger does not ask Sara to recite a rule: ${prompt}`)
+}
+
+assert(
+  matchingRedFlags('Side-lying bent knee lift hurts.').some((rule) => rule.id === 'movement-pain'),
+  'hyphenated movement name still counts as pain',
+)
+assert(
+  matchingRedFlags('side lying bent knee lift hurts').some((rule) => rule.id === 'movement-pain'),
+  'spaced side lying name still counts as pain',
+)
+assert(
+  matchingRedFlags('cat cow is painful').some((rule) => rule.id === 'movement-pain'),
+  'spaced cat cow still counts as pain',
+)
+
+const combined = "I'm pregnant and the butterfly hurts."
+const combinedIds = matchingRedFlags(combined).map((rule) => rule.id)
+assert(
+  combinedIds[0] === 'movement-pain' && combinedIds.includes('pregnancy'),
+  'pain rule stays ahead of the pregnancy rule',
+)
+const combinedLead = buildMessages(combined)[0].content.slice(SARA_SYSTEM.length)
+assert(
+  combinedLead.indexOf('stop that movement') !== -1 &&
+    combinedLead.indexOf('stop that movement') < combinedLead.indexOf('after 12 weeks gestational age'),
+  'combined lead-in states pain before the pregnancy limit',
+)
+
+// PfilAtes research knowledge (docs/pfilates-research.md)
+const knowledge = saraKnowledgePrompt()
+assert(SARA_SYSTEM.includes(knowledge), 'system prompt includes PfilAtes research knowledge')
+assert(
+  SARA_SYSTEM.indexOf(saraGuardrailPrompt()) < SARA_SYSTEM.indexOf(knowledge),
+  'red-flag guardrails come before research knowledge',
+)
+assert(/Red-flag rules always come first/.test(knowledge), 'research block defers to red-flag rules')
+assert(/I don't know of a PfilAtes study on that/.test(knowledge), 'research block says "I don\'t know" for unknown studies')
+assert(/never say proven or cure/i.test(knowledge), 'research block bans overstatement')
+assert(knowledge.includes(KEGEL_10X_BAN), 'research block bans 10x by name')
+assert(knowledge.includes(KEGEL_COMPARISON), 'research block gives the EMG Kegel comparison')
+function withoutKegelBan(text) {
+  return String(text).split(KEGEL_10X_BAN).join('')
+}
+assert(!/\b10x\b/i.test(withoutKegelBan(knowledge)), 'research facts do not say 10x')
+assert(!/\bten times\b/i.test(withoutKegelBan(knowledge)), 'research facts do not say ten times')
+assert(!/\b10\s+times\b/i.test(withoutKegelBan(knowledge)), 'research facts do not say 10 times')
+assert(!/\b10x\b/i.test(withoutKegelBan(SARA_SYSTEM)), 'the prompt does not say 10x outside the ban')
+assert(!/\bten times\b/i.test(withoutKegelBan(SARA_SYSTEM)), 'the prompt does not say ten times outside the ban')
+assert(!/\b10\s+times\b/i.test(withoutKegelBan(SARA_SYSTEM)), 'the prompt does not say 10 times outside the ban')
+assert(!APPROVED_CLAIMS.some((claim) => /\b10x\b|\bten times\b|\b10\s+times\b/i.test(claim)), 'approved claims do not include 10x')
+assert(/21% to 56%/.test(SARA_SYSTEM) && /100 consecutive patients/.test(SARA_SYSTEM), 'prompt holds the EMG Kegel figure')
+assert(/suggests/.test(SARA_SYSTEM), 'prompt tells Sara to say suggests')
+assert(PFILATES_MOVEMENTS[8] === 'All Fours Side Leg Lift', 'movement 9 is All Fours Side Leg Lift')
+assert(SARA_SYSTEM.includes('All Fours Side Leg Lift'), 'prompt uses All Fours Side Leg Lift')
+assert(!SARA_SYSTEM.includes('All-4s side leg lift'), 'old All-4s side leg lift name is gone')
+assert(!SARA_SYSTEM.includes('All 4s Bent Knee Lift'), 'old All 4s Bent Knee Lift name is gone')
+assert(
+  matchingRedFlags('All Fours Side Leg Lift hurts.').some((rule) => rule.id === 'movement-pain'),
+  'All Fours Side Leg Lift still counts as pain',
+)
+assert(
+  /hip replacement should avoid Side-lying bent knee lift, Side-lying straight leg circle, Butterfly, and All Fours Side Leg Lift/.test(
+    SARA_SYSTEM,
+  ),
+  'hip-replacement avoid list keeps movements 3, 4, 5, and 9 under the new name',
+)
+assert(/plus the PfilAtes research facts/.test(SARA_SYSTEM), 'claims whitelist admits the research facts')
+assert(knowledge.length < 4500, `research block stays within budget (${knowledge.length} chars)`)
+for (const item of RESEARCH_FACTS) {
+  assert(knowledge.includes(item.fact), `research fact in prompt: ${item.id}`)
+  assert(item.source && knowledge.includes(item.source), `research fact cites a source: ${item.id}`)
+}
+const researchDoc = readFileSync(new URL('../docs/pfilates-research.md', import.meta.url), 'utf8')
+for (const [label, needle] of [
+  ['EMG range', '21% to +56%'],
+  ['Bridge 56%', '56% (15-82)'],
+  ['strength 33%', '33% (13.2 – 16.9 cm H2O, p=.006)'],
+  ['Au leaks', '2.07 vs 0.94'],
+  ['VESy expansion', 'Video, EMG, Synchronization'],
+]) {
+  assert(researchDoc.includes(needle), `research doc backs ${label}`)
+}
+for (const sample of RESEARCH_QA_CASES) {
+  for (const needle of sample.mustMention) {
+    assert(knowledge.includes(needle), `${sample.id}: prompt holds "${needle}"`)
+  }
+  assert(researchReplyIssues(sample.goodReply).length === 0, `${sample.id}: sourced reply passes`)
+  assert(researchReplyIssues(sample.badReply).length > 0, `${sample.id}: overstated reply is caught`)
+  assert(
+    buildMessages(sample.prompt)[0].content === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}`,
+    `${sample.id}: no red-flag lead-in`,
+  )
+}
+const painResearch = "Bridging hurts, but the research says it's the strongest one. Should I keep going?"
+assert(
+  matchingRedFlags(painResearch).some((rule) => rule.id === 'movement-pain'),
+  'pain + research question still triggers the pain rule',
+)
+assert(
+  buildMessages(painResearch)[0].content.includes('If a movement at any time causes pain, stop that movement.'),
+  'pain + research question leads with the stop rule',
+)
+assert(RESEARCH_ALLOWED_PERCENTS.includes('80%') && RESEARCH_ALLOWED_PERCENTS.includes('50%'), '80% and 50% are allowed percents')
+assert(
+  /80% of people who use the PfilAtes™ program \(or at least 50%\) improved in 28 days of training/.test(knowledge),
+  '80% / 28 days result is in the research knowledge',
+)
+assert(
+  /80% of people who use the PfilAtes™ program \(or at least 50%\) improved in 28 days of training/.test(SARA_SYSTEM),
+  '80% / 28 days result is in the prompt',
+)
+assert(!SARA_SYSTEM.includes('showed 74% bladder symptom improvement'), 'old general 74% bladder claim is gone')
+assert(
+  researchReplyIssues('PfilAtes™ movements can be up to 10x a standard Kegel.').some((issue) => /10x/i.test(issue)),
+  '10x is caught even in the old allowed phrase',
+)
+assert(
+  researchReplyIssues('It is ten times a standard Kegel.').some((issue) => /ten times/i.test(issue)),
+  'ten times is caught',
+)
+assert(
+  researchReplyIssues(
+    'PfilAtes™ movements can activate the pelvic floor up to 10 times more than a standard Kegel.',
+  ).some((issue) => /10 times/i.test(issue)),
+  '10 times more than a Kegel is caught',
+)
+assert(researchReplyIssues('It takes 10 minutes a day and uses 10 movements.').length === 0, '10 minutes and 10 movements are allowed')
+assert(
+  researchReplyIssues('Studies have proven it is up to 10x a standard Kegel.').some((issue) => /proven/i.test(issue)),
+  'proven is still caught beside 10x',
+)
+assert(
+  researchReplyIssues('PfilAtes will cure leaks and is up to 10x a standard Kegel.').some((issue) => /cure/i.test(issue)),
+  'cure is still caught beside 10x',
+)
+const kegelQuestion = 'How much better than Kegels is PfilAtes?'
+const kegelPrompt = buildMessages(kegelQuestion)[0].content
+assert(kegelPrompt === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}`, 'a Kegel comparison does not pull onboarding emails')
+assert(!/\b10x\b|\bten times\b|\b10\s+times\b/i.test(withoutKegelBan(kegelPrompt)), 'the Kegel question prompt contains no 10x')
+assert(
+  SARA_SYSTEM.includes(
+    'Pregnant users should avoid Butterfly, Bridging, and Corkscrew after 12 weeks gestational age.',
+  ),
+  'pregnancy sentence stays exact',
+)
+assert(researchDoc.includes('All Fours Side Leg Lift'), 'research doc uses All Fours Side Leg Lift')
+assert(!researchDoc.includes('All-4s side leg lift'), 'research doc drops All-4s side leg lift')
+assert(!researchDoc.includes('All 4s Bent Knee Lift'), 'research doc drops All 4s Bent Knee Lift')
+const seventyFourPromptProblems = seventyFourProblems(SARA_SYSTEM)
+assert(
+  seventyFourPromptProblems.length === 0,
+  `prompt never presents 74% as a community-women result${seventyFourPromptProblems.length ? `: ${seventyFourPromptProblems[0]}` : ''}`,
+)
+const seventyFourKnowledgeProblems = seventyFourProblems(knowledge)
+assert(
+  seventyFourKnowledgeProblems.length === 0,
+  `knowledge never presents 74% as a community-women result${seventyFourKnowledgeProblems.length ? `: ${seventyFourKnowledgeProblems[0]}` : ''}`,
+)
 
 const built = buildMessages('how much water?', [
   { from: 'you', text: 'hi' },
   { from: 'sara', text: 'hey' },
 ])
-assert(built[0].role === 'system' && built[0].content === SARA_SYSTEM, 'system message first')
+assert(
+  built[0].role === 'system' &&
+    built[0].content === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}\n\n${SARA_NO_REPEAT_GREETING}`,
+  'system message first, with the no-trigger note on an ordinary question, and no second greeting',
+)
+assert(/Greet at most once per conversation/.test(SARA_SYSTEM), 'prompt allows a greeting at most once')
+assert(
+  /only on the first turn, and only if they greeted you or this is the opening/.test(SARA_SYSTEM),
+  'prompt greets only on the opening turn',
+)
+assert(/Do not open with "Hey there"/.test(SARA_SYSTEM), 'prompt names the repeated greeting')
+assert(!buildMessages('how much water?')[0].content.includes(SARA_NO_REPEAT_GREETING), 'opening turn does not get the no-repeat note')
+assert(built[0].content.includes(SARA_NO_RED_FLAG), 'second turn still gets the no-trigger note')
+assert(
+  built[0].content.indexOf(SARA_NO_RED_FLAG) < built[0].content.indexOf(SARA_NO_REPEAT_GREETING),
+  'no-repeat greeting note stays after the no-trigger note',
+)
+
+const greetings = [
+  ['Hey there, sip water through the day.', 'Sip water through the day.'],
+  ['Hi there! A sneeze is a push.', 'A sneeze is a push.'],
+  ['Hello there. Log the leak.', 'Log the leak.'],
+  ['Hey, keep the last drink modest.', 'Keep the last drink modest.'],
+  ['Hi, a glass with meals is plenty.', 'A glass with meals is plenty.'],
+  ['Hello! Rest today.', 'Rest today.'],
+  ['Hey! Quality over stacking.', 'Quality over stacking.'],
+  ['Hey there. Sip water through the day.', 'Sip water through the day.'],
+  ['Hey, i would log the leak.', 'I would log the leak.'],
+  ['Hello there — log the time.', 'Log the time.'],
+  [
+    'Hey there, If a movement at any time causes pain, stop that movement. Then rest.',
+    'If a movement at any time causes pain, stop that movement. Then rest.',
+  ],
+]
+for (const [raw, expected] of greetings) {
+  assert(stripLeadingGreeting(raw) === expected, `strips a leading greeting: ${raw}`)
+}
+assert(stripLeadingGreeting('High effort is not the goal.') === 'High effort is not the goal.', 'does not strip High')
+assert(stripLeadingGreeting('Hey there!') === 'Hey there!', 'a greeting-only line is kept')
+assert(
+  stripLeadingGreeting('Sip water. Hey there, that is enough.') === 'Sip water. Hey there, that is enough.',
+  'does not strip a greeting later in the reply',
+)
+const voiced = splitSpeakChunksForTurn('Hey there. Sip water through the day. A glass with meals is plenty.', false)
+assert(voiced[0] === 'Sip water through the day.', 'follow-up voice chunk does not start with a greeting')
+assert(!/^(hey|hi|hello)\b/i.test(voiced[0]), 'second-turn voice chunk is the answer')
+assert(
+  splitSpeakChunksForTurn("Hi, it's Sara.", true)[0] === "Hi, it's Sara.",
+  'opening turn chunker leaves a greeting in place',
+)
 assert(built.at(-1).content === 'how much water?', 'latest user message last')
 assert(built.some((m) => m.role === 'assistant'), 'history maps sara → assistant')
 assert(built.filter((m) => m.role === 'system').length === 1, 'no extra system note without context')
 
-const withContext = buildMessages('hello', [], 'Everyday movements: Lunge; Bridge')
-assert(withContext[0].content === SARA_SYSTEM, 'movement context does not rewrite the Sara system prompt')
+const PLAN_MARKER = 'Everyday plan marker ZQ-PLAN'
+const withContext = buildMessages('hello', [], { context: PLAN_MARKER })
+assert(withContext[0].content.includes(SARA_SYSTEM), 'movement context does not rewrite the Sara system prompt')
+assert(!withContext[0].content.includes(PLAN_MARKER), 'worksheet note stays out of the Sara system prompt')
 assert(
-  withContext[1]?.role === 'system' && withContext[1].content.includes('Lunge'),
+  withContext[1]?.role === 'system' && withContext[1].content === PLAN_MARKER,
   'everyday movement context is a second system note',
 )
 assert(withContext.at(-1).content === 'hello', 'user message stays last when context is set')
 
 const contextSent = await askSaraGrok({
   message: 'what should I do today?',
-  context: 'Everyday movements: Lunge; Bridge',
+  context: PLAN_MARKER,
   apiKey: 'test-not-a-real-key',
   fetchFn: async (_url, init) => {
     const body = JSON.parse(init.body)
     const notes = body.messages.filter((message) => message.role === 'system')
     assert(notes.length === 2, 'ask sends the worksheet context beside the system prompt')
-    assert(notes[1].content.includes('Bridge'), 'ask forwards the everyday movement names')
-    assert(!notes[0].content.includes('Bridge'), 'base Sara prompt stays free of the worksheet note')
+    assert(notes[1].content === PLAN_MARKER, 'ask forwards the everyday movement note')
+    assert(!notes[0].content.includes(PLAN_MARKER), 'base Sara prompt stays free of the worksheet note')
     return { ok: true, json: async () => ({ choices: [{ message: { content: 'Those two, as you learned them.' } }] }) }
   },
 })
@@ -69,8 +413,19 @@ const mocked = await askSaraGrok({
     const body = JSON.parse(init.body)
     assert(url.includes('api.x.ai/v1/chat/completions'), 'calls xAI chat completions')
     assert(init.headers.Authorization === 'Bearer test-not-a-real-key', 'Bearer from env, not hardcoded')
-    assert(body.model === 'grok-4.6', 'sends grok-4.6')
+    assert(body.model === 'grok-4.20-0309-non-reasoning', 'sends the non-reasoning model')
+    assert(body.max_tokens === 600, 'keeps max_tokens at 600')
     assert(body.messages[0].content.includes('Never diagnose'), 'sends Sara system prompt')
+    assert(
+      body.messages[0].content.includes(
+        '80% of people who use the PfilAtes™ program (or at least 50%) improved in 28 days of training',
+      ),
+      'sends the approved-claims whitelist',
+    )
+    assert(
+      body.messages[0].content.includes('If a movement at any time causes pain, stop that movement.'),
+      'sends Dr C red-flag rules',
+    )
     assert(body.messages.at(-1).content.includes('sneezed'), 'forwards the user question')
     return {
       ok: true,
@@ -97,6 +452,207 @@ const down = await askSaraGrok({
   },
 })
 assert(down.reply === SARA_OFFLINE, 'network failure → honest offline line, not a keyword stub')
+
+const secondTurn = await askSaraGrok({
+  message: 'how much water?',
+  history: [
+    { from: 'you', text: 'hi' },
+    { from: 'sara', text: 'Hey there. Ask me a real one.' },
+  ],
+  apiKey: 'test-not-a-real-key',
+  fetchFn: async (_url, init) => {
+    const body = JSON.parse(init.body)
+    assert(body.messages[0].content.includes(SARA_NO_REPEAT_GREETING), 'second turn tells Sara not to greet')
+    assert(body.messages.some((m) => m.role === 'assistant'), 'second turn still sends history')
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Hey there, sip water through the day. A glass with meals is plenty.' } }],
+      }),
+    }
+  },
+})
+assert(
+  secondTurn.reply === 'Sip water through the day. A glass with meals is plenty.',
+  'second-turn answer does not start with a greeting',
+)
+assert(
+  !/^(hey|hi|hello)\b/i.test(splitSpeakChunksForTurn(secondTurn.reply, false)[0] ?? ''),
+  'second-turn spoken chunks do not start with a greeting',
+)
+
+const openingTurn = await askSaraGrok({
+  message: 'hi',
+  history: [],
+  firstTurn: true,
+  apiKey: 'test-not-a-real-key',
+  fetchFn: async () => ({
+    ok: true,
+    json: async () => ({ choices: [{ message: { content: 'Hey there. Ask me a real one about water.' } }] }),
+  }),
+})
+assert(openingTurn.reply.startsWith('Hey there'), 'opening turn may still greet')
+
+const flaggedFollowUp = await askSaraGrok({
+  message: 'how much water?',
+  history: [],
+  firstTurn: false,
+  apiKey: 'test-not-a-real-key',
+  fetchFn: async (_url, init) => {
+    const body = JSON.parse(init.body)
+    assert(body.messages[0].content.includes(SARA_NO_REPEAT_GREETING), 'firstTurn false is a follow-up even with empty history')
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'Hi, sip water through the day.' } }] }),
+    }
+  },
+})
+assert(flaggedFollowUp.reply === 'Sip water through the day.', 'firstTurn false strips the greeting')
+
+assert(ONBOARDING_EMAILS.length === 47, 'onboarding module has the 47 emails')
+assert(onboardingPromptForTurn('how much water?') === '', 'an ordinary question adds no onboarding text')
+assert(
+  buildMessages('how much water?')[0].content === `${SARA_SYSTEM}\n\n${SARA_NO_RED_FLAG}`,
+  'water still uses the ordinary system prompt',
+)
+const emailFields = ONBOARDING_EMAILS.map((email) =>
+  [email.summary, email.asks, email.guidance, email.newer, email.subject].join('\n'),
+).join('\n')
+for (const [pattern, label] of [
+  [/\b10x\b/i, '10x'],
+  [/\bten times\b/i, 'ten times'],
+  [/\b10\s+times\b/i, '10 times'],
+  [/74%/, '74%'],
+  [/29%/, '29%'],
+  [/\b8 times\b/i, '8 times'],
+  [/62%/, '62%'],
+  [/95\.2/, '95.2'],
+  [/60\.7/, '60.7'],
+  [/43\.6/, '43.6'],
+  [/52\.8/, '52.8'],
+  [/3 in 10/i, '3 in 10'],
+  [/lying on your back/i, 'lying on your back'],
+  [/80%\s+reported/i, '80% reported'],
+  [/\bcure\b/i, 'cure'],
+  [/\bproven\b/i, 'proven'],
+]) {
+  assert(!pattern.test(emailFields), `onboarding email notes do not include ${label}`)
+}
+const onboardingSrc = readFileSync(new URL('./onboardingEmails.mjs', import.meta.url), 'utf8')
+assert(!/lying on your back/i.test(onboardingSrc), 'onboarding module does not copy the email pregnancy wording')
+assert(/only pregnancy rule/.test(onboardingSrc), 'onboarding rules defer to the existing pregnancy sentence')
+
+function onboardingFiles(message, options) {
+  const content = buildMessages(message, [], options)[0].content
+  return ONBOARDING_EMAILS.filter((email) =>
+    content.includes(`${email.sequence} (${email.who}), ${email.dayLabel}.`),
+  ).map((email) => email.file)
+}
+
+const pulse = buildMessages('What was the pulse self-check email about?')[0].content
+assert(
+  onboardingFiles('What was the pulse self-check email about?').join(',') === '18-W-email5.txt,19-M-email5.txt',
+  'pulse self-check retrieves the Day 11 emails',
+)
+assert(pulse.includes('Your 30-second pulse self-check'), 'pulse prompt includes the subject')
+assert(
+  pulse.includes('full movement first') && pulse.includes('squeezing on purpose'),
+  'pulse prompt includes the four questions',
+)
+assert(!pulse.includes(SARA_DEMO_AUDIENCE), 'a buyer question does not get the demo audience note')
+
+const prostate = "I'm a man. Which email covers leakage after prostate surgery?"
+assert(
+  onboardingFiles(prostate).join(',') === '12-M-track-prostatectomy-sui-T1.txt',
+  'a prostate-surgery question retrieves the men\'s track email',
+)
+assert(buildMessages(prostate)[0].content.includes('cold water'), 'men\'s prostate email keeps the squeeze cue')
+
+const diary = 'Which email has the bladder diary?'
+assert(
+  onboardingFiles(diary).join(',') === '32-W-email8.txt,33-M-email8.txt',
+  'bladder diary retrieves the Day 24 emails',
+)
+assert(
+  buildMessages(diary)[0].content.includes('no separate Day 25 email') ||
+    buildMessages(diary)[0].content.includes('There is no separate Day 25 email'),
+  'bladder diary prompt says there is no separate Day 25 email',
+)
+
+assert(
+  onboardingFiles('When do I get the Day 28 email?').join(',') === '34-W-email9.txt,35-M-email9.txt',
+  'Day 28 retrieves the main one-number emails',
+)
+assert(
+  buildMessages('When do I get the Day 28 email?')[0].content.includes('10 means no change'),
+  'Day 28 prompt explains the problem scale',
+)
+
+const stuck = 'I clicked Stuck, what now?'
+assert(onboardingFiles(stuck).join(',') === '16-W-email4.txt,17-M-email4.txt', 'Stuck retrieves the Day 8 check-in')
+assert(
+  !onboardingFiles(stuck).includes('24-WM-troubleshoot-d21-notyet.txt') &&
+    !buildMessages(stuck)[0].content.includes("Let's troubleshoot together"),
+  'Stuck does not retrieve the Day 21 troubleshoot email',
+)
+assert(buildMessages(stuck)[0].content.includes('team will follow up'), 'Stuck prompt says the team follows up')
+
+assert(
+  onboardingFiles('What do the 1-10 buttons do?').join(',') ===
+    '34-W-email9.txt,35-M-email9.txt,38-W-email11.txt,39-M-email11.txt',
+  '1-10 buttons retrieve Day 28 and Day 60',
+)
+
+const day2 = "I'm a man. What does the Day 2 email ask me to click?"
+assert(onboardingFiles(day2).join(',') === '04-M-email2.txt', 'men\'s Day 2 stays on the men\'s email')
+assert(buildMessages(day2)[0].content.includes('prostate surgery'), 'men\'s Day 2 names prostate surgery')
+assert(
+  !buildMessages(day2)[0].content.includes('W main (women), Day 2.'),
+  "men's Day 2 does not include the women's email",
+)
+
+const notYet = 'I clicked Not yet, what now?'
+assert(
+  onboardingFiles(notYet).join(',') === '22-W-email7.txt,23-M-email7.txt,24-WM-troubleshoot-d21-notyet.txt',
+  'Not yet includes the troubleshooting email',
+)
+
+const unknown = buildMessages('What did the email about the secret discount code say?')[0].content
+assert(unknown.includes('do not recognize that email'), 'an unknown email is named as unrecognized')
+assert(unknown.includes('pfilates1@gmail.com'), 'an unknown email points to pfilates1@gmail.com')
+assert(onboardingFiles('What did the email about the secret discount code say?').length === 0, 'an unknown email invents no card')
+
+const missingEmail = buildMessages('I never got the Day 8 email')[0].content
+assert(missingEmail.includes('Do not insist'), 'a missing email tells Sara not to insist')
+assert(missingEmail.includes('pfilates1@gmail.com'), 'a missing email points to pfilates1@gmail.com')
+assert(onboardingFiles('I never got the Day 8 email').join(',') === '16-W-email4.txt,17-M-email4.txt', 'a missing Day 8 still names that check-in')
+
+const demoPulse = buildMessages('What was the pulse self-check email about?', [], { audience: 'demo' })[0].content
+assert(demoPulse.includes(SARA_DEMO_AUDIENCE), 'demo onboarding keeps the audience note')
+assert(demoPulse.includes('has not received these emails'), 'demo onboarding says the emails have not arrived')
+assert(demoPulse.includes('your Day 8 email'), 'demo onboarding names the phrase Sara must not use')
+assert(SARA_DEMO_AUDIENCE.includes('has not received those emails'), 'every demo turn says the emails have not arrived')
+
+const secondEmail = buildMessages('What was the pulse self-check email about?', [
+  { from: 'you', text: 'hi' },
+  { from: 'sara', text: 'hey' },
+])[0].content
+assert(secondEmail.includes(SARA_NO_REPEAT_GREETING), 'a later email question still skips the greeting')
+assert(
+  secondEmail.indexOf('Your 30-second pulse self-check') < secondEmail.indexOf(SARA_NO_REPEAT_GREETING),
+  'the no-repeat note stays after the matching email',
+)
+
+const beforeRebuild = readFileSync(new URL('./onboardingEmails.mjs', import.meta.url), 'utf8')
+const rebuilt = spawnSync(process.execPath, ['scripts/build-onboarding-emails.mjs'], {
+  cwd: fileURLToPath(new URL('..', import.meta.url)),
+  encoding: 'utf8',
+})
+assert(rebuilt.status === 0, `onboarding rebuild exits 0 (${rebuilt.stderr || rebuilt.stdout})`)
+assert(
+  readFileSync(new URL('./onboardingEmails.mjs', import.meta.url), 'utf8') === beforeRebuild,
+  'rebuilding the onboarding module does not change it',
+)
 
 if (process.exitCode) {
   console.error('askGrok smoke failed')

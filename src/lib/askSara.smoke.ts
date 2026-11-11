@@ -65,6 +65,9 @@ assert(/onStreamCreated/.test(streamSrc), 'reads session_id from stream/created'
 assert(/session_id — inserting from stream\/created/.test(streamSrc), 'patches SDP/ICE finalize when session_id is missing')
 assert(/bindLateTracks/.test(streamSrc), 're-assigns srcObject when a late video track arrives')
 assert(/addtrack/.test(streamSrc), 'listens for video tracks added after warmup-off connect')
+assert(!/addEventListener\('unmute'/.test(streamSrc), 'track unmute does not clear and reattach srcObject')
+assert(/classifyPlayRejection/.test(streamSrc), 'AbortError from video.play() is not a Tap to see Sara fallback')
+assert(/playPending/.test(streamSrc), 'at most one video.play() is pending at a time')
 assert(/framesArePlayable/.test(streamSrc), 'does not skip ara unless srcObject is playing frames')
 assert(/onVoiceFallback/.test(streamSrc), 'heard path that dies later can start ara')
 assert(/speak finished with no video srcObject/.test(streamSrc), 'missing srcObject after speak falls back to ara')
@@ -187,6 +190,26 @@ assert(
   'srcObject without decoded frames is not live',
 )
 assert(
+  isSaraVideoLive({
+    srcObject: {},
+    videoWidth: 0,
+    readyState: 2,
+    paused: false,
+    currentTime: 0.2,
+  } as HTMLVideoElement),
+  'iOS can paint WebRTC frames while videoWidth is still 0',
+)
+assert(
+  !isSaraVideoLive({
+    srcObject: {},
+    videoWidth: 0,
+    readyState: 2,
+    paused: true,
+    currentTime: 0.2,
+  } as HTMLVideoElement),
+  'a paused element with width 0 is not live',
+)
+assert(
   isSaraVideoLive({ srcObject: {}, videoWidth: 512 } as HTMLVideoElement),
   'decoded frames on a srcObject count as live',
 )
@@ -229,6 +252,10 @@ assert(
 assert(
   !streamVideoShouldBeMuted({ voicePath: 'did', userMuted: false, videoLive: true }),
   'unmutes D-ID only when stream speak is heard and frames are live',
+)
+assert(
+  streamVideoShouldBeMuted({ voicePath: 'visual', userMuted: false, videoLive: true }),
+  'iPhone keeps D-ID video muted so ara on the media element is the voice',
 )
 assert(
   !streamVideoShouldUnlockElement({ voicePath: 'pending', userMuted: false }),
@@ -278,6 +305,11 @@ assert(/object-cover/.test(portraitSrc), 'still and stream video cover the portr
 assert(!/rounded-full/.test(portraitSrc), 'TalkingPortrait is not a circular crop on Ask Sara')
 assert(/opacity-100/.test(portraitSrc), 'idle still is opacity-100 unless the stream is actually live')
 assert(/isSaraVideoLive/.test(portraitSrc), 'portrait reports live only when the video has srcObject + frames')
+assert(
+  /addEventListener\('resize', reportLive\)/.test(portraitSrc) &&
+    /addEventListener\('timeupdate', reportLive\)/.test(portraitSrc),
+  'portrait listens for resize and timeupdate because iOS width can be 0 at playing',
+)
 assert(/setVideoNode/.test(portraitSrc), 'binds the stream video during commit so Send/Play can attach')
 assert(/replaySaraStreamVideo/.test(portraitSrc), 'portrait play retries do not force-mute D-ID audio')
 assert(!/video\.muted = true/.test(portraitSrc), 'portrait effect does not pin muted=true after bind')
@@ -379,15 +411,23 @@ assert(/playAra/.test(askSrc), 'ara fallback is idempotent so return+callback ca
 assert(/settleSaraStreamVoice/.test(askSrc), 'unreachable Grok remutes a pending stream unlock')
 assert(/setSaraStreamUserMuted/.test(askSrc), 'Ask Sara forwards mute so D-ID audio respects Mute')
 assert(/setSaraStreamUserMuted/.test(streamSrc), 'stream module tracks user mute without importing speakSara')
-assert(!/warmSaraStream/.test(askSrc), 'Ask Sara does not pre-warm a D-ID session on mount')
+assert(/holdDemoStream/.test(askSrc), 'demo Ask Sara reuses the landing warm instead of opening a second session')
+{
+  const sessionSrc = readFileSync(new URL('./demoStreamSession.ts', import.meta.url), 'utf8')
+  assert(/createDemoWarmController/.test(sessionSrc), 'the shared demo session still uses one warm controller')
+  assert(/ctl\.unmount\(\)/.test(sessionSrc), 'leaving the last holder uses the strict-mode delayed close')
+  assert(/discardSaraStreamCreds/.test(sessionSrc), 'closing the shared session discards the client key')
+}
 assert(/preloadSaraStream\(\)/.test(askSrc), 'Ask Sara may preload the SDK on mount without opening WebRTC')
 assert(/connectSaraStream\(\)/.test(askSrc), 'Send starts mint + WebRTC in the same gesture as unlock')
 {
   const mountEffect = askSrc.match(/setSaraStreamCallbacks\([\s\S]*?stopSaraSpeech\(\)/)?.[0] || ''
   assert(Boolean(mountEffect), 'Ask Sara mount effect is present')
-  assert(!/connectSaraStream|warmSaraStream/.test(mountEffect), 'mount effect does not open a D-ID session')
-  assert(/preloadSaraStream\(\)/.test(mountEffect), 'mount effect only preloads the SDK')
+  assert(/voiceOnly \? holdDemoStream\(/.test(mountEffect), 'only the demo pass holds the shared D-ID session')
+  assert(!/connectSaraStream/.test((mountEffect.split('if (voiceOnly)')[0] ?? '')), 'paid mount does not open a D-ID session')
+  assert(/preloadSaraStream\(\)/.test(mountEffect), 'mount effect still preloads the SDK')
   assert(/releaseSaraStream/.test(mountEffect), 'unmount releases the D-ID session')
+  assert(/releaseWarm\?\.\(\)/.test(mountEffect), 'unmount releases the shared demo hold')
 }
 assert(/SARA_STREAM_CAPPED_NOTE/.test(askSrc), 'Ask Sara surfaces session-cap status while ara talks')
 assert(/releaseSaraStream/.test(askSrc), 'Ask Sara releases the D-ID session on leave')

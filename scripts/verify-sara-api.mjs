@@ -136,7 +136,7 @@ async function selfTest() {
 
   let selfFailed = Boolean(process.exitCode)
   process.exitCode = 0
-  const araOk = await withHealthServer({ ok: true, tts: 'ara', model: 'grok-4.6' }, (base) =>
+  const araOk = await withHealthServer({ ok: true, tts: 'ara', model: 'grok-4.20-0309-non-reasoning' }, (base) =>
     checkHealth(base),
   )
   if (araOk && !process.exitCode) ok('GET /health with tts=ara passes')

@@ -1,0 +1,21 @@
+Subject: Let's troubleshoot together
+Preview: "Not yet" is useful information. Here's your next step.
+Delay/trigger: Immediately when tag pf-d21-notyet is added (Email 7 'Not yet' click). Same email for both Women and Men (body has no course name); build once per site automation.
+Tag action on links: None (no tagging links).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Thanks for telling me honestly. "Not yet" helps me more than silence. This week, try three things:
+
+- Re-score two movements. Replay them in the Movement Selection Video and re-score them on a fresh worksheet. If a different movement scores higher now, switch to it.
+- Slow down the pulse. Small range, a sharp "HA," and a squeeze, all at the same instant. Quality matters more than speed.
+- Protect the 5 + 5. Same two times every day, and check each one off in your exercise log.
+
+Then hit reply with: (1) your 2–3 movements, (2) how many days a week you're practicing, and (3) what you're hoping changes. We'll write back.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

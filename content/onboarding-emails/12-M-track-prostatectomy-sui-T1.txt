@@ -1,0 +1,18 @@
+Subject: Leakage after surgery or exertion: your focus
+Preview: How to aim your 10 minutes at regaining control.
+Delay/trigger: Sequence 'Men concern track: prostatectomy-sui' email T1. Trigger: tag pf-m-concern-prostatectomy-sui added (Email 2 click) → subscribe to this sequence; delay 4 days after tag (~Day 6).
+Tag action on links: None (no tagging links).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}}, you told us leakage after prostate surgery, or when you cough, lift or exercise, is your main concern.
+- Check with your surgeon or urologist about when to start, especially if a catheter was recently removed.
+- Make the pulse sharp. A short, forceful, open-mouth "HA" with a voluntary squeeze (picture stepping into cold water), at the exact moment of the pulse.
+- Pre-squeeze in real life. Try a quick voluntary pelvic floor squeeze before you stand up, cough, sneeze or lift.
+
+Questions? Just hit reply. My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

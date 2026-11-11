@@ -1,0 +1,15 @@
+Subject: Not sure what your main concern is? That's okay.
+Preview: One sentence from you helps us point you the right way.
+Delay/trigger: Sequence 'Women concern track: other' email T1. Trigger: tag pf-w-concern-other added (Email 2 click) → subscribe to this sequence; delay 4 days after tag (~Day 6).
+Tag action on links: None (no tagging links).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}}, reply and tell us in a sentence what you've noticed, and we'll point you to the right part of the course. In the meantime: pick your best 2–3 movements, do 5 + 5 a day, and make every pulse count.
+
+My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

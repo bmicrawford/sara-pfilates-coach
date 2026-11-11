@@ -1,0 +1,21 @@
+Subject: Leaks when you cough, laugh or lift: your focus
+Preview: How to aim your 10 minutes at stress leakage.
+Delay/trigger: Sequence 'Women concern track: sui' email T1. Trigger: tag pf-w-concern-sui added (Email 2 click) → subscribe to this sequence; delay 4 days after tag (~Day 6).
+Tag action on links: None (no tagging links).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}}, you told us leakage with physical activity (coughing, sneezing, lifting, exercise) is your main concern. Here's how to aim your practice at it:
+- Make the pulse sharp. The short, forceful, open-mouth "HA" engages your transversus abdominis at the exact moment of the pulse, alongside your voluntary pelvic floor squeeze. Timing is the skill you're training.
+- Pick your highest-scoring movements, the ones where you felt your pelvic floor work hardest. If you're unsure: Lunge, Bridge, Hovering, Cat Cow or Butterfly. Pregnant and past 12 weeks? Avoid any PfilAtes™ movements that involve lying on your back (Butterfly, Bridge, Corkscrew), and check with your OB or midwife.
+- Pre-squeeze in real life. Try a quick voluntary pelvic floor squeeze just before you cough, sneeze, laugh or lift.
+- You're already ahead. Only 29% of women with urinary leakage see a clinician about it, about 3 in 10 (Hou 2025, a review of 80 studies). Doing something about it matters. It's also worth talking with your own doctor.
+
+(This figure is for urinary incontinence only, from the study abstract, and the studies varied a lot.)
+
+Questions? Just hit reply. My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

@@ -1,19 +1,36 @@
-import { askSaraGrok, corsHeaders, jsonResponse, GROK_MODEL } from '../../server/askGrok.mjs'
+import { askSaraGrok, corsHeaders, jsonResponse, GROK_MODEL, SARA_OFFLINE } from '../../server/askGrok.mjs'
 import { dispatchRedeem, headerGetter, kvRedeemStore } from '../../server/redeem.mjs'
+import { dispatchKajabi, kvEntitlementStore, rawQueryParam } from '../../server/kajabiPurchase.mjs'
 import { speakSaraTts, SARA_VOICE } from '../../server/speakSara.mjs'
 import {
   talkSaraDid,
   getSaraTalk,
-  isTalkPath,
   talkIdFromUrl,
   talkStartResponse,
   talkPollResponse,
 } from '../../server/talkSara.mjs'
 import { mintSaraStreamKey, streamStartResponse } from '../../server/streamSara.mjs'
+import {
+  authorizePaidRequest,
+  clientIpFromHeaders,
+  denialExtraHeaders,
+  didUnavailableDecision,
+  kvCounterStore,
+  paidEndpoint,
+  passFromParts,
+} from '../../server/demoGate.mjs'
 
 function talkJson(status, body, origin) {
   const out = jsonResponse(status, body, origin)
   return { ...out, headers: { ...out.headers, 'Cache-Control': 'no-store' } }
+}
+
+function respond(status, body, origin, extra = {}) {
+  const out = jsonResponse(status, body, origin)
+  return new Response(out.body, {
+    status: out.status,
+    headers: { ...out.headers, 'Cache-Control': 'no-store', ...extra },
+  })
 }
 
 export default {
@@ -39,29 +56,6 @@ export default {
         origin,
       )
       return new Response(out.body, { status: out.status, headers: out.headers })
-    }
-
-    if (request.method === 'GET' && isTalkPath(url.pathname)) {
-      const talked = await getSaraTalk({
-        id: talkIdFromUrl(url),
-        apiKey: env.DID_API_KEY,
-      })
-      const out = talkJson(200, talkPollResponse(talked), origin)
-      return new Response(out.body, { status: out.status, headers: out.headers })
-    }
-
-    if (request.method === 'POST' && url.pathname === '/stream') {
-      try {
-        const minted = await mintSaraStreamKey({
-          apiKey: env.DID_API_KEY,
-          agentId: env.DID_AGENT_ID,
-        })
-        const out = talkJson(200, streamStartResponse(minted), origin)
-        return new Response(out.body, { status: out.status, headers: out.headers })
-      } catch {
-        const out = talkJson(200, streamStartResponse({ ok: false, reason: 'stream_failed' }), origin)
-        return new Response(out.body, { status: out.status, headers: out.headers })
-      }
     }
 
     if (request.method === 'POST' && (url.pathname === '/redeem' || url.pathname === '/redeem/mint')) {
@@ -107,48 +101,136 @@ export default {
       }
     }
 
-    let body = {}
-    if (request.method === 'POST') {
+    if (url.pathname.startsWith('/kajabi/')) {
+      let rawBody = ''
       try {
-        body = await request.json()
+        rawBody = await request.text()
       } catch {
-        body = {}
+        rawBody = ''
+      }
+      try {
+        const entitlements = kvEntitlementStore(env.REDEEM_TOKENS)
+        const result = await dispatchKajabi(url.pathname, request.method, {
+          store: entitlements,
+          entitlementStore: entitlements,
+          redeemStore: kvRedeemStore(env.REDEEM_TOKENS),
+          counterStore: kvCounterStore(env.REDEEM_TOKENS),
+          secret: String(env.REDEEM_MINT_SECRET || '').trim(),
+          expectedKey: String(env.KAJABI_WEBHOOK_KEY || '').trim(),
+          presentedKey: rawQueryParam(url.search, 'key'),
+          offerIds: env.KAJABI_SARA_OFFER_IDS,
+          getHeader: headerGetter(request.headers),
+          rawBody,
+          publicOrigin: env.SARA_PUBLIC_ORIGIN,
+          ip: clientIpFromHeaders(request.headers),
+          now: new Date().toISOString(),
+          nowMs: Date.now(),
+        })
+        if (!result) {
+          const out = jsonResponse(404, { reply: 'Not found' }, origin)
+          return new Response(out.body, { status: out.status, headers: out.headers })
+        }
+        return respond(result.status, result.body, origin, {
+          ...(result.retryAfter ? { 'Retry-After': String(result.retryAfter) } : {}),
+        })
+      } catch {
+        return respond(503, { ok: false, error: 'kajabi_failed' }, origin)
       }
     }
 
-    if (request.method === 'POST' && url.pathname === '/ask') {
-      const result = await askSaraGrok({
-        message: body.message ?? body.text,
-        history: body.history,
-        context: typeof body.context === 'string' ? body.context : '',
-        apiKey: env.XAI_API_KEY,
-        model: env.XAI_MODEL || GROK_MODEL,
-      })
-      const out = jsonResponse(result.status, { reply: result.reply }, origin)
-      return new Response(out.body, { status: out.status, headers: out.headers })
-    }
+    const endpoint = paidEndpoint(request.method, url.pathname)
+    if (endpoint) {
+      let body = {}
+      if (request.method === 'POST') {
+        try {
+          const parsed = await request.json()
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) body = parsed
+        } catch {
+          body = {}
+        }
+      }
+      let decision
+      try {
+        decision = await authorizePaidRequest({
+          method: request.method,
+          pathname: url.pathname,
+          pass: passFromParts({
+            body,
+            header: request.headers.get('X-Sara-Pass'),
+            query: url.searchParams.get('pass'),
+          }),
+          redeemStore: kvRedeemStore(env.REDEEM_TOKENS),
+          counterStore: kvCounterStore(env.REDEEM_TOKENS),
+          ip: clientIpFromHeaders(request.headers),
+        })
+      } catch {
+        return respond(503, { ok: false, error: 'busy', message: SARA_OFFLINE, reply: SARA_OFFLINE }, origin)
+      }
+      if (!decision.allow) {
+        return respond(decision.status, decision.body, origin, denialExtraHeaders(decision))
+      }
 
-    if (request.method === 'POST' && url.pathname === '/speak') {
-      const result = await speakSaraTts({
-        text: body.text ?? body.message,
-        apiKey: env.XAI_API_KEY,
-        voice: env.XAI_TTS_VOICE || SARA_VOICE,
-      })
-      if (!result.ok) {
-        const out = jsonResponse(result.status, { error: result.error, voice: 'unavailable' }, origin)
+      if (endpoint === 'ask') {
+        const result = await askSaraGrok({
+          message: body.message ?? body.text,
+          history: body.history,
+          context: typeof body.context === 'string' ? body.context : '',
+          firstTurn: body.firstTurn,
+          apiKey: env.XAI_API_KEY,
+          model: env.XAI_MODEL || GROK_MODEL,
+          audience: decision.pass.voiceOnly ? 'demo' : undefined,
+        })
+        const out = jsonResponse(result.status, { reply: result.reply }, origin)
         return new Response(out.body, { status: out.status, headers: out.headers })
       }
-      return new Response(result.audio, {
-        status: 200,
-        headers: {
-          'Content-Type': result.contentType,
-          'Cache-Control': 'no-store',
-          ...corsHeaders(origin),
-        },
-      })
-    }
 
-    if (request.method === 'POST' && url.pathname === '/talk') {
+      if (endpoint === 'speak') {
+        const result = await speakSaraTts({
+          text: body.text ?? body.message,
+          apiKey: env.XAI_API_KEY,
+          voice: env.XAI_TTS_VOICE || SARA_VOICE,
+        })
+        if (!result.ok) {
+          const out = jsonResponse(result.status, { error: result.error, voice: 'unavailable' }, origin)
+          return new Response(out.body, { status: out.status, headers: out.headers })
+        }
+        return new Response(result.audio, {
+          status: 200,
+          headers: {
+            'Content-Type': result.contentType,
+            'Cache-Control': 'no-store',
+            ...corsHeaders(origin),
+          },
+        })
+      }
+
+      if (endpoint === 'stream') {
+        try {
+          const minted = await mintSaraStreamKey({
+            apiKey: env.DID_API_KEY,
+            agentId: env.DID_AGENT_ID,
+          })
+          if (minted.capacity) {
+            const denied = didUnavailableDecision()
+            return respond(denied.status, denied.body, origin, denialExtraHeaders(denied))
+          }
+          const out = talkJson(200, streamStartResponse(minted), origin)
+          return new Response(out.body, { status: out.status, headers: out.headers })
+        } catch {
+          const out = talkJson(200, streamStartResponse({ ok: false, reason: 'stream_failed' }), origin)
+          return new Response(out.body, { status: out.status, headers: out.headers })
+        }
+      }
+
+      if (request.method === 'GET') {
+        const talked = await getSaraTalk({
+          id: talkIdFromUrl(url),
+          apiKey: env.DID_API_KEY,
+        })
+        const out = talkJson(200, talkPollResponse(talked), origin)
+        return new Response(out.body, { status: out.status, headers: out.headers })
+      }
+
       if (!env.DID_API_KEY) {
         const out = talkJson(200, talkStartResponse({ ok: false, reason: 'missing_did_key' }), origin)
         return new Response(out.body, { status: out.status, headers: out.headers })
@@ -168,6 +250,10 @@ export default {
         apiKey: env.DID_API_KEY,
         imageUrl: env.SARA_AVATAR_URL,
       })
+      if (talked.capacity) {
+        const denied = didUnavailableDecision()
+        return respond(denied.status, denied.body, origin, denialExtraHeaders(denied))
+      }
       const out = talkJson(200, talkStartResponse(talked), origin)
       return new Response(out.body, { status: out.status, headers: out.headers })
     }

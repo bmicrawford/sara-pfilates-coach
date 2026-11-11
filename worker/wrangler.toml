@@ -6,7 +6,8 @@ main = "src/index.js"
 compatibility_date = "2026-09-14"
 
 [vars]
-XAI_MODEL = "grok-4.6"
+# Non-reasoning. grok-4.6 spends thousands of hidden tokens (~24–36s) per /ask.
+XAI_MODEL = "grok-4.20-0309-non-reasoning"
 XAI_TTS_VOICE = "ara"
 SARA_AVATAR_URL = "https://sara-pfilates.surge.sh/avatar/sara-default.png"
 
@@ -26,3 +27,8 @@ id = "6465ceb88c4b4fdfbc9cf0374588181d"
 # Mint auth for Kajabi/Zapier. Generate with: openssl rand -hex 32
 #   printf '%s' "$REDEEM_MINT_SECRET" | npx wrangler secret put REDEEM_MINT_SECRET
 # Never VITE_REDEEM_MINT_SECRET. Never commit the value.
+# Purchase webhook query secret (hex, so the URL keeps every character). Generate with: openssl rand -hex 32
+#   printf '%s' "$KAJABI_WEBHOOK_KEY" | npx wrangler secret put KAJABI_WEBHOOK_KEY
+# Comma-separated offer ids that should receive Sara. Deploy-time. Do not commit the live choice.
+# Known $149 offers: 2147989270 women's, 2149556914 men's.
+#   printf '%s' "$KAJABI_SARA_OFFER_IDS" | npx wrangler secret put KAJABI_SARA_OFFER_IDS

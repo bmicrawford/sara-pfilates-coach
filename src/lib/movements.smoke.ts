@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { exerciseLogs } from './diary.ts'
-import { EXERCISE_DAILY_MINUTES, fourWeekExerciseReport } from './exercise.ts'
+import { fourWeekExerciseReport } from './exercise.ts'
 import { exerciseLogPdfPlainText, exerciseLogPdfDoc } from './exercisePdf.ts'
 import { addLog, readLogs } from './mockServer.ts'
 import {
@@ -25,10 +25,12 @@ import {
   blankDraft,
 } from './movementPlan.ts'
 import {
+  AI_COACH_LINE,
   CIRCLE_ANSWERS,
   CONTRACTION_QUESTION,
   CONTRACTION_SCALE,
   COURSE_LINE,
+  DAILY_ROUTINE_LINE,
   ESSENTIAL_TIE_NOTE,
   MOVEMENT_CATALOGS,
   NO_EVERYDAY_PLAN_MESSAGE,
@@ -121,7 +123,7 @@ const EXPECTED_NAMES = [
   'Bridging',
   'Corkscrew',
   'Hovering',
-  'All-4s side leg lift',
+  'All Fours Side Leg Lift',
   'Cat-Cow',
 ]
 
@@ -133,13 +135,14 @@ assert(Object.keys(MOVEMENT_CATALOGS).join(',') === 'standard', 'only the 10-mov
 assert(!('prolapse' in MOVEMENT_CATALOGS), 'prolapse variant is not shipped')
 assert(WORKSHEET_TITLE === 'Movement Selection Worksheet', 'worksheet title matches the sheet')
 assert(
-  WORKSHEET_INTRO === "Fill this out after you've learned the movements in the PfilAtes course.",
-  'intro is the course line',
+  WORKSHEET_INTRO === "Fill this out after you've learned the movements in the PfilAtes™ course.",
+  'intro is the course line and uses the trademark',
 )
 assert(PAIN_QUESTION === 'Does This Movement Cause Pain?', 'pain question matches the sheet')
+assert(REGULAR_QUESTION === 'Do you like doing this movement?', 'liking the movement is the second question')
 assert(
-  REGULAR_QUESTION === 'Is This A Movement You Could Perform Regularly?',
-  'regular question matches the sheet',
+  STANDARD_MOVEMENT_CATALOG.movements[8]?.name === 'All Fours Side Leg Lift',
+  'movement 9 is All Fours Side Leg Lift',
 )
 assert(CONTRACTION_QUESTION === 'Feeling of pelvic floor contraction', 'contraction question uses the corrected wording')
 assert(
@@ -161,14 +164,22 @@ assert(
 assert(!movementIsEssential('squat'), 'Squat is a low-probability movement')
 assert(CIRCLE_ANSWERS === 'Circle your answers', 'circle-your-answers note is kept')
 assert(TOP_MOVEMENTS_TITLE === 'My top movements', 'result title matches the sheet')
-assert(COURSE_LINE === 'As taught in your PfilAtes course.', 'course line does not invent instructions')
+assert(COURSE_LINE === 'As taught in your PfilAtes™ course.', 'course line does not invent instructions')
+assert(DAILY_ROUTINE_LINE === 'About 10 minutes a day.', 'the daily routine is about 10 minutes')
+assert(AI_COACH_LINE === 'Sara is an AI coach, not a doctor.', 'Sara is an AI coach, not a doctor')
+assert(
+  !/10x a Kegel|74%/.test(
+    [WORKSHEET_INTRO, COURSE_LINE, DAILY_ROUTINE_LINE, AI_COACH_LINE, NO_EVERYDAY_PLAN_MESSAGE, PAIN_STOP_LINE].join('\n'),
+  ),
+  'worksheet copy does not use a withdrawn claim',
+)
 assert(/clinician or pelvic floor PT/.test(NO_EVERYDAY_PLAN_MESSAGE), 'empty plan points at the course and a clinician')
 assert(!/cure|treat|diagnos|heal|safe to/i.test(NO_EVERYDAY_PLAN_MESSAGE), 'empty plan makes no medical claim')
 assert(!/you failed|streak broken|behind/i.test(RESTART_CUE), 'restart cue is not a scolding')
 
 assert(isEliminated(row('lunge', 'yes', 'yes', 3)), 'pain Yes eliminates even with a strong contraction')
-assert(isEliminated(row('lunge', 'no', 'no', 3)), 'regular No eliminates even with a strong contraction')
-assert(!isEliminated(row('lunge', 'no', 'yes', 0)), 'pain No and regular Yes keeps the movement')
+assert(isEliminated(row('lunge', 'no', 'no', 3)), 'liking it No eliminates even with a strong contraction')
+assert(!isEliminated(row('lunge', 'no', 'yes', 0)), 'pain No and liking it Yes keeps the movement')
 
 const painDropsStrong = selectTopMovements(
   STANDARD_MOVEMENT_CATALOG,
@@ -188,8 +199,8 @@ const irregularDrops = selectTopMovements(
     butterfly: 2,
   }),
 )
-assert(!irregularDrops.rankedIds.includes('bridging'), 'regular No is left out of the ranking')
-assert(irregularDrops.suggestedIds.join(',') === 'butterfly', 'only the regular movement is suggested')
+assert(!irregularDrops.rankedIds.includes('bridging'), 'liking it No is left out of the ranking')
+assert(irregularDrops.suggestedIds.join(',') === 'butterfly', 'only the liked movement is suggested')
 
 const ranked = selectTopMovements(
   STANDARD_MOVEMENT_CATALOG,
@@ -277,7 +288,10 @@ assert(
 )
 
 const one = adjustTopMovements(ranked.rankedIds, ['bridging'])
-assert(one?.join(',') === 'bridging', 'the person can keep a single eligible movement')
+assert(one === null, 'one movement is not a daily plan when two or more remain')
+const pair = adjustTopMovements(ranked.rankedIds, ['butterfly', 'lunge'])
+assert(pair?.join(',') === 'butterfly,lunge', 'two movements is a daily plan')
+assert(adjustTopMovements(['squat'], ['squat'])?.join(',') === 'squat', 'a single remaining movement can be the plan')
 const three = adjustTopMovements(ranked.rankedIds, ['bridging', 'squat', 'lunge'])
 assert(three?.join(',') === 'squat,lunge,bridging', 'an adjusted set is returned in rank order, not tap order')
 assert(adjustTopMovements(ranked.rankedIds, ['squat', 'butterfly', 'lunge', 'bridging']) === null, 'four movements is not a plan')
@@ -305,11 +319,11 @@ assert(firstSaved.ok, 'a complete worksheet saves')
 assert(localStorage.getItem('sara.' + MOVEMENT_PLAN_STORAGE_KEY), 'worksheet state uses the sara.movementPlan key')
 assert(readMovementPlan().currentId === (firstSaved.ok ? firstSaved.state.currentId : ''), 'current id points at the save')
 
-const second = saveWorksheetResult(sheet({ squat: 3, hovering: 2 }), ['hovering'], new Date(2026, 8, 26, 9, 0, 0))
+const second = saveWorksheetResult(sheet({ squat: 3, hovering: 2 }), ['squat', 'hovering'], new Date(2026, 8, 26, 9, 0, 0))
 assert(second.ok, 'a redo saves')
 const afterRedo = readMovementPlan()
 assert(afterRedo.history.length === 2, 'redo keeps the earlier worksheet')
-assert(afterRedo.history[0]?.selectedIds.join(',') === 'hovering', 'the newest result is current')
+assert(afterRedo.history[0]?.selectedIds.join(',') === 'squat,hovering', 'the newest result is current')
 assert(afterRedo.history[1]?.selectedIds.join(',') === 'lunge,bridging,cat-cow', 'the first result stays in history')
 assert(afterRedo.currentId === afterRedo.history[0]?.id, 'current id follows the redo')
 
@@ -343,15 +357,15 @@ for (const id of ['lunge', 'bridging', 'cat-cow']) {
 const logsAfter = readLogs()
 const planLogs = exerciseLogs(logsAfter).filter((log) => log.id !== 'manual-pfilates')
 assert(planLogs.length === 1, 'finishing the day writes one exercise session')
-assert(planLogs[0]?.minutes === String(EXERCISE_DAILY_MINUTES), 'the session uses the existing 5-minute daily unit')
+assert(planLogs[0]?.minutes === '10', 'the session records about 10 minutes')
 assert(planLogs[0]?.activity === 'Lunge · Bridging · Cat-Cow', 'the session names the everyday movements')
 assert(planLogs[0]?.felt === '', 'the session does not invent a feeling')
 assert(logsAfter.some((log) => log.id === 'manual-pfilates'), 'a session already in the log stays')
 const report = fourWeekExerciseReport(logsAfter, { now: doneAt.toISOString() })
 const today = report.days.find((day) => day.items.some((item) => item.id === 'manual-pfilates'))
-assert(today && today.minutes === 15 && today.sessions === 2, 'the 4-week log adds the plan session beside the existing one')
+assert(today && today.minutes === 20 && today.sessions === 2, 'the 4-week log adds the plan session beside the existing one')
 const pdfText = exerciseLogPdfPlainText(exerciseLogPdfDoc(report))
-assert(pdfText.includes('Lunge · Bridging · Cat-Cow · 5 min'), 'the exercise PDF lists the everyday movements')
+assert(pdfText.includes('Lunge · Bridging · Cat-Cow · 10 min'), 'the exercise PDF lists the everyday movements')
 assert(pdfText.includes('PfilAtes · 10 min'), 'the exercise PDF still lists the existing session')
 
 const undone = setEverydayMovementDone('bridging', false, doneAt)
@@ -377,7 +391,7 @@ assert(!shouldShowRestartCue(readMovementPlan(), sep27), 'finishing today clears
 assert(adherenceSummary(readMovementPlan(), sep27).line === '6 of last 7 days', 'today counts once it is finished')
 
 memory.clear()
-saveWorksheetResult(planAnswers, ['cat-cow'], new Date(2026, 8, 27, 9, 0, 0))
+saveWorksheetResult(planAnswers, ['lunge', 'cat-cow'], new Date(2026, 8, 27, 9, 0, 0))
 assert(!shouldShowRestartCue(readMovementPlan(), sep27), 'the first day of a plan is not treated as a missed yesterday')
 
 memory.clear()
@@ -391,7 +405,9 @@ saveWorksheetResult(planAnswers, ['bridging', 'lunge'], new Date(2026, 8, 27, 9,
 const context = everydayMovementsAskContext()
 assert(context.includes('Lunge') && context.includes('Bridging'), 'Ask Sara context names the current movements')
 assert(context.indexOf('Lunge') < context.indexOf('Bridging'), 'Ask Sara context uses rank order')
-assert(/Kajabi|PfilAtes course/.test(context), 'Ask Sara context keeps the course as the source')
+assert(/Kajabi|PfilAtes™ course/.test(context), 'Ask Sara context keeps the course as the source')
+assert(context.includes('About 10 minutes a day.'), 'Ask Sara context names the 10-minute routine')
+assert(!/10x a Kegel|74%/.test(context), 'Ask Sara context does not use a withdrawn claim')
 assert(!/step|inhale|exhale|reps|sets/i.test(context), 'Ask Sara context does not invent instructions')
 assert(!/prolapse/i.test(context), 'Ask Sara context does not mention an unshipped variant')
 
@@ -434,7 +450,7 @@ assert(excludedMovementIds(null).length === 0, 'no health screen excludes nothin
 assert(excludedMovementIds({ ...noHealth, osteoporosis: 'yes' }).join(',') === 'cat-cow', 'osteoporosis excludes Cat-Cow')
 assert(
   excludedMovementIds({ ...noHealth, hipReplacement: 'yes' }).join(',') ===
-    'side-lying-bent-knee-lift,side-lying-straight-leg-circle,butterfly,all-4s-side-leg-lift',
+    'side-lying-bent-knee-lift,side-lying-straight-leg-circle,butterfly,all-fours-side-leg-lift',
   'hip replacement excludes movements 3, 4, 5, and 9',
 )
 assert(

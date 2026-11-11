@@ -1,0 +1,33 @@
+Subject: Who else needs this?
+Preview: Most men never bring it up. You can.
+Delay/trigger: Sequence 'PfilAtes™ for Men – Onboarding' email 6. Delay after previous: 6 days (Day 17).
+Tag action on links: None (no tagging links; plain URLs only).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+You're more than two weeks into PfilAtes™. Thank you for sticking with it, 10 minutes at a time.
+
+I have a favor to ask. Men rarely talk about bladder or pelvic floor problems, even with their doctors. Chances are a brother, friend, father or teammate is dealing with it quietly right now.
+
+If PfilAtes™ is helping you, would you pass it on to one person? Forward this email, or send him here:
+👉 https://www.pfilates.com/men
+
+Does your wife or partner have bladder concerns? There's a women's course too: https://www.pfilates.com/womens-course
+
+Want your own share link? Reply "share link" and we'll set you up.
+
+Quick pulse recap: small range at the hold point + short, forceful, open-mouth "HA" + voluntary squeeze. All together.
+
+How are your 2–3 movements feeling? Just hit reply. My team and I read every message.
+
+Quick answers
+- I've missed a few days. Pick it back up today. The exercise log is there to help you, not to grade you.
+- Should I add more movements? Stay with your best 2–3 for now. We'll re-take the worksheet together in month 2.
+- Where's my exercise log? In the Downloads under Outline and Objectives (first module).
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

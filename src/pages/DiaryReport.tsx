@@ -14,8 +14,10 @@ import {
   type DiaryDayReport,
 } from '../lib/diary'
 import { DIARY_REPORT_EMPTY, bladderDiaryReportSubtitle, incompleteDayLabel } from '../lib/diaryPdf'
-import { finishActiveDiary, readDiaries, readLogs, startNewDiary, syncDiaryWindows } from '../lib/mockServer'
+import { isDemoPass, reportForViewer } from '../lib/demoPass'
+import { finishActiveDiary, readDiaries, readLogs, readSession, startNewDiary, syncDiaryWindows } from '../lib/mockServer'
 import { formatDateOfBirth, readPatient } from '../lib/patient'
+import { PROSPECT_NO_IDENTITY } from '../lib/prospectCopy'
 import { formatDay, formatTime } from '../lib/storage'
 
 export function DiaryReport() {
@@ -24,11 +26,12 @@ export function DiaryReport() {
   const [logs] = useState(() => readLogs())
   const [selectedId, setSelectedId] = useState(() => latestDiary(readDiaries())?.id ?? null)
   const selected = diaries.find((diary) => diary.id === selectedId) ?? latestDiary(diaries)
-  const patient = readPatient()
+  const prospect = isDemoPass(readSession()?.redeemToken)
+  const patient = prospect ? null : readPatient()
 
   const report = useMemo(
-    () => (selected ? bladderDiaryReport(selected, logs, { patient }) : null),
-    [selected, logs, patient],
+    () => (selected ? reportForViewer(bladderDiaryReport(selected, logs, { patient }), prospect) : null),
+    [selected, logs, patient, prospect],
   )
 
   const picker = diaries.map((diary) => ({
@@ -64,16 +67,20 @@ export function DiaryReport() {
     >
       <PfilatesBrandHeader />
 
-      <section className="mb-5 rounded-2xl bg-cream-card px-4 py-4 shadow-card">
-        <p className="text-xs uppercase tracking-wide text-ink-faint">Patient</p>
-        <p className="mt-1 font-serif text-xl text-ink">{report.patientName}</p>
-        <p className="mt-1 text-sm text-ink">
-          Date of birth{' '}
-          {report.dateOfBirth.includes('-') && report.dateOfBirth.length === 10
-            ? formatDateOfBirth(report.dateOfBirth)
-            : report.dateOfBirth}
-        </p>
-      </section>
+      {prospect ? (
+        <p className="mb-5 text-sm text-ink-mute">{PROSPECT_NO_IDENTITY}</p>
+      ) : (
+        <section className="mb-5 rounded-2xl bg-cream-card px-4 py-4 shadow-card">
+          <p className="text-xs uppercase tracking-wide text-ink-faint">Patient</p>
+          <p className="mt-1 font-serif text-xl text-ink">{report.patientName}</p>
+          <p className="mt-1 text-sm text-ink">
+            Date of birth{' '}
+            {report.dateOfBirth.includes('-') && report.dateOfBirth.length === 10
+              ? formatDateOfBirth(report.dateOfBirth)
+              : report.dateOfBirth}
+          </p>
+        </section>
+      )}
 
       <DiaryPicker diaries={picker} selectedId={selected.id} onSelect={setSelectedId} />
 

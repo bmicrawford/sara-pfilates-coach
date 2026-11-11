@@ -1,0 +1,40 @@
+Subject: One week in: quick check-in
+Preview: How's your 5 + 5 going? Plus a 10-second pulse refresher.
+Delay/trigger: Sequence 'PfilAtes™ for Women – Onboarding' email 4. Delay after previous: 3 days (Day 8).
+Tag action on links: None (no tagging links; plain URLs only).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+It's been one week. How's it going? Tap one:
+
+[Great] → https://www.pfilates.com/thanks-got-it?a=w-wk1-great  (adds tag w-wk1-great)
+[Okay] → https://www.pfilates.com/thanks-got-it?a=w-wk1-okay  (adds tag w-wk1-okay)
+[Stuck] → https://www.pfilates.com/thanks-got-it?a=w-wk1-stuck  (adds tag w-wk1-stuck)
+
+Tapped "Stuck"? We'll follow up to help you get moving again.
+
+Week-1 checklist
+- ☐ Logged in and watched Understanding The Pelvic Floor & The PfilAtes™ Principles
+- ☐ Did the Movement Selection Video with the printed worksheet
+- ☐ Picked my best 2–3 movements
+- ☐ Practicing 5 minutes morning + 5 minutes evening
+- ☐ Checking off sessions in my exercise log
+
+Pulse refresher (the power is in the pulse):
+Small range around the hold point · percussive breath, a short, forceful, open-mouth "HA" that engages the transversus abdominis · voluntary pelvic floor squeeze. All three at the same moment.
+
+Missed some days? That's normal. Don't start over and don't double up. Just do your next 5 minutes.
+
+Questions? Just hit reply. My team and I read every message.
+
+Quick answers
+- I never got my login email. Check spam and promotions for an email sent when you purchased. Or go to https://www.pfilates.com/login and use the password-reset link with your purchase email. Still nothing? Reply here.
+- Can I watch on my phone or TV? Yes, log in from any browser. Printing the worksheet is easiest from a computer.
+- Can I switch movements? Yes. If one isn't working, move to your next-highest score.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

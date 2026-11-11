@@ -1,7 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { isDemoPass } from './lib/demoPass'
+import { captureSaraDebug } from './lib/saraDebug'
 import { PATIENT_CHANGED_EVENT, patientProfileComplete, readPatient } from './lib/patient'
 import { readSession } from './lib/mockServer'
+import { promptsForNameOrDob } from './lib/prospectCopy'
 import type { Session } from './lib/types'
 import { AskSara } from './pages/AskSara'
 import { DiaryReport } from './pages/DiaryReport'
@@ -9,6 +12,7 @@ import { ExerciseLog } from './pages/ExerciseLog'
 import { Home } from './pages/Home'
 import { Move } from './pages/Move'
 import { PatientOnboarding } from './pages/PatientOnboarding'
+import { OpenSara } from './pages/OpenSara'
 import { Redeem } from './pages/Redeem'
 import { Welcome } from './pages/Welcome'
 import { Worksheet } from './pages/Worksheet'
@@ -16,6 +20,10 @@ import { Worksheet } from './pages/Worksheet'
 export default function App() {
   const location = useLocation()
   const [session, setSession] = useState<Session | null>(() => readSession())
+
+  useEffect(() => {
+    captureSaraDebug(location.search)
+  }, [location.search])
 
   useEffect(() => {
     const sync = () => setSession(readSession())
@@ -41,12 +49,13 @@ export default function App() {
             path="/r/:token"
             element={session ? <Navigate to="/" replace /> : <Redeem />}
           />
+          <Route path="/open" element={session ? <Navigate to="/" replace /> : <OpenSara />} />
           <Route path="/move" element={<Move />} />
           <Route
             path="/ask"
             element={
               <NeedSession session={session}>
-                <NeedProfile>
+                <NeedProfile session={session}>
                   <AskSara />
                 </NeedProfile>
               </NeedSession>
@@ -56,7 +65,7 @@ export default function App() {
             path="/diary"
             element={
               <NeedSession session={session}>
-                <NeedProfile>
+                <NeedProfile session={session}>
                   <DiaryReport />
                 </NeedProfile>
               </NeedSession>
@@ -66,7 +75,7 @@ export default function App() {
             path="/exercise"
             element={
               <NeedSession session={session}>
-                <NeedProfile>
+                <NeedProfile session={session}>
                   <ExerciseLog />
                 </NeedProfile>
               </NeedSession>
@@ -76,7 +85,7 @@ export default function App() {
             path="/worksheet"
             element={
               <NeedSession session={session}>
-                <NeedProfile>
+                <NeedProfile session={session}>
                   <Worksheet />
                 </NeedProfile>
               </NeedSession>
@@ -86,7 +95,7 @@ export default function App() {
             path="/"
             element={
               session ? (
-                <NeedProfile>
+                <NeedProfile session={session}>
                   <Home session={session} />
                 </NeedProfile>
               ) : (
@@ -112,7 +121,7 @@ function NeedSession({
   return children
 }
 
-function NeedProfile({ children }: { children: ReactNode }) {
+function NeedProfile({ session, children }: { session: Session | null; children: ReactNode }) {
   const [patient, setPatient] = useState(() => readPatient())
 
   useEffect(() => {
@@ -125,6 +134,7 @@ function NeedProfile({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  if (!promptsForNameOrDob(isDemoPass(session?.redeemToken))) return children
   if (!patientProfileComplete(patient)) return <PatientOnboarding />
   return children
 }

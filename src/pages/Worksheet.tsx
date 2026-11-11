@@ -20,7 +20,9 @@ import {
   CIRCLE_ANSWERS,
   CONTRACTION_QUESTION,
   CONTRACTION_SCALE,
+  AI_COACH_LINE,
   COURSE_LINE,
+  DAILY_ROUTINE_LINE,
   ESSENTIAL_LABEL,
   ESSENTIAL_TIE_NOTE,
   HEALTH_HIP_REPLACEMENT,
@@ -216,6 +218,8 @@ function Form({
   return (
     <>
       <p className="mt-3 text-sm font-bold leading-relaxed text-black">{WORKSHEET_INTRO}</p>
+      <p className="mt-2 text-sm font-bold leading-relaxed text-black">{DAILY_ROUTINE_LINE}</p>
+      <p className="mt-2 text-sm font-bold leading-relaxed text-black">{AI_COACH_LINE}</p>
       <p className="mt-2 text-sm font-bold leading-relaxed text-black">{PAIN_STOP_LINE}</p>
       <p className="mt-2 text-sm font-bold text-black">{CIRCLE_ANSWERS}</p>
       <div className="glass-card mt-4 px-4 py-3 text-sm font-bold leading-relaxed text-black">
@@ -371,8 +375,11 @@ function Review({
         <p className="text-sm font-bold leading-relaxed text-black">{PAIN_STOP_LINE}</p>
         <h2 className="mt-3 font-serif text-2xl font-bold text-black">{TOP_MOVEMENTS_TITLE}</h2>
         <p className="mt-2 text-sm font-bold leading-relaxed text-black">
-          Highest contraction ratings, up to 3. Change this to 1–3 movements.
+          {selection.rankedIds.length >= 2
+            ? 'The daily plan is the top 2 or 3. You can change it to 2 or 3 movements.'
+            : 'One movement is still available. That is the daily plan.'}
         </p>
+        <p className="mt-2 text-sm font-bold leading-relaxed text-black">{DAILY_ROUTINE_LINE}</p>
         {selectionHasRatingTie(STANDARD_MOVEMENT_CATALOG, answers) ? (
           <p className="mt-2 text-sm font-bold leading-relaxed text-black">{ESSENTIAL_TIE_NOTE}</p>
         ) : null}
@@ -387,7 +394,7 @@ function Review({
           ))}
         </ol>
         {ordered.length === 0 ? (
-          <p className="mt-3 text-sm font-bold text-black">Choose 1 to 3 movements.</p>
+          <p className="mt-3 text-sm font-bold text-black">Choose 2 or 3 movements.</p>
         ) : null}
         <p className="mt-3 text-sm font-bold text-black">{COURSE_LINE}</p>
       </div>
@@ -425,7 +432,7 @@ function Review({
             )
           })}
         </ul>
-        {limitNote ? <p className="mt-3 text-sm font-bold text-black">Choose up to 3.</p> : null}
+        {limitNote ? <p className="mt-3 text-sm font-bold text-black">A daily plan is 2 or 3 movements.</p> : null}
       </div>
 
       <button

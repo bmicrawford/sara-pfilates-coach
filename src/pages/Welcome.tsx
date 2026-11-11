@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { SaraPortrait } from '../components/SaraPortrait'
 import { DEMO_TOKEN } from '../lib/mockServer'
+import { PROSPECT_WELCOME } from '../lib/prospectCopy'
 
 export function Welcome() {
   return (
@@ -11,10 +12,7 @@ export function Welcome() {
       <div className="mt-8">
         <SaraPortrait mood="default" />
       </div>
-      <p className="mt-3 text-center text-ink-mute">
-        Your course stays on Kajabi. This is the quiet pocket version — log a sip,
-        a leak, a class. No password. Just your email, once.
-      </p>
+      <p className="mt-3 text-center text-ink-mute">{PROSPECT_WELCOME}</p>
       <div className="mt-auto space-y-3 pt-8">
         <Link
           to={`/r/${DEMO_TOKEN}`}

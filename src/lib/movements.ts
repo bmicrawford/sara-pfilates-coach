@@ -28,7 +28,7 @@ export type MovementAnswers = {
   movementId: string
   /** "Does This Movement Cause Pain?" Yes eliminates the movement. */
   pain: YesNo
-  /** "Is This A Movement You Could Perform Regularly?" No eliminates the movement. */
+  /** "Do you like doing this movement?" No eliminates the movement. */
   regular: YesNo
   contraction: ContractionRating
 }
@@ -42,17 +42,17 @@ export type SelectionResult = {
    * low-probability, then worksheet order.
    */
   rankedIds: string[]
-  /** Up to 3 ids Sara suggests. Empty when no plan is possible. */
+  /** Top 2 or 3 ids. One id only when a single movement remains. Empty when no plan is possible. */
   suggestedIds: string[]
 }
 
 export const WORKSHEET_TITLE = 'Movement Selection Worksheet'
 
 export const WORKSHEET_INTRO =
-  "Fill this out after you've learned the movements in the PfilAtes course."
+  "Fill this out after you've learned the movements in the PfilAtes™ course."
 
 export const PAIN_QUESTION = 'Does This Movement Cause Pain?'
-export const REGULAR_QUESTION = 'Is This A Movement You Could Perform Regularly?'
+export const REGULAR_QUESTION = 'Do you like doing this movement?'
 export const CONTRACTION_QUESTION = 'Feeling of pelvic floor contraction'
 export const CIRCLE_ANSWERS = 'Circle your answers'
 
@@ -70,10 +70,17 @@ export const ESSENTIAL_TIE_NOTE =
   'When a rating is tied, an Essential movement is the recommended pick.'
 
 export const TOP_MOVEMENTS_TITLE = 'My top movements'
-export const COURSE_LINE = 'As taught in your PfilAtes course.'
+export const COURSE_LINE = 'As taught in your PfilAtes™ course.'
+
+export const DAILY_PLAN_MIN = 2
+export const DAILY_PLAN_MAX = 3
+
+export const DAILY_ROUTINE_LINE = 'About 10 minutes a day.'
+
+export const AI_COACH_LINE = 'Sara is an AI coach, not a doctor.'
 
 export const NO_EVERYDAY_PLAN_MESSAGE =
-  'None of these movements are ready for an everyday plan. Review the movements in the PfilAtes course, and check with your clinician or pelvic floor PT.'
+  'None of these movements are ready for an everyday plan. Review the movements in the PfilAtes™ course, and check with your clinician or pelvic floor PT.'
 
 export const RESTART_CUE =
   "A missed day is just a missed day. Start again with today's movements whenever you're ready."
@@ -116,7 +123,7 @@ const HIP_REPLACEMENT_MOVEMENTS = new Set([
   'side-lying-bent-knee-lift',
   'side-lying-straight-leg-circle',
   'butterfly',
-  'all-4s-side-leg-lift',
+  'all-fours-side-leg-lift',
 ])
 
 const PREGNANCY_AFTER_12_MOVEMENTS = new Set(['butterfly', 'bridging', 'corkscrew'])
@@ -134,7 +141,7 @@ export const STANDARD_MOVEMENT_CATALOG: MovementCatalog = {
     { id: 'bridging', name: 'Bridging', essential: true },
     { id: 'corkscrew', name: 'Corkscrew', essential: false },
     { id: 'hovering', name: 'Hovering', essential: true },
-    { id: 'all-4s-side-leg-lift', name: 'All-4s side leg lift', essential: false },
+    { id: 'all-fours-side-leg-lift', name: 'All Fours Side Leg Lift', essential: false },
     { id: 'cat-cow', name: 'Cat-Cow', essential: true },
   ],
 }
@@ -226,15 +233,16 @@ export function selectionHasRatingTie(
   return false
 }
 
-/** Yes on pain, or No on "could perform regularly", drops the movement. */
+/** Yes on pain, or No on "like doing it", drops the movement. */
 export function isEliminated(answer: Pick<MovementAnswers, 'pain' | 'regular'>): boolean {
   return answer.pain === 'yes' || answer.regular === 'no'
 }
 
 /**
- * Among movements that were not eliminated, suggest the top 3 by contraction
- * rating. A tie prefers an Essential movement, then worksheet order. If every
- * movement is eliminated, or every remaining movement is rated 0, there is no plan.
+ * Among movements that were not eliminated, suggest the top 2 or 3 by
+ * contraction rating. A tie prefers an Essential movement, then worksheet
+ * order. If every movement is eliminated, or every remaining movement is
+ * rated 0, there is no plan. A single remaining movement is the whole plan.
  */
 export function selectTopMovements(
   catalog: MovementCatalog,
@@ -283,14 +291,15 @@ export function selectTopMovements(
   return {
     status: 'plan',
     rankedIds,
-    suggestedIds: rankedIds.slice(0, 3),
+    suggestedIds: rankedIds.slice(0, DAILY_PLAN_MAX),
   }
 }
 
 /**
- * The person may change Sara's suggestion to any 1–3 movements that were not
- * eliminated. Returns those ids in rank order, or null when the choice is
- * outside 1–3 or includes an eliminated movement.
+ * The person may change Sara's suggestion to 2 or 3 movements that were not
+ * eliminated. One movement is allowed only when it is the only one left.
+ * Returns those ids in rank order, or null when the choice is outside that
+ * range or includes an eliminated movement.
  */
 export function adjustTopMovements(
   rankedIds: readonly string[],
@@ -302,7 +311,9 @@ export function adjustTopMovements(
     if (!allowed.has(id) || unique.includes(id)) continue
     unique.push(id)
   }
-  if (unique.length < 1 || unique.length > 3) return null
+  const floor = rankedIds.length >= DAILY_PLAN_MIN ? DAILY_PLAN_MIN : 1
+  const ceiling = Math.min(DAILY_PLAN_MAX, Math.max(rankedIds.length, 1))
+  if (unique.length < floor || unique.length > ceiling) return null
   if (unique.length !== chosenIds.length) return null
   return rankedIds.filter((id) => unique.includes(id))
 }

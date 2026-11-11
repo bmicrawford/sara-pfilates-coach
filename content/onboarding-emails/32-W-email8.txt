@@ -1,0 +1,32 @@
+Subject: Day 25 is almost here: your bladder diary
+Preview: Time to measure your own progress.
+Delay/trigger: Sequence 'PfilAtes™ for Women – Onboarding' email 8. Delay after previous: 3 days (Day 24).
+Tag action on links: None (no tagging links; plain URLs only).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Your exercise log has two important dates coming up:
+- Day 25: start your post-training Bladder Diary
+- Day 28: finish it
+
+Fill out the C-10 Symptom Questionnaire again too, and then compare both with the ones you filled out before you started. This is how you see your own progress in your own numbers.
+
+Can't find the forms? Log in at https://www.pfilates.com/login and go to Before You Begin | Course Introduction → Outline and Objectives → Downloads.
+
+Didn't do a "before" diary? Do one now anyway. It gives you a baseline for month 2.
+
+Habit tip: Put the diary next to your exercise log and your worksheet. Keep all three in the same spot.
+
+Questions about the diary? Just hit reply. My team and I read every message.
+
+Quick answers
+- What if my day count is off? Use your own Day 25–28, counted from when you started practicing.
+- Do I keep practicing during the diary? Yes. Keep your 5 + 5 going.
+- Which C-10 do I use? The same questionnaire. The lesson labels it "Pre + Post."
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

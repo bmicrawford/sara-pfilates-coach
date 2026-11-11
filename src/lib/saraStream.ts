@@ -3,9 +3,13 @@
  * means the trial/session cap (or zero credits) — do not retry connect/speak; keep still + ara.
  *
  * Do not connect() on Ask Sara mount. Lite’s concurrent stream cap is small; idle
- * tabs (phone + laptop PWA + Studio) exhaust it and freeze the still. Mint + WebRTC
- * start on Send / Play, in parallel with Grok. Keep the session after connect
- * so the next speak() does not re-pay WebRTC; release on leave / unmount / pagehide.
+ * tabs (phone + laptop PWA + Studio) exhaust it and freeze the still. Paid and
+ * class passes mint + WebRTC on Send / Play, in parallel with Grok. The demo
+ * pass is the exception: the landing and home screen warm one muted session
+ * and Ask Sara reuses it (demoStreamSession). This module still does not connect
+ * from preload. Keep the session after connect so the next speak() does not
+ * re-pay WebRTC; release on leave / unmount / pagehide. The demo Worker lease
+ * is not renewed — it expires on its TTL.
  * speak() fires as soon as Grok text exists — do not wait for ara, and do
  * not start ara while D-ID is still connecting or decoding. Heard voice is
  * D-ID stream audio only when speak has started AND the <video> has visible
@@ -20,7 +24,9 @@
  * the SDK retry; do not treat that flap as a dead session.
  */
 
+import { currentSaraPass, isDemoPass } from './demoPass.ts'
 import { rewritePfilatesForSpeech } from './pfilatesSpeech.mjs'
+import { beginMutedGesturePlay, classifyPlayRejection, unmuteInPlace } from './saraStreamGesture.ts'
 
 function apiBase(): string {
   return (import.meta.env.VITE_SARA_API_URL ?? '').replace(/\/$/, '')
@@ -42,7 +48,7 @@ type AgentManagerLike = {
 
 export type SaraStreamStatus = 'live' | 'unavailable' | 'session_capped'
 export type SaraStreamSpeakResult = 'heard' | 'fallback'
-export type SaraStreamVoicePath = 'idle' | 'pending' | 'did' | 'ara'
+export type SaraStreamVoicePath = 'idle' | 'pending' | 'did' | 'ara' | 'visual'
 
 type StreamCallbacks = {
   onTalking?: (talking: boolean) => void
@@ -50,6 +56,10 @@ type StreamCallbacks = {
   onStatus?: (status: SaraStreamStatus) => void
   /** Fired when a previously-heard D-ID path dies and ara must take over. */
   onVoiceFallback?: () => void
+  /** Muted play() from a tap was rejected. The face needs Tap to see Sara. */
+  onSeeSara?: (blocked: boolean) => void
+  /** In-place unmute succeeded (true) or the video must stay a muted visual (false). */
+  onStreamAudible?: (ok: boolean) => void
 }
 
 /** Quiet UI line when D-ID is at the session/credit cap. Ara still plays. */
@@ -68,6 +78,7 @@ export function streamVideoShouldBeMuted(opts: {
   videoLive?: boolean
 }): boolean {
   if (opts.userMuted) return true
+  if (opts.voicePath === 'visual') return true
   return !(opts.voicePath === 'did' && opts.videoLive)
 }
 
@@ -103,14 +114,44 @@ let deadMode = false
 let sessionCapped = false
 let foregroundBound = false
 let lifecycleBound = false
-/** True after Send / Play asks for a session. Idle mount does not set this. */
+/** True while this tab wants the WebRTC session kept. Demo warm sets it on open. */
 let streamWanted = false
+/** Last connect() returned false (cap, 429, or no credentials). */
+let connectFailed = false
+/** Worker 429/402/403 or did_unavailable. Not a retryable warm failure. */
+let streamDenied = false
 let releaseTimer: number | null = null
 const playTimers = new Set<number>()
+/** Bumped when a tap cancels queued play() retries. In-flight plays from an older token are ignored. */
+let playToken = 0
+/** At most one video.play() is in flight. Overlapping calls abort each other on iOS. */
+let playPending = false
+/** One collapsed retry to run when the in-flight play() settles. */
+let playFollowUp: (() => void) | null = null
+/** Ask Sara registers this so Tap to see Sara can reopen a retryable warm session. */
+let reconnectForTap: (() => void) | null = null
 const listeners: StreamCallbacks = {}
-/** Heard-voice state. did + live frames unmute; pending stays silent; ara remutes. */
+/** Heard-voice state. did + live frames unmute; pending stays silent; ara remutes. visual stays muted. */
 let voicePath: SaraStreamVoicePath = 'idle'
 let fallbackLocked = false
+/**
+ * iPhone WebRTC audio is silenced by the hardware Silent switch. When set,
+ * live frames stay a muted visual and ara on the media element is the voice.
+ */
+let keepStreamMuted = false
+/** Last video.play() outcome for ?debug=1. `played` or a DOMException name. */
+let playLabel = '—'
+/** ICE / peer connection state from the Agents SDK. */
+let iceState = '—'
+/** A media track has arrived on the WebRTC stream. */
+let trackReceived = false
+/** Why this visit left D-ID audio. Shown on the debug line. */
+let fallbackReason = '—'
+/** Ask Sara was opened or Send was tapped before the <video> mounted. */
+let gestureArmed = false
+/** The user asked the video to play. Background autoplay failures stay quiet. */
+let userAskedToSee = false
+let seeBlocked = false
 /** Speak START / a real speak result — not enough to unmute without frames. */
 let speakingStarted = false
 /** Ask Sara mute preference — kept here so this module does not import speakSara. */
@@ -152,7 +193,10 @@ export function shouldShowSaraStream(opts: {
 /** True only when the element holds a real stream with a decoded frame. */
 export function isSaraVideoLive(video: HTMLVideoElement | null | undefined): boolean {
   if (!video || !video.srcObject) return false
-  return video.videoWidth > 0
+  if (video.videoWidth > 0) return true
+  // iOS WebRTC can paint frames and advance currentTime while videoWidth is still 0.
+  const currentTime = Number(video.currentTime)
+  return video.readyState >= 2 && video.paused === false && currentTime > 0
 }
 
 function elementHoldsStream(): boolean {
@@ -189,7 +233,7 @@ function gateAudioTracks(enabled: boolean) {
 
 function applyHeardMute(video: HTMLVideoElement) {
   const videoLive = isSaraVideoLive(video)
-  const audible = !streamVideoShouldBeMuted({ voicePath, userMuted, videoLive })
+  const audible = !streamVideoShouldBeMuted({ voicePath, userMuted, videoLive }) && !video.paused
   // Disable tracks first so a pending path cannot leak audio before frames.
   gateAudioTracks(audible)
   if (audible) {
@@ -201,10 +245,165 @@ function applyHeardMute(video: HTMLVideoElement) {
   }
   // Keep muted until did+frames. Unmuted play() after async connect is blocked
   // by autoplay rules, so the <video> never decodes and srcObject looks dead.
+  // A paused element stays muted: iOS rejects play() once muted is false.
   video.volume = 0
   video.muted = true
   video.defaultMuted = true
   video.setAttribute('muted', '')
+}
+
+export type SaraStreamDebugFacts = {
+  play: string
+  muted: boolean | null
+  videoWidth: number
+  readyState: number
+  ice: string
+  track: boolean
+  fallback: string
+}
+
+export function saraStreamHasFrames(): boolean {
+  return isSaraVideoLive(videoEl)
+}
+
+export function saraStreamDebugFacts(): SaraStreamDebugFacts {
+  const video = videoEl
+  return {
+    play: playLabel,
+    muted: video ? video.muted : null,
+    videoWidth: video?.videoWidth ?? 0,
+    readyState: video?.readyState ?? 0,
+    ice: iceState,
+    track: trackReceived,
+    fallback: fallbackReason,
+  }
+}
+
+export function noteStreamFallback(reason: string): void {
+  fallbackReason = reason || '—'
+  logStream('fallback', `${fallbackReason} ${JSON.stringify(saraStreamDebugFacts())}`)
+}
+
+function logFacts(event: string) {
+  logStream(event, saraStreamDebugFacts())
+}
+
+function markSee(blocked: boolean) {
+  if (seeBlocked === blocked) {
+    if (blocked) listeners.onSeeSara?.(true)
+    return
+  }
+  seeBlocked = blocked
+  listeners.onSeeSara?.(blocked)
+}
+
+function noteTracks(stream: MediaStream | null | undefined) {
+  if (!stream || typeof stream.getTracks !== 'function') return
+  const tracks = stream.getTracks()
+  if (!tracks.length) return
+  if (!trackReceived) logStream('track', tracks.map((track) => track.kind).join(',') || 'yes')
+  trackReceived = true
+}
+
+function rememberPlayError(error: unknown, fromGesture: boolean) {
+  const decision = classifyPlayRejection(error)
+  playLabel = decision.name
+  logStream('video.play rejected', playLabel)
+  // AbortError means a newer play() replaced this one. Do not cover the
+  // video or stick the visit on play-AbortError. Only NotAllowedError
+  // needs Tap to see Sara.
+  if (!decision.benignAbort && (fromGesture || userAskedToSee || elementHoldsStream())) {
+    if (decision.fallback) noteStreamFallback(decision.fallback)
+    if (decision.showSeeOverlay) markSee(true)
+  }
+  logFacts('play')
+}
+
+function rememberPlayOk() {
+  playLabel = 'played'
+  markSee(false)
+  logFacts('play')
+}
+
+/** Cap or Worker denial. A retryable WebRTC miss stays false so the next Send can connect. */
+export function saraStreamConnectBlocked(): boolean {
+  return sessionCapped || streamDenied
+}
+
+export function setSaraStreamTapReconnect(fn: (() => void) | null): void {
+  reconnectForTap = fn
+}
+
+function requestTapReconnect() {
+  if (saraStreamConnectBlocked()) return
+  const phase = saraStreamPhase()
+  if (phase === 'live' || phase === 'connecting') return
+  // Home's Ask Sara link also calls gestureUnlock to prime play().
+  // Only Ask Sara registers a reconnect, so that tap cannot mint a session.
+  reconnectForTap?.()
+}
+
+/** Muted play() from a tap. Does not unmute. Arms the next mount if the node is missing. */
+export function gestureUnlockSaraStream(): void {
+  userAskedToSee = true
+  requestTapReconnect()
+  if (!videoEl) {
+    gestureArmed = true
+    logStream('gesture armed — stream video is not mounted yet')
+    return
+  }
+  gestureArmed = false
+  playMutedFromUser(videoEl, true)
+}
+
+function playMutedFromUser(video: HTMLVideoElement, fromTap = false) {
+  // A gesture play has to run even if a retry is in flight. Bumping the
+  // token drops that retry's result (its AbortError is not a fallback).
+  playToken += 1
+  clearPlayTimers()
+  playPending = false
+  playFollowUp = null
+  if (fromTap) {
+    if (srcObject) {
+      if (video.src) video.src = ''
+      if (video.srcObject !== srcObject) video.srcObject = srcObject
+    }
+    markSee(false)
+  }
+  invokeMutedPlay(video, true, () => {})
+}
+
+function invokeMutedPlay(video: HTMLVideoElement, fromGesture: boolean, onPlayed: () => void) {
+  if (playPending) return
+  const token = playToken
+  let pending: Promise<void> | void
+  try {
+    pending = beginMutedGesturePlay(video)
+  } catch (error) {
+    rememberPlayError(error, fromGesture)
+    return
+  }
+  const succeed = () => {
+    if (token !== playToken) return
+    rememberPlayOk()
+    onPlayed()
+  }
+  const fail = (error: unknown) => {
+    if (token !== playToken) return
+    rememberPlayError(error, fromGesture)
+  }
+  if (pending && typeof pending.then === 'function') {
+    playPending = true
+    void Promise.resolve(pending).then(succeed, fail).finally(() => {
+      if (token !== playToken) return
+      playPending = false
+      const follow = playFollowUp
+      playFollowUp = null
+      follow?.()
+    })
+    return
+  }
+  succeed()
 }
 
 function rememberStreamSession(info: { stream_id?: string; session_id?: string }) {
@@ -273,21 +472,30 @@ function isSessionIdError(error: unknown): boolean {
 }
 
 function bindLateTracks(stream: MediaStream) {
+  noteTracks(stream)
   if (lateTrackStreams.has(stream)) return
   lateTrackStreams.add(stream)
-  const refresh = () => {
+  // Do not listen for track 'unmute'. Re-clearing srcObject there fires
+  // 'emptied' and the still photo covers a video that was already playing.
+  // WebKit only misses a video track that was absent when srcObject was set.
+  let waitingForVideo = stream.getVideoTracks().length === 0
+  stream.addEventListener('addtrack', () => {
+    noteTracks(stream)
+    if (!waitingForVideo || stream.getVideoTracks().length === 0) return
+    waitingForVideo = false
     if (srcObject !== stream || !videoEl) return
-    // WebKit often ignores a video track added after srcObject is set (warmup off).
+    // Cancel queued play() calls before the element load, or they abort
+    // each other and the emptied event puts the still back up.
+    playToken += 1
+    clearPlayTimers()
+    playPending = false
+    playFollowUp = null
     if (videoEl.src) videoEl.src = ''
     if (videoEl.srcObject === stream) videoEl.srcObject = null
     videoEl.srcObject = stream
     applyHeardMute(videoEl)
     schedulePlay(videoEl)
     maybePromoteHeard()
-  }
-  stream.addEventListener('addtrack', refresh)
-  stream.getVideoTracks().forEach((track) => {
-    track.addEventListener('unmute', refresh)
   })
 }
 
@@ -299,6 +507,15 @@ function setVoicePath(next: SaraStreamVoicePath) {
   if (videoEl) applyHeardMute(videoEl)
 }
 
+export function setSaraStreamKeepMuted(keep: boolean): void {
+  keepStreamMuted = keep
+}
+
+/** Speech frames are on screen (speak started, decoded, not paused). */
+export function isSaraStreamSpeechLive(): boolean {
+  return framesArePlayable()
+}
+
 function resolveAvReady(ready: boolean) {
   const waiters = avReadyWaiters.splice(0, avReadyWaiters.length)
   waiters.forEach((fn) => fn(ready))
@@ -306,14 +523,25 @@ function resolveAvReady(ready: boolean) {
 
 function maybePromoteHeard() {
   if (fallbackLocked) return
-  if (voicePath !== 'pending' && voicePath !== 'did') return
+  if (voicePath !== 'pending' && voicePath !== 'did' && voicePath !== 'visual') return
   if (!speakingStarted || !streamHasLiveFrames()) {
     if (videoEl) applyHeardMute(videoEl)
     return
   }
+  if (keepStreamMuted || voicePath === 'visual') {
+    if (voicePath !== 'visual') setVoicePath('visual')
+    if (videoEl) {
+      applyHeardMute(videoEl)
+      schedulePlay(videoEl)
+    }
+    listeners.onTalking?.(true)
+    resolveAvReady(true)
+    return
+  }
   setVoicePath('did')
-  if (videoEl) {
-    applyHeardMute(videoEl)
+  if (videoEl && !videoEl.paused && unmuteInPlace(videoEl)) {
+    listeners.onStreamAudible?.(true)
+  } else if (videoEl) {
     schedulePlay(videoEl)
   }
   listeners.onTalking?.(true)
@@ -329,7 +557,7 @@ function framesArePlayable(): boolean {
 }
 
 function waitForAvReady(): Promise<boolean> {
-  if (voicePath === 'did' && framesArePlayable()) return Promise.resolve(true)
+  if ((voicePath === 'did' || voicePath === 'visual') && framesArePlayable()) return Promise.resolve(true)
   return new Promise((resolve) => {
     const started = Date.now()
     let settled = false
@@ -344,7 +572,7 @@ function waitForAvReady(): Promise<boolean> {
     }
     const onReady = (ready: boolean) => finish(ready)
     const poll = window.setInterval(() => {
-      if (voicePath === 'did' && framesArePlayable()) {
+      if ((voicePath === 'did' || voicePath === 'visual') && framesArePlayable()) {
         finish(true)
         return
       }
@@ -356,6 +584,7 @@ function waitForAvReady(): Promise<boolean> {
 }
 
 function onAvCue() {
+  noteFirstFrame()
   maybePromoteHeard()
 }
 
@@ -382,7 +611,7 @@ function scheduleTalkingEnd(result: unknown, gen: number) {
     window.setTimeout(() => {
       if (gen !== speakGen) return
       listeners.onTalking?.(false)
-      if (voicePath === 'did') setVoicePath('idle')
+      if (voicePath === 'did' || voicePath === 'visual') setVoicePath('idle')
     }, Math.round(duration * 1000) + 250),
   )
 }
@@ -416,12 +645,40 @@ function clearPlayTimers() {
 
 function schedulePlay(video: HTMLVideoElement) {
   primeVideo(video)
+  const token = playToken
   const kick = () => {
-    if (videoEl !== video) return
-    applyHeardMute(video)
-    video.playsInline = true
-    const play = video.play()
-    if (play && typeof play.catch === 'function') void play.catch(() => {})
+    if (token !== playToken || videoEl !== video) return
+    const wantAudible = !streamVideoShouldBeMuted({
+      voicePath,
+      userMuted,
+      videoLive: isSaraVideoLive(video),
+    })
+    if (!video.paused && isSaraVideoLive(video)) {
+      if (wantAudible && video.muted) {
+        if (unmuteInPlace(video)) listeners.onStreamAudible?.(true)
+        else {
+          noteStreamFallback('unmute')
+          if (voicePath === 'did') setVoicePath('visual')
+          listeners.onStreamAudible?.(false)
+        }
+      }
+      return
+    }
+    if (playPending) {
+      playFollowUp = () => kick()
+      return
+    }
+    // Always play muted. Unmute only after the element is already playing.
+    invokeMutedPlay(video, false, () => {
+      if (!wantAudible || videoEl !== video || token !== playToken) return
+      if (unmuteInPlace(video)) {
+        listeners.onStreamAudible?.(true)
+        return
+      }
+      noteStreamFallback('unmute')
+      if (voicePath === 'did') setVoicePath('visual')
+      listeners.onStreamAudible?.(false)
+    })
   }
   clearPlayTimers()
   kick()
@@ -508,6 +765,8 @@ function dropLiveSession() {
   cancelRelease()
   stopSaraStream()
   dropManager()
+  trackReceived = false
+  iceState = '—'
   attachSrcObject(null)
 }
 
@@ -525,6 +784,32 @@ function bindSessionLifecycle() {
 export function preloadSaraStream(): void {
   bindSessionLifecycle()
   void loadSdk()
+}
+
+export type SaraStreamPhase = 'idle' | 'connecting' | 'live' | 'failed'
+
+/** idle / connecting / live / failed. Live means the WebRTC session exists, not that frames are painted. */
+export function saraStreamPhase(): SaraStreamPhase {
+  if (sessionCapped || connectFailed) return 'failed'
+  if (hasLiveManager()) return 'live'
+  if (connectPromise) return 'connecting'
+  return 'idle'
+}
+
+/** Cancel a pending unmount close. Does not mint or open a second session. */
+export function keepSaraStream(): void {
+  streamWanted = true
+  cancelRelease()
+}
+
+/**
+ * Close the current D-ID session now (SDK disconnect).
+ * Does not renew the Worker lease — that key expires on its TTL.
+ */
+export function retireDemoStream(): void {
+  streamWanted = false
+  connectFailed = false
+  dropLiveSession()
 }
 
 /** Debounced disconnect for React unmount. StrictMode remount cancels this and reuses the session. */
@@ -548,6 +833,10 @@ export function bindSaraStreamVideo(el: HTMLVideoElement | null) {
   bindAvCues(el)
   if (el) {
     attachSrcObject(srcObject)
+    if (gestureArmed) {
+      gestureArmed = false
+      playMutedFromUser(el, true)
+    }
     return
   }
   // Video node gone (StrictMode remount, leave page) — do not leave streamReady
@@ -560,7 +849,13 @@ export function bindSaraStreamVideo(el: HTMLVideoElement | null) {
  */
 export function unlockSaraStream(): void {
   if (voicePath === 'idle') setVoicePath('pending')
-  if (!videoEl) return
+  if (!videoEl) {
+    gestureArmed = true
+    userAskedToSee = true
+    return
+  }
+  // Same turn as Send / Play / Test voice. Muted, before any await.
+  playMutedFromUser(videoEl)
   bindAvCues(videoEl)
   primeVideo(videoEl)
   if (srcObject && videoEl.srcObject !== srcObject) {
@@ -577,8 +872,8 @@ export function replaySaraStreamVideo(): void {
   if (videoEl) schedulePlay(videoEl)
 }
 
-/** Remute after an unreachable Grok reply or when ara takes over. */
-export function settleSaraStreamVoice(path: Exclude<SaraStreamVoicePath, 'pending' | 'did'>): void {
+/** Remute after an unreachable Grok reply, when ara takes over, or for muted visuals. */
+export function settleSaraStreamVoice(path: 'idle' | 'ara' | 'visual'): void {
   setVoicePath(path)
   if (videoEl) applyHeardMute(videoEl)
 }
@@ -588,11 +883,197 @@ export function setSaraStreamCallbacks(next: StreamCallbacks) {
   listeners.onReady = next.onReady
   listeners.onStatus = next.onStatus
   listeners.onVoiceFallback = next.onVoiceFallback
+  listeners.onSeeSara = next.onSeeSara
+  listeners.onStreamAudible = next.onStreamAudible
+  if (next.onSeeSara) next.onSeeSara(seeBlocked)
   if (next.onReady) next.onReady(streamReady)
   if (next.onStatus && sessionCapped) next.onStatus('session_capped')
 }
 
+/** Reuse a minted client key until this long before it expires. */
+const STREAM_KEY_REUSE_MS = 30_000
+
+export type SaraConnectTiming = {
+  mintMs: number | null
+  /** True when this connect did not POST /stream because the key was still inside its TTL. */
+  mintCached: boolean
+  sdkMs: number | null
+  agentMs: number | null
+  createMs: number | null
+  streamPostMs: number | null
+  sdpMs: number | null
+  /** ICE gathering duration after the peer connection exists. */
+  iceGatherMs: number | null
+  /** Offset from connect start to iceConnectionState connected/completed. */
+  iceConnectedMs: number | null
+  connectMs: number | null
+  firstFrameMs: number | null
+  totalMs: number | null
+}
+
+const emptyTiming = (): SaraConnectTiming => ({
+  mintMs: null,
+  mintCached: false,
+  sdkMs: null,
+  agentMs: null,
+  createMs: null,
+  streamPostMs: null,
+  sdpMs: null,
+  iceGatherMs: null,
+  iceConnectedMs: null,
+  connectMs: null,
+  firstFrameMs: null,
+  totalMs: null,
+})
+
+let connectTiming = emptyTiming()
+let connectT0 = 0
+let peerWatchGen = 0
+let credsCache: SaraStreamCreds | null = null
+let credsInflight: Promise<SaraStreamCreds | null> | null = null
+let credsGen = 0
+/** Demo landing can mint before Continue writes the local session. Paid passes never use this. */
+let passOverride = ''
+
+export function saraStreamConnectTiming(): SaraConnectTiming {
+  return { ...connectTiming }
+}
+
+export function saraStreamTimingLabel(): string {
+  const t = connectTiming
+  const n = (value: number | null) => (value == null ? '—' : String(value))
+  const mint = t.mintCached ? 'cached' : n(t.mintMs)
+  return `mint ${mint} · sdk ${n(t.sdkMs)} · agent ${n(t.agentMs)} · create ${n(t.createMs)} · stream ${n(t.streamPostMs)} · sdp ${n(t.sdpMs)} · gather ${n(t.iceGatherMs)} · iceAt ${n(t.iceConnectedMs)} · connect ${n(t.connectMs)} · up ${n(t.totalMs)} · frame ${n(t.firstFrameMs)}`
+}
+
+function publishTiming(reason: string) {
+  if (connectT0) connectTiming.totalMs = Math.round(performance.now() - connectT0)
+  logStream('timing', `${reason} ${saraStreamTimingLabel()}`)
+}
+
+function noteFirstFrame() {
+  if (!connectT0 || connectTiming.firstFrameMs != null) return
+  if (!isSaraVideoLive(videoEl)) return
+  connectTiming.firstFrameMs = Math.round(performance.now() - connectT0)
+  publishTiming('first-frame')
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input
+  if (input instanceof URL) return input.toString()
+  return input.url
+}
+
+function noteNetworkTiming(method: string, url: string, ms: number) {
+  if (!connectT0) return
+  const path = url.split('?')[0]
+  const rounded = Math.round(ms)
+  if (method === 'POST' && /\/stream$/.test(path)) {
+    if (connectTiming.mintMs == null) connectTiming.mintMs = rounded
+    return
+  }
+  if (method === 'GET' && /\/runtime$/.test(path)) {
+    if (connectTiming.agentMs == null) connectTiming.agentMs = rounded
+    return
+  }
+  if (method === 'POST' && /\/streams$/.test(path)) {
+    if (connectTiming.streamPostMs == null) connectTiming.streamPostMs = rounded
+    return
+  }
+  if (method === 'POST' && /\/sdp$/.test(path)) {
+    if (connectTiming.sdpMs == null) connectTiming.sdpMs = rounded
+  }
+}
+
+function observePeer(pc: RTCPeerConnection) {
+  const watch = peerWatchGen
+  const gatherStart = performance.now()
+  pc.addEventListener('icegatheringstatechange', () => {
+    if (watch !== peerWatchGen) return
+    if (pc.iceGatheringState === 'complete' && connectTiming.iceGatherMs == null) {
+      connectTiming.iceGatherMs = Math.round(performance.now() - gatherStart)
+      logStream('timing', `ice-gathering-complete ${saraStreamTimingLabel()}`)
+    }
+  })
+  pc.addEventListener('iceconnectionstatechange', () => {
+    if (watch !== peerWatchGen) return
+    const state = pc.iceConnectionState
+    if ((state === 'connected' || state === 'completed') && connectTiming.iceConnectedMs == null && connectT0) {
+      connectTiming.iceConnectedMs = Math.round(performance.now() - connectT0)
+      logStream('timing', `ice-connected ${saraStreamTimingLabel()}`)
+    }
+  })
+}
+
+/** Installed before the Agents SDK evaluates, because the SDK binds RTCPeerConnection at import. */
+function installConnectObservers() {
+  if (typeof window === 'undefined') return
+  const win = window as Window & { __saraConnectObserved?: boolean }
+  if (win.__saraConnectObserved) return
+  win.__saraConnectObserved = true
+  const OrigPC = window.RTCPeerConnection
+  if (OrigPC) {
+    const Wrapped = function (this: RTCPeerConnection, config?: RTCConfiguration) {
+      const pc = new OrigPC(config)
+      observePeer(pc)
+      return pc
+    }
+    Wrapped.prototype = OrigPC.prototype
+    window.RTCPeerConnection = Wrapped as unknown as typeof RTCPeerConnection
+  }
+  const nativeFetch = window.fetch.bind(window)
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const method = String(
+      init?.method || (typeof Request !== 'undefined' && input instanceof Request ? input.method : 'GET'),
+    ).toUpperCase()
+    const url = requestUrl(input)
+    const start = performance.now()
+    return nativeFetch(input, init).then((res) => {
+      noteNetworkTiming(method, url, performance.now() - start)
+      return res
+    })
+  }
+}
+
+installConnectObservers()
+
+export function setSaraStreamPassOverride(pass: string): void {
+  passOverride = isDemoPass(pass) ? String(pass).trim() : ''
+}
+
+function credsStillFresh(creds: SaraStreamCreds | null, now = Date.now()): boolean {
+  if (!creds?.agentId || !creds.clientKey) return false
+  if (creds.expiresAt == null) return true
+  return creds.expiresAt - now > STREAM_KEY_REUSE_MS
+}
+
+/** Drop the cached client key so the next session POSTs /stream and counts against the gate. */
+export function discardSaraStreamCreds(): void {
+  credsGen += 1
+  credsCache = null
+  credsInflight = null
+}
+
 export async function fetchSaraStreamCreds(): Promise<SaraStreamCreds | null> {
+  if (credsStillFresh(credsCache)) {
+    connectTiming.mintCached = true
+    connectTiming.mintMs = 0
+    return credsCache
+  }
+  if (credsInflight) return credsInflight
+  const gen = credsGen
+  const pending = fetchSaraStreamCredsFresh()
+  credsInflight = pending
+  try {
+    const creds = await pending
+    if (gen === credsGen && credsStillFresh(creds)) credsCache = creds
+    return creds
+  } finally {
+    if (credsInflight === pending) credsInflight = null
+  }
+}
+
+async function fetchSaraStreamCredsFresh(): Promise<SaraStreamCreds | null> {
   const ctrl = new AbortController()
   const timer = window.setTimeout(() => ctrl.abort(), 12_000)
   try {
@@ -600,14 +1081,25 @@ export async function fetchSaraStreamCreds(): Promise<SaraStreamCreds | null> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: ctrl.signal,
-      body: '{}',
+      body: JSON.stringify({ pass: currentSaraPass() || passOverride }),
     })
     const data = (await res.json().catch(() => ({}))) as {
       agentId?: string | null
       clientKey?: string | null
       expiresAt?: number | null
+      error?: string | null
     }
-    if (!data.agentId || !data.clientKey) return null
+    if (!res.ok || !data.agentId || !data.clientKey) {
+      if (
+        res.status === 429 ||
+        res.status === 402 ||
+        res.status === 403 ||
+        data.error === 'did_unavailable'
+      ) {
+        streamDenied = true
+      }
+      return null
+    }
     return { agentId: data.agentId, clientKey: data.clientKey, expiresAt: data.expiresAt }
   } catch {
     return null
@@ -685,6 +1177,7 @@ function speakLooksDead(result: unknown): boolean {
 
 export async function connectSaraStream(): Promise<boolean> {
   streamWanted = true
+  connectFailed = false
   cancelRelease()
   bindSessionLifecycle()
   patchDidSessionFetch()
@@ -708,19 +1201,37 @@ export async function connectSaraStream(): Promise<boolean> {
         return false
       }
       deadMode = false
-      const [creds, create] = await Promise.all([fetchSaraStreamCreds(), loadSdk()])
+      connectT0 = performance.now()
+      connectTiming = emptyTiming()
+      peerWatchGen += 1
+      const cachedKey = credsStillFresh(credsCache)
+      const parallelStart = performance.now()
+      const [creds, create] = await Promise.all([
+        fetchSaraStreamCreds(),
+        loadSdk().then((factory) => {
+          connectTiming.sdkMs = Math.round(performance.now() - parallelStart)
+          return factory
+        }),
+      ])
+      if (cachedKey) {
+        connectTiming.mintCached = true
+        connectTiming.mintMs = 0
+      }
       if (!creds || session !== sessionGen) {
         logStream('no stream credentials — keeping still')
+        publishTiming('no-creds')
         return false
       }
       if (!create || session !== sessionGen) return false
+      const createStart = performance.now()
       created = await create(creds.agentId, {
         auth: { type: 'key', clientKey: creds.clientKey },
         mode: SPEAK_MODE,
         enableAnalytics: false,
-        streamOptions: {
+          streamOptions: {
           compatibilityMode: 'on',
           // iOS often never decodes warmup; gating connect() on that leaves speak() dead.
+          // Warmup also delays the SDK's connected callback until that clip ends.
           streamWarmup: false,
           outputResolution: 512,
         },
@@ -730,6 +1241,7 @@ export async function connectSaraStream(): Promise<boolean> {
             // the SDP finalize 400 → retry 200 flap. Keep a usable srcObject.
             const tracks = typeof value?.getTracks === 'function' ? value.getTracks() : []
             if (value && tracks.length) {
+              noteTracks(value)
               attachSrcObject(value)
               if (elementHoldsStream() && !sessionCapped) listeners.onStatus?.('live')
               return value
@@ -758,7 +1270,7 @@ export async function connectSaraStream(): Promise<boolean> {
             listeners.onTalking?.(talking)
             if (!talking) {
               speakingStarted = false
-              if (voicePath === 'did') setVoicePath('idle')
+              if (voicePath === 'did' || voicePath === 'visual') setVoicePath('idle')
             }
           },
           onFirstAudioDetected() {
@@ -770,6 +1282,9 @@ export async function connectSaraStream(): Promise<boolean> {
           },
           onConnectionStateChange(state: string) {
             const s = String(state).toLowerCase()
+            iceState = s === 'fail' ? 'failed' : s
+            logFacts('ice')
+            if (s === 'failed' || s === 'fail') noteStreamFallback('ice-failed')
             if (s === 'connected') {
               if (srcObject) attachSrcObject(srcObject)
               else logStream('peer connected — waiting for srcObject')
@@ -779,12 +1294,14 @@ export async function connectSaraStream(): Promise<boolean> {
               deadMode = true
               setReady(false)
               resolveAvReady(false)
-              if (voicePath === 'did') markVoiceFallback('peer closed without playable video — falling back to ara')
+              if (voicePath === 'did' || voicePath === 'visual') {
+                markVoiceFallback('peer closed without playable video — falling back to ara')
+              }
             } else if (s === 'disconnected' && !elementHoldsStream()) {
               logStream('peer has no video srcObject — keeping still', s)
               setReady(false)
               // Intermediate 400 flap: do not resolveAvReady(false) — the 200 retry may attach.
-              if (voicePath === 'did') {
+              if (voicePath === 'did' || voicePath === 'visual') {
                 markVoiceFallback('peer has no video srcObject — falling back to ara')
               }
             }
@@ -813,18 +1330,30 @@ export async function connectSaraStream(): Promise<boolean> {
           },
         },
       })
-      if (session !== sessionGen || sessionCapped) return false
+      connectTiming.createMs = Math.round(performance.now() - createStart)
+      if (session !== sessionGen || sessionCapped) {
+        publishTiming('superseded')
+        return false
+      }
       manager = created
+      const connectStart = performance.now()
       await created.connect()
-      if (session !== sessionGen || deadMode || sessionCapped) return false
+      connectTiming.connectMs = Math.round(performance.now() - connectStart)
+      if (session !== sessionGen || deadMode || sessionCapped) {
+        publishTiming('connect-dropped')
+        return false
+      }
       if (srcObject) attachSrcObject(srcObject)
       // Keep the session without frames. Warmup is off; speak() attaches the talking track.
+      // ICE trickle is already how the SDK works (answer is sent, then candidates).
+      // Gathering finishes in a few hundred ms; the long wait is POST /streams.
       if (!elementHoldsStream()) {
         logStream('connected — no video frames yet; session kept for speak()')
       } else {
         listeners.onStatus?.('live')
       }
       keepSession = true
+      publishTiming('connected')
       return true
     } catch (error) {
       if (isSaraSessionCapError(error)) {
@@ -854,6 +1383,7 @@ export async function connectSaraStream(): Promise<boolean> {
   const ok = await connectPromise
   connectPromise = null
   if (!ok && session === sessionGen) {
+    connectFailed = true
     dropManager()
     fallBackToStill('stream unavailable — still stays visible')
   }
@@ -864,6 +1394,11 @@ function markHeard(result: unknown, gen: number): SaraStreamSpeakResult {
   if (gen !== speakGen || fallbackLocked) return 'fallback'
   speakingStarted = true
   maybePromoteHeard()
+  if (voicePath === 'visual' && framesArePlayable()) {
+    scheduleTalkingEnd(result, gen)
+    logStream('D-ID video is muted for visuals — ara stays the heard voice')
+    return 'heard'
+  }
   if (voicePath !== 'did' || !framesArePlayable()) return 'fallback'
   scheduleTalkingEnd(result, gen)
   logStream('D-ID stream audio is the heard voice — skipping ara')
@@ -871,7 +1406,7 @@ function markHeard(result: unknown, gen: number): SaraStreamSpeakResult {
 }
 
 function markVoiceFallback(reason: string, detail?: unknown): SaraStreamSpeakResult {
-  const wasHeard = voicePath === 'did'
+  const wasHeard = voicePath === 'did' || voicePath === 'visual'
   setVoicePath('ara')
   if (videoEl) applyHeardMute(videoEl)
   logStream(reason, detail)
@@ -982,6 +1517,7 @@ export async function speakSaraStream(text: string): Promise<SaraStreamSpeakResu
 export function stopSaraStream(): void {
   speakGen += 1
   fallbackLocked = false
+  keepStreamMuted = false
   speakingStarted = false
   avReadyWaiters.splice(0, avReadyWaiters.length).forEach((fn) => fn(false))
   clearTalkingEndTimers()

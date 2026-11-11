@@ -1,0 +1,19 @@
+Subject: Urgency and frequency: your focus
+Preview: Practical ways to use your practice when urgency hits.
+Delay/trigger: Sequence 'Men concern track: oab' email T1. Trigger: tag pf-m-concern-oab added (Email 2 click) → subscribe to this sequence; delay 4 days after tag (~Day 6).
+Tag action on links: None (no tagging links).
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}}, you told us frequent urination and/or difficulty making it to the bathroom in time is your main concern.
+- Use your bladder diary as a map. Note the times, the drinks, and the moments urgency hits. Patterns help.
+- When an urge hits: stop, stand or sit still, do a few quick voluntary pelvic floor squeezes, breathe, and let the urge settle before you walk calmly to the bathroom.
+- Don't cut fluids drastically. Spread them through the day, and notice whether caffeine or fizzy drinks make your urgency worse.
+- Keep your 5 + 5 going with your best 2–3 movements and a sharp pulse.
+
+Questions? Just hit reply. My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.

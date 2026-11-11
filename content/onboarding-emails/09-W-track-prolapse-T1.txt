@@ -1,0 +1,40 @@
+Subject: Prolapse: your focus
+Preview: How to choose your movements, plus a 2-minute check-in (just tap).
+Delay/trigger: Sequence 'Women concern track: prolapse' email T1. Trigger: tag pf-w-concern-prolapse added; delay 4 days after tag (~Day 6).
+Tag action on links: each button → Add tag w-pop-d1-{L}{v} (e.g. w-pop-d1-A2). Lands on thanks-got-it. 24 links.
+From: Dr. Bruce Crawford | PfilAtes™ | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}}, you told us a feeling of pressure, heaviness or bulging in the vagina is your main concern.
+- Choose movements that feel comfortable. Cross off anything that causes pain or makes heaviness worse.
+- Exhale on effort. Don't hold your breath and strain when you lift. The percussive exhale in your pulse builds that habit.
+- If heaviness or bulging gets worse, pause and check in with your doctor.
+- Use your Prolapse Movement Selection Worksheet when you choose your movements: [Prolapse Movement Selection Worksheet PDF link, already in Kajabi]
+
+Your 2-minute check-in (just tap)
+Think about the last 7 days. For each line, tap the answer that fits best. Each tap opens a short "Thanks, got it" page, so come back to this email for the next one. I'll ask the same six questions again on Day 28 and at Month 3 so you can see how things change.
+
+In the last 7 days, I have had...
+1. A pressure or "dropping" feeling in my vagina
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-A0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-A1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-A2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-A3
+2. A heavy or dragging feeling low in my belly or back
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-B0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-B1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-B2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-B3
+3. Discomfort that builds up when I stand or as the day goes on
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-C0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-C1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-C2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-C3
+4. Trouble starting my urine, or feeling my bladder did not fully empty
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-D0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-D1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-D2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-D3
+5. A feeling that my bowel did not fully empty
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-E0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-E1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-E2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-E3
+6. A fullness or soft bulge that I can notice
+   [Never] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-F0  [Rarely] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-F1  [Sometimes] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-F2  [Often] https://www.pfilates.com/thanks-got-it?a=w-pop-d1-F3
+
+There are no right or wrong answers. Some days are better than others, so just notice the pattern.
+
+When to check in with your doctor: please talk with your doctor, nurse or pelvic health clinician if you notice a bulge you can see or feel outside the vaginal opening, pain, any bleeding, not being able to pass urine, or symptoms that are getting worse.
+
+Questions? Just hit reply. My team and I read every message.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor. This check-in is a personal tracking tool, not a diagnosis.

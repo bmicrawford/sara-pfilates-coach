@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../components/BottomSheet'
 import { MovementPhoneSettings, TodayPlanCard } from '../components/TodayPlan'
 import { Chip, Field, inputClass } from '../components/Chip'
@@ -22,9 +22,15 @@ import {
   markExerciseCueShown,
   shouldShowExerciseCue,
 } from '../lib/exercise'
+import { isDemoPass, reportForViewer } from '../lib/demoPass'
+import { demoStreamSnapshot, holdDemoStream } from '../lib/demoStreamSession'
+import type { DemoWarmPhase } from '../lib/demoStreamWarm'
 import { addDiaryLog, finishActiveDiary, readDiaries, readLogs, startNewDiary, syncDiaryWindows } from '../lib/mockServer'
 import { patientFirstName, readPatient } from '../lib/patient'
+import { PROSPECT_ASK_GREETING, PROSPECT_HOME_NOTE } from '../lib/prospectCopy'
 import { markCompanionOpened } from '../lib/notifications'
+import { saraDebugOn } from '../lib/saraDebug'
+import { gestureUnlockSaraStream, preloadSaraStream } from '../lib/saraStream'
 import {
   DRINK_OZ_DEFAULT,
   drinkEventVolume,
@@ -51,19 +57,30 @@ type Props = {
 }
 
 export function Home({ session }: Props) {
+  const navigate = useNavigate()
   const [mood, setMood] = useState<Mood>('default')
   const [sheet, setSheet] = useState<SheetId>(null)
   const [logs, setLogs] = useState<LogEntry[]>(() => readLogs())
   const [diaries, setDiaries] = useState<Diary[]>(() => syncDiaryWindows())
-  const patient = readPatient()
+  const prospect = isDemoPass(session.redeemToken)
+  const [warmPhase, setWarmPhase] = useState<DemoWarmPhase>(
+    () => (prospect ? demoStreamSnapshot()?.phase ?? 'idle' : 'idle'),
+  )
+  const patient = prospect ? null : readPatient()
   const [smsNote, setSmsNote] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [exerciseCue, setExerciseCue] = useState(() => shouldShowExerciseCue(readLogs()))
   const active = useMemo(() => activeDiary(diaries), [diaries])
   const activeReport = useMemo(
-    () => (active ? bladderDiaryReport(active, logs, { patient }) : null),
-    [active, logs, patient],
+    () => (active ? reportForViewer(bladderDiaryReport(active, logs, { patient }), prospect) : null),
+    [active, logs, patient, prospect],
   )
+
+  useEffect(() => {
+    if (!prospect) return
+    preloadSaraStream()
+    return holdDemoStream((snap) => setWarmPhase(snap.phase))
+  }, [prospect])
 
   useEffect(() => {
     const evaled = markCompanionOpened()
@@ -144,10 +161,21 @@ export function Home({ session }: Props) {
       </header>
 
       <div className="mt-6">
-        <SaraPortrait mood={mood} />
-        <p className="mt-1 text-center text-sm text-ink-mute">
-          {greeting()}, {patientFirstName(patient) ?? firstName(session.email)}.
-        </p>
+        <SaraPortrait
+          mood={mood}
+          preparing={prospect && warmPhase === 'connecting'}
+          motion={prospect}
+        />
+        {prospect ? (
+          <div className="mt-1 text-center">
+            <p className="text-sm text-ink">{PROSPECT_ASK_GREETING}</p>
+            <p className="mt-2 text-sm text-ink-mute">{PROSPECT_HOME_NOTE}</p>
+          </div>
+        ) : (
+          <p className="mt-1 text-center text-sm text-ink-mute">
+            {greeting()}, {patientFirstName(patient) ?? firstName(session.email)}.
+          </p>
+        )}
       </div>
 
       <div className="mt-6">
@@ -217,6 +245,12 @@ export function Home({ session }: Props) {
       <Link
         to="/ask"
         className="mt-5 block rounded-2xl bg-sage py-4 text-center font-semibold text-white shadow-card"
+        onClick={(event) => {
+          gestureUnlockSaraStream()
+          if (!saraDebugOn(window.location.search)) return
+          event.preventDefault()
+          navigate('/ask?debug=1')
+        }}
       >
         Ask Sara
       </Link>

@@ -30,7 +30,7 @@ rejectEphemeralSaraApiUrl()
 export default defineConfig(({ command }) => {
   if (command === 'build' && !envVar('VITE_SARA_API_URL')) {
     warn(
-      '[sara] VITE_SARA_API_URL is empty. Local preview is fine (Vite proxies /ask /speak /redeem). ' +
+      '[sara] VITE_SARA_API_URL is empty. Local preview is fine (Vite proxies /ask /speak /redeem /kajabi). ' +
         'A Surge rebuild for the phone demo must set it to the Worker *.workers.dev URL — not trycloudflare.',
     )
   }
@@ -110,6 +110,7 @@ export default defineConfig(({ command }) => {
         '/stream': { target: 'http://127.0.0.1:8787', changeOrigin: true },
         '/health': { target: 'http://127.0.0.1:8787', changeOrigin: true },
         '/redeem': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+        '/kajabi': { target: 'http://127.0.0.1:8787', changeOrigin: true },
       },
     },
     preview: {
@@ -128,6 +129,7 @@ export default defineConfig(({ command }) => {
         '/stream': { target: 'http://127.0.0.1:8787', changeOrigin: true },
         '/health': { target: 'http://127.0.0.1:8787', changeOrigin: true },
         '/redeem': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+        '/kajabi': { target: 'http://127.0.0.1:8787', changeOrigin: true },
       },
     },
   }

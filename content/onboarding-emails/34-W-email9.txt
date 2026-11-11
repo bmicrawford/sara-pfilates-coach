@@ -1,0 +1,78 @@
+Subject: Day 28: one number, 1 to 10
+Preview: If it was a 10 when you started, what is it now?
+Delay/trigger: Sequence 'PfilAtes™ for Women – Onboarding' email 9. Delay after previous: 4 days (Day 28).
+Tag action on links: C-10 buttons → add tag w-c10-post-q{n}-{score} (41 links). Each number N → add tag pf-d28-score-N (1–10). Landing page form: comment → custom field 'Day-28 comment'; permission field contains 'Yes' → add tag pf-testimonial-ok.
+From: Bruce Crawford, M.D. | Reply-to: pfilates1@gmail.com
+
+Hi {{first_name | default: 'there'}},
+
+Today is Day 28, the day your exercise log has you finish your post-training bladder diary. Congratulations on four weeks.
+
+One question, one click:
+If the problem that brought you here was a 10 when you started, what is it now?
+
+1 → https://www.pfilates.com/thanks-got-it?a=pf-d28-score-1
+2 → https://www.pfilates.com/thanks-got-it?a=pf-d28-score-2
+3 → https://www.pfilates.com/thanks-got-it?a=pf-d28-score-3
+4 → https://www.pfilates.com/thanks-got-it?a=pf-d28-score-4
+5 → https://www.pfilates.com/thanks-got-it?a=pf-d28-score-5
+6 → https://www.pfilates.com/thanks-got-it?a=pf-d28-score-6
+7 → https://www.pfilates.com/thanks-got-it?a=pf-d28-score-7
+8 → https://www.pfilates.com/thanks-got-it?a=pf-d28-score-8
+9 → https://www.pfilates.com/thanks-got-it?a=pf-d28-score-9
+10 → https://www.pfilates.com/thanks-got-it?a=pf-d28-score-10
+
+(10 = no change. 1 = barely noticeable now.)
+
+Your "after" check-in (2 minutes, just tap)
+Same 10 questions as your "before" check-in on Day 0. Tap the answer that fits you best today.
+
+How big a problem is your bladder?
+1. How much of a problem is having to urinate too often?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q1-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q1-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q1-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q1-3
+2. How much of a problem is having to urinate during the night?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q2-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q2-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q2-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q2-3
+3. How much of a problem is having to rush to the bathroom to avoid leaking?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q3-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q3-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q3-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q3-3
+4. How much of a problem is urine leakage related to coughing, sneezing, laughing, or exercise?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q4-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q4-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q4-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q4-3
+5. How many pads do you use daily?
+   [0] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q5-0  [1] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q5-1  [2] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q5-2  [3] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q5-3  [4 or more] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q5-4
+
+How does your bladder problem affect your day-to-day activities?
+6. Does your bladder problem affect your ability to perform normal household chores?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q6-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q6-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q6-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q6-3
+7. Does your bladder problem affect your ability to exercise?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q7-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q7-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q7-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q7-3
+8. Does your bladder problem affect your ability to do things you enjoy?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q8-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q8-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q8-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q8-3
+9. Does/would your bladder problem affect your ability to work?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q9-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q9-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q9-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q9-3
+10. How likely are you to avoid leaving the house because of your bladder problem?
+   [Not at all] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q10-0  [Slightly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q10-1  [Moderately] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q10-2  [Greatly] https://www.pfilates.com/thanks-got-it?a=w-c10-post-q10-3
+
+After you click, a short page gives you the option to:
+- add a comment about what's changed, and
+- give permission for us to share your words to help other women. We'd use your first name and last initial only, and you can say no.
+
+Then take 5 minutes for your own self-check:
+1. Put your "before" and "after" bladder diaries side by side.
+2. Compare today's C-10 answers with your "before" answers from Day 0.
+3. Count the days in your exercise log where you did both sessions.
+4. Check your pulse: small, percussive, squeezed, all at once.
+5. Write down one thing that's easier now.
+
+Not much change? Reply with your movements and how often you practice. Usually the fix is a better movement choice or a tighter pulse.
+
+P.S. If PfilAtes™ is helping, send a friend this link: https://www.pfilates.com/womens-course
+
+Quick answers
+- Do I stop now? No. Keep up your 10 minutes a day. In month 2, you'll re-take your worksheet.
+- Can I re-watch the course? Yes. You have lifetime access.
+- Where do I leave course feedback? Use the Evaluation in the Course Wrap-Up module.
+
+Bruce Crawford, M.D.
+Urogynecologist · Founder, PfilAtes™
+
+---
+PfilAtes™ is an educational program, not personal medical advice. If any movement causes pain, stop it and choose a different one. For questions about your own health, talk with your doctor.
