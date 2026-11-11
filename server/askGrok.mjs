@@ -128,6 +128,9 @@ export function buildMessages(userMessage, history = [], options = {}) {
   if (onboarding) content = `${content}\n\n${onboarding}`
   if (!isFirstSaraTurn(history, opts)) content = `${content}\n\n${SARA_NO_REPEAT_GREETING}`
   const messages = [{ role: 'system', content }]
+  // Worksheet note stays beside the system prompt. It does not edit the prompt.
+  const note = clip(opts.context, 800)
+  if (note) messages.push({ role: 'system', content: note })
   const recent = Array.isArray(history) ? history.slice(-12) : []
   for (const turn of recent) {
     const text = clip(turn?.text)
@@ -142,6 +145,7 @@ export function buildMessages(userMessage, history = [], options = {}) {
 export async function askSaraGrok({
   message,
   history = [],
+  context = '',
   apiKey,
   model = GROK_MODEL,
   fetchFn = fetch,
@@ -159,6 +163,7 @@ export async function askSaraGrok({
   const opts = {}
   if (audience) opts.audience = audience
   if (typeof firstTurn === 'boolean') opts.firstTurn = firstTurn
+  if (typeof context === 'string' && context.trim()) opts.context = context
   const opening = isFirstSaraTurn(history, opts)
 
   const payload = {

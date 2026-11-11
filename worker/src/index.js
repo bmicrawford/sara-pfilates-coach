@@ -19,6 +19,7 @@ import {
   paidEndpoint,
   passFromParts,
 } from '../../server/demoGate.mjs'
+import { dispatchDueReminders, dispatchReminderRequest, kvReminderStore, remindersConfigured, vapidFromEnv } from '../../server/reminders.mjs'
 
 function talkJson(status, body, origin) {
   const out = jsonResponse(status, body, origin)
@@ -52,6 +53,7 @@ export default {
           talk: Boolean(env.DID_API_KEY),
           stream: Boolean(env.DID_API_KEY && env.DID_AGENT_ID),
           redeem: Boolean(env.REDEEM_MINT_SECRET && env.REDEEM_TOKENS),
+          reminders: remindersConfigured(env) && Boolean(env.REDEEM_TOKENS),
         },
         origin,
       )
@@ -138,6 +140,37 @@ export default {
       }
     }
 
+    if (url.pathname === '/reminders' || url.pathname === '/reminders/vapid') {
+      let body = {}
+      if (request.method === 'POST') {
+        try {
+          const parsed = await request.json()
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) body = parsed
+        } catch {
+          body = {}
+        }
+      }
+      try {
+        const result = await dispatchReminderRequest(url.pathname, request.method, {
+          store: kvReminderStore(env.REDEEM_TOKENS),
+          redeemStore: kvRedeemStore(env.REDEEM_TOKENS),
+          vapid: vapidFromEnv(env),
+          envSuppress: env.REMINDER_SUPPRESS_EMAILS,
+          getHeader: (name) => request.headers.get(name),
+          body,
+          query: url.searchParams,
+          now: new Date(),
+        })
+        if (!result) {
+          const out = jsonResponse(404, { reply: 'Not found' }, origin)
+          return new Response(out.body, { status: out.status, headers: out.headers })
+        }
+        return respond(result.status, result.body, origin)
+      } catch {
+        return respond(503, { ok: false, error: 'reminders_failed' }, origin)
+      }
+    }
+
     const endpoint = paidEndpoint(request.method, url.pathname)
     if (endpoint) {
       let body = {}
@@ -174,6 +207,7 @@ export default {
         const result = await askSaraGrok({
           message: body.message ?? body.text,
           history: body.history,
+          context: typeof body.context === 'string' ? body.context : '',
           firstTurn: body.firstTurn,
           apiKey: env.XAI_API_KEY,
           model: env.XAI_MODEL || GROK_MODEL,
@@ -259,5 +293,19 @@ export default {
 
     const out = jsonResponse(404, { reply: 'Not found' }, origin)
     return new Response(out.body, { status: out.status, headers: out.headers })
+  },
+
+  async scheduled(_event, env, ctx) {
+    const vapid = vapidFromEnv(env)
+    if (!vapid || !env.REDEEM_TOKENS) return
+    ctx.waitUntil(
+      dispatchDueReminders({
+        store: kvReminderStore(env.REDEEM_TOKENS),
+        envSuppress: env.REMINDER_SUPPRESS_EMAILS,
+        vapid,
+        fetchFn: fetch,
+        now: new Date(),
+      }),
+    )
   },
 }
