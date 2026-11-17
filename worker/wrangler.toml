@@ -41,5 +41,6 @@ id = "6465ceb88c4b4fdfbc9cf0374588181d"
 #   printf '%s' "$REMINDER_SUPPRESS_EMAILS" | npx wrangler secret put REMINDER_SUPPRESS_EMAILS
 
 [triggers]
-# Every minute. A sign-up is due from its local minute through the next 14 minutes, once per local date.
-crons = ["* * * * *"]
+# Every 15 minutes. A sign-up is due from its local minute through the next 14 minutes, once per local date.
+# The handler reads `reminder-index` and does not call KV list on the steady path (free plan: 1,000 lists/day).
+crons = ["*/15 * * * *"]

@@ -12,6 +12,7 @@ import { sendWebPush } from './webPush.mjs'
 export const REMINDER_TITLE = 'Sara'
 export const REMINDER_BODY = 'Time for your 10-minute PfilAtes™ routine'
 export const REMINDER_PREFIX = 'reminder:'
+export const REMINDER_INDEX_KEY = 'reminder-index'
 export const SUPPRESS_KV_KEY = 'ops:do-not-contact'
 export const DUE_WINDOW_MINUTES = 15
 
@@ -292,42 +293,92 @@ export function memoryReminderStore(initial = {}) {
   }
 }
 
+function parseStoredReminder(raw) {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function parseReminderIndex(raw) {
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    const emails = []
+    for (const item of parsed) {
+      if (typeof item !== 'string' || !item || emails.includes(item)) continue
+      emails.push(item)
+    }
+    return emails
+  } catch {
+    return []
+  }
+}
+
+function emailsFromReminderList(page) {
+  const emails = []
+  for (const key of page?.keys || []) {
+    const name = String(key?.name ?? '')
+    if (!name.startsWith(REMINDER_PREFIX)) continue
+    const email = name.slice(REMINDER_PREFIX.length)
+    if (!email || emails.includes(email)) continue
+    emails.push(email)
+  }
+  return emails
+}
+
 export function kvReminderStore(kv) {
+  // One list, ever, and only when `reminder-index` is missing. After that the cron reads the index.
+  async function readIndex() {
+    const raw = await kv.get(REMINDER_INDEX_KEY)
+    if (raw !== null && raw !== undefined) return parseReminderIndex(raw)
+    const page = await kv.list({ prefix: REMINDER_PREFIX })
+    const emails = emailsFromReminderList(page)
+    await kv.put(REMINDER_INDEX_KEY, JSON.stringify(emails))
+    return emails
+  }
+
   return {
     async get(email) {
       if (!kv || !email) return null
-      const raw = await kv.get(REMINDER_PREFIX + email)
-      if (!raw) return null
-      try {
-        const parsed = JSON.parse(raw)
-        return parsed && typeof parsed === 'object' ? parsed : null
-      } catch {
-        return null
-      }
+      return parseStoredReminder(await kv.get(REMINDER_PREFIX + email))
     },
     async put(record) {
-      await kv.put(REMINDER_PREFIX + record.email, JSON.stringify(record))
+      const email = record.email
+      await kv.put(REMINDER_PREFIX + email, JSON.stringify(record))
+      const emails = await readIndex()
+      if (emails.includes(email)) return
+      emails.push(email)
+      await kv.put(REMINDER_INDEX_KEY, JSON.stringify(emails))
     },
     async delete(email) {
       await kv.delete(REMINDER_PREFIX + email)
+      const emails = await readIndex()
+      if (!emails.includes(email)) return
+      await kv.put(
+        REMINDER_INDEX_KEY,
+        JSON.stringify(emails.filter((item) => item !== email)),
+      )
     },
     async list() {
+      const emails = await readIndex()
       const out = []
-      let cursor
-      do {
-        const page = await kv.list({ prefix: REMINDER_PREFIX, cursor })
-        for (const key of page.keys || []) {
-          const raw = await kv.get(key.name)
-          if (!raw) continue
-          try {
-            const parsed = JSON.parse(raw)
-            if (parsed && typeof parsed === 'object') out.push(parsed)
-          } catch {
-            // Skip a corrupt record. Do not throw the rest of the dispatch away.
-          }
+      const kept = []
+      let dropped = false
+      for (const email of emails) {
+        const raw = await kv.get(REMINDER_PREFIX + email)
+        if (!raw) {
+          dropped = true
+          continue
         }
-        cursor = page.list_complete ? undefined : page.cursor
-      } while (cursor)
+        kept.push(email)
+        const parsed = parseStoredReminder(raw)
+        if (parsed) out.push(parsed)
+      }
+      if (dropped) await kv.put(REMINDER_INDEX_KEY, JSON.stringify(kept))
       return out
     },
     async suppressedSet(envList) {
