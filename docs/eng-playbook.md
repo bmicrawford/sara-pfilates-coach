@@ -149,7 +149,7 @@ The demo system note in `SARA_DEMO_AUDIENCE` is appended after `server/saraGuard
 - `REDEEM_MINT_SECRET` is server/Worker only. Never `VITE_*`, never in the Vite bundle, never in `wrangler.toml` as a value. Zapier sends it as `Authorization: Bearer` or `X-Redeem-Mint-Secret`.
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` are Worker/Node only. Never `VITE_*`. Generate with `node worker/scripts/generate-vapid.mjs` and store them with `wrangler secret put`. `VAPID_SUBJECT` is a `mailto:` address or an https URL. The public key is served to an entitled phone from `GET /reminders/vapid`; it is still not committed.
 - `REMINDER_SUPPRESS_EMAILS` is an optional Worker/Node do-not-contact seed (comma or whitespace separated). The other seed is KV key `ops:do-not-contact` in `REDEEM_TOKENS` (a JSON array or a comma/newline list). Do not commit either list.
-- Reminder sign-ups use the existing `REDEEM_TOKENS` namespace under `reminder:{email}`. No second namespace. The cron in `worker/wrangler.toml` is `* * * * *`. A sign-up sends once per local date, from the chosen minute through the next 14 minutes. Default is off.
+- Reminder sign-ups use the existing `REDEEM_TOKENS` namespace under `reminder:{email}`. No second namespace. The cron in `worker/wrangler.toml` is `*/15 * * * *`. A sign-up sends once per local date, from the chosen minute through the next 14 minutes. Cron reads the `reminder-index` key instead of listing KV. Default is off.
 - `.env.example` may name the keys. The repo must not contain values.
 
 ### Daily reminder (human, after this tree merges)

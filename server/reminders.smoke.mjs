@@ -3,9 +3,12 @@ import { DEMO_TOKEN } from './redeem.mjs'
 import {
   DUE_WINDOW_MINUTES,
   REMINDER_BODY,
+  REMINDER_INDEX_KEY,
+  REMINDER_PREFIX,
   REMINDER_TITLE,
   dispatchDueReminders,
   dispatchReminderRequest,
+  kvReminderStore,
   memoryReminderStore,
   parseReminderTime,
   reminderIsDue,
@@ -94,6 +97,67 @@ assert(
     noon,
   ),
   'a reminder already sent today is not due again',
+)
+
+const atUtc = (hhmm) => new Date(`2026-11-10T${hhmm}:00Z`)
+function dueAt(time, hhmm, lastSentLocalDate = null) {
+  return reminderIsDue(
+    { time, timeZone: 'UTC', endpoint: subscription.endpoint, lastSentLocalDate },
+    atUtc(hhmm),
+  )
+}
+assert(dueAt('08:07', '08:07'), '8:07 is due at 8:07')
+assert(dueAt('08:07', '08:15'), '8:07 is due at the 8:15 run')
+assert(dueAt('08:01', '08:15'), 'a minute after a quarter-hour is still due 14 minutes later')
+assert(!dueAt('08:07', '08:00'), '8:07 is not due before its local time')
+assert(!dueAt('08:07', '08:22'), '8:07 is not due once the 15-minute window has closed')
+assert(!dueAt('08:00', '08:15'), 'a reminder 15 minutes ago is outside the window')
+assert(!dueAt('08:07', '08:15', '2026-11-10'), '8:07 does not fire twice on the same local day')
+assert(dueAt('08:07', '08:15', '2026-11-09'), '8:07 fires again on the next local day')
+
+const quarterStore = memoryReminderStore({
+  records: [
+    {
+      email: EMAIL,
+      time: '08:07',
+      timeZone: 'UTC',
+      endpoint: subscription.endpoint,
+      p256dh: subPublic,
+      auth: subAuth,
+      lastSentLocalDate: null,
+    },
+  ],
+})
+let quarterFetches = 0
+const quarterNow = atUtc('08:15')
+const quarterSent = await dispatchDueReminders({
+  store: quarterStore,
+  envSuppress: '',
+  vapid,
+  now: quarterNow,
+  fetchFn: async () => {
+    quarterFetches += 1
+    return { status: 201 }
+  },
+})
+assert(
+  quarterFetches === 1 && quarterSent.some((row) => row.email === EMAIL && row.status === 'sent'),
+  '8:07 fires once on the 8:15 run',
+)
+quarterFetches = 0
+const quarterAgain = await dispatchDueReminders({
+  store: quarterStore,
+  envSuppress: '',
+  vapid,
+  now: quarterNow,
+  fetchFn: async () => {
+    quarterFetches += 1
+    return { status: 201 }
+  },
+})
+assert(
+  quarterFetches === 0 && quarterAgain.some((row) => row.email === EMAIL && row.status === 'not_due'),
+  'the same local day does not fire the 8:07 reminder again',
 )
 
 const suppress = suppressedEmailSet(' Quiet@example.com, not-an-email ', '["buyer@example.com"]')
@@ -285,7 +349,173 @@ assert(/default OFF|off until you turn it on/i.test(page), 'the control says it 
 assert(handler.includes(REMINDER_BODY), 'the service worker shows the same sentence')
 assert(!/74%|10x a Kegel/i.test(page + handler + REMINDER_BODY), 'reminder UI has no withdrawn claim')
 assert(worker.includes('dispatchDueReminders') && worker.includes('scheduled'), 'the worker cron dispatches reminders')
-assert(toml.includes('crons') && toml.includes('* * * * *'), 'the worker cron is every minute')
+assert(toml.includes('crons') && toml.includes('"*/15 * * * *"'), 'the worker cron is every 15 minutes')
+assert(!/crons\s*=\s*\[\s*"\* \* \* \* \*"\s*\]/.test(toml), 'the worker cron is not every minute')
+
+function mockKv(seed = {}) {
+  const data = new Map(Object.entries(seed))
+  const calls = { list: 0, indexPuts: 0 }
+  return {
+    calls,
+    data,
+    async get(key) {
+      return data.has(key) ? data.get(key) : null
+    },
+    async put(key, value) {
+      if (key === REMINDER_INDEX_KEY) calls.indexPuts += 1
+      data.set(key, value)
+    },
+    async delete(key) {
+      data.delete(key)
+    },
+    async list({ prefix } = {}) {
+      calls.list += 1
+      const keys = [...data.keys()]
+        .filter((key) => !prefix || String(key).startsWith(prefix))
+        .map((name) => ({ name }))
+      return { keys, list_complete: false, cursor: 'more' }
+    },
+  }
+}
+
+function indexEmails(kv) {
+  return JSON.parse(kv.data.get(REMINDER_INDEX_KEY))
+}
+
+assert(REMINDER_INDEX_KEY === 'reminder-index', 'reminders share one index key')
+assert(!REMINDER_INDEX_KEY.startsWith(REMINDER_PREFIX), 'the index key is not itself a reminder record')
+
+const indexed = mockKv({ [REMINDER_INDEX_KEY]: '[]' })
+const indexedStore = kvReminderStore(indexed)
+const firstRecord = {
+  email: 'a@example.com',
+  time: '08:07',
+  timeZone: 'UTC',
+  endpoint: 'https://push.example/a',
+  p256dh: subPublic,
+  auth: subAuth,
+  lastSentLocalDate: null,
+}
+await indexedStore.put(firstRecord)
+assert(indexEmails(indexed).join() === 'a@example.com', 'put adds the email to the index')
+assert(indexed.calls.list === 0, 'put does not list when the index exists')
+assert(indexed.calls.indexPuts === 1, 'put writes the index when the email is new')
+await indexedStore.put({ ...firstRecord, time: '09:15' })
+assert(indexed.calls.indexPuts === 1, 'put does not rewrite the index when the email is already there')
+assert((await indexedStore.get('a@example.com'))?.time === '09:15', 'put still updates the stored reminder')
+await indexedStore.put({
+  ...firstRecord,
+  email: 'b@example.com',
+  endpoint: 'https://push.example/b',
+})
+assert(indexEmails(indexed).join() === 'a@example.com,b@example.com', 'put appends a new email')
+await indexedStore.delete('a@example.com')
+assert(indexEmails(indexed).join() === 'b@example.com', 'delete removes the email from the index')
+assert((await indexedStore.get('a@example.com')) == null, 'delete removes the reminder record')
+const putsAfterDelete = indexed.calls.indexPuts
+await indexedStore.delete('a@example.com')
+await indexedStore.delete('missing@example.com')
+assert(indexed.calls.indexPuts === putsAfterDelete, 'delete does not rewrite the index when the email is already gone')
+assert(indexed.calls.list === 0, 'delete does not list when the index exists')
+
+const listed = await indexedStore.list()
+assert(indexed.calls.list === 0, 'list does not call kv.list once the index exists')
+assert(listed.length === 1 && listed[0].email === 'b@example.com', 'list reads each indexed reminder')
+
+const dropKv = mockKv({
+  [REMINDER_INDEX_KEY]: JSON.stringify(['stay@example.com', 'gone@example.com']),
+  [REMINDER_PREFIX + 'stay@example.com']: JSON.stringify({
+    email: 'stay@example.com',
+    time: '08:07',
+    timeZone: 'UTC',
+    endpoint: 'https://push.example/stay',
+  }),
+})
+const dropStore = kvReminderStore(dropKv)
+const left = await dropStore.list()
+assert(dropKv.calls.list === 0, 'a present index is never listed')
+assert(left.length === 1 && left[0].email === 'stay@example.com', 'a missing record is not returned')
+assert(indexEmails(dropKv).join() === 'stay@example.com', 'list drops index entries whose record is missing')
+const dropPuts = dropKv.calls.indexPuts
+await dropStore.list()
+assert(dropKv.calls.list === 0 && dropKv.calls.indexPuts === dropPuts, 'a second list does not list or rewrite the index')
+
+const migrateKv = mockKv({
+  [REMINDER_PREFIX + 'kept@example.com']: JSON.stringify({
+    email: 'kept@example.com',
+    time: '08:01',
+    timeZone: 'UTC',
+    endpoint: 'https://push.example/kept',
+  }),
+  'ops:do-not-contact': '["quiet@example.com"]',
+  'other-key': 'nope',
+})
+const migrateStore = kvReminderStore(migrateKv)
+const migrated = await migrateStore.list()
+assert(migrateKv.calls.list === 1, 'migration does exactly one list')
+assert(migrated.length === 1 && migrated[0].email === 'kept@example.com', 'migration returns the stored reminder')
+assert(indexEmails(migrateKv).join() === 'kept@example.com', 'migration writes the index and skips other keys')
+await migrateStore.list()
+await migrateStore.get('kept@example.com')
+assert(migrateKv.calls.list === 1, 'list does not call kv.list after the index exists')
+
+const seedKv = mockKv({
+  [REMINDER_PREFIX + 'old@example.com']: JSON.stringify({
+    email: 'old@example.com',
+    time: '08:00',
+    timeZone: 'UTC',
+    endpoint: 'https://push.example/old',
+  }),
+})
+const seedStore = kvReminderStore(seedKv)
+await seedStore.put({
+  email: 'new@example.com',
+  time: '08:07',
+  timeZone: 'UTC',
+  endpoint: subscription.endpoint,
+  p256dh: subPublic,
+  auth: subAuth,
+  lastSentLocalDate: null,
+})
+assert(seedKv.calls.list === 1, 'the first put migrates with exactly one list')
+assert(seedKv.calls.indexPuts === 1, 'migration does not rewrite the index when the new email was listed')
+const seeded = indexEmails(seedKv)
+assert(
+  seeded.includes('old@example.com') && seeded.includes('new@example.com'),
+  'migration keeps existing emails and adds the new one',
+)
+await seedStore.delete('old@example.com')
+assert(!indexEmails(seedKv).includes('old@example.com') && indexEmails(seedKv).includes('new@example.com'), 'delete after migration removes only that email')
+assert(seedKv.calls.list === 1, 'delete does not list again after the index exists')
+
+let kvFired = 0
+const kvNow = atUtc('08:15')
+const kvSent = await dispatchDueReminders({
+  store: seedStore,
+  envSuppress: '',
+  vapid,
+  now: kvNow,
+  fetchFn: async () => {
+    kvFired += 1
+    return { status: 201 }
+  },
+})
+assert(kvFired === 1 && kvSent.some((row) => row.email === 'new@example.com' && row.status === 'sent'), 'the indexed 8:07 reminder fires at 8:15')
+assert(seedKv.calls.list === 1, 'dispatch does not list once the index exists')
+const putsAfterSend = seedKv.calls.indexPuts
+kvFired = 0
+await dispatchDueReminders({
+  store: seedStore,
+  envSuppress: '',
+  vapid,
+  now: kvNow,
+  fetchFn: async () => {
+    kvFired += 1
+    return { status: 201 }
+  },
+})
+assert(kvFired === 0, 'the indexed reminder does not fire twice the same local day')
+assert(seedKv.calls.indexPuts === putsAfterSend, 'recording a send does not rewrite the index')
 assert(!/VAPID_PRIVATE_KEY\s*=\s*['"][A-Za-z0-9_-]{20,}/.test(toml), 'wrangler.toml does not contain a VAPID private key')
 
 if (process.exitCode) {
